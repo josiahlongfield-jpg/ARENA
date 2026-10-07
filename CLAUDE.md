@@ -61,3 +61,14 @@ Note: the page's own animation frames keep running between test steps, so screen
 - Audio: recordings for the pistol, footsteps, grunts and hits; the CC0 sword recordings layer under the synthesis (`swordAudio`:
   'mix' | 'rec' | 'synth', a menu toggle so they can be compared); everything else is synthesised (`SYN`, `humSet`).
   No openly licensed 40k bolter/bolt pistol recording exists (see assets/cc0/CREDITS.md); the bolt is generic CC0 material.
+
+## Open world preview (rpg/)
+The first step toward a Templar RPG: a walkable 1.6 km region (shrine highlands, siege front, dead hive). No combat yet.
+- `rpg/world_src.html` is THE source; `python3 rpg/build.py` inlines the CC0 textures (`rpg/assets/tex`, Poly Haven + ambientCG, 512px colour + normal)
+  and the baked Kenney props (`rpg/assets/kenney.json`) into `rpg/world.html`, which is published to https://claude.ai/artifact/HfAK8LV57xTesDm78gw3C8.
+- `rpg/tools/kenney_convert.py <cc0-world/models> rpg/assets/kenney.json` bakes the Kenney GLBs to vertex colours in the region's palette, with a
+  per-surface class (stone, wood, metal, cloth) that picks the scanned texture laid over it. The full download lives in the project files under
+  `templar-arena/assets/cc0-world/` (CREDITS.md there; everything is CC0).
+- `triMat()` lays scanned textures on by world position (triplanar), so props need no UVs. Give each new variant a distinct key: r128 caches programs
+  by `customProgramCacheKey`. Grass cards zero their specular, or they glow white toward the low sun.
+- Test hook: `window.__world` (goTo(id), at(x, z, yaw, pitch), mode, fly, info, sites).

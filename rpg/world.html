@@ -1,0 +1,680 @@
+<title>Templar Open World</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Alegreya+Sans:wght@400;500;700&display=swap">
+<style>
+/* One screen: the world fills the window; a slim header, a place card and a compass. Single dark look, like the game. */
+:root { --panel: rgba(16, 14, 13, 0.82); --line: rgba(232, 214, 180, 0.16); --fg: #ece2cf; --dim: #a99d88; --accent: #c0281e; --gold: #c9a24a; color-scheme: dark; }
+html, body { height: 100%; }
+body { margin: 0; background: #0e0d0c; color: var(--fg); font: 15px/1.45 'Alegreya Sans', 'Gill Sans', 'Trebuchet MS', sans-serif; overflow: hidden; }
+#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+header { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 16px; background: linear-gradient(rgba(16, 14, 13, 0.75), rgba(16, 14, 13, 0)); pointer-events: none; }
+header > * { pointer-events: auto; }
+h1 { margin: 0; font: 400 24px/1 'IM Fell English SC', Georgia, serif; }
+h1 span { color: var(--accent); }
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+button { font: 500 14px 'Alegreya Sans', sans-serif; color: var(--fg); background: rgba(20, 18, 16, 0.85); border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+button:hover { border-color: rgba(232, 214, 180, 0.4); }
+button[aria-pressed="true"] { border-color: var(--gold); background: rgba(70, 52, 22, 0.85); }
+#card { position: fixed; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(360px, calc(100% - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px; display: grid; gap: 6px; }
+#card .sub { color: var(--gold); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; }
+#card h2 { margin: 0; font: 400 26px/1.05 'IM Fell English SC', Georgia, serif; }
+#card p { margin: 0; color: var(--dim); }
+#hint { font-size: 13px; color: var(--dim); }
+#compass { position: fixed; top: calc(60px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: min(420px, 70vw); height: 40px; overflow: hidden; border-bottom: 1px solid var(--line); font: 400 15px 'IM Fell English SC', Georgia, serif; color: var(--fg); pointer-events: none; mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent); }
+#compass div { position: absolute; top: 2px; transform: translateX(-50%); white-space: nowrap; }
+#compass .poi { color: var(--gold); font-size: 13px; top: 20px; }
+#map { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: 180px; height: 180px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+#fwd { position: fixed; right: 16px; bottom: calc(210px + env(safe-area-inset-bottom, 0px)); width: 72px; height: 72px; border-radius: 50%; display: none; }
+#fwd.on { display: block; }
+#card.min p, #card.min #hint { display: none; }
+@media (max-width: 640px) { h1 { font-size: 20px; } #map { width: 120px; height: 120px; } #fwd { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); } #compass { top: calc(96px + env(safe-area-inset-top, 0px)); } }
+</style>
+<canvas id="c" aria-label="Explorable world"></canvas>
+<header>
+  <h1>Templar <span>open world</span></h1>
+  <div class="row">
+    <button id="mWalk" type="button" aria-pressed="true">Walk</button>
+    <button id="mFly" type="button" aria-pressed="false">Fly over</button>
+    <button id="mMin" type="button" aria-pressed="false">Hide notes</button>
+  </div>
+  <div class="row" id="go" aria-label="Travel to"></div>
+</header>
+<div id="compass" aria-hidden="true"></div>
+<section id="card">
+  <div class="sub" id="sub"></div>
+  <h2 id="name"></h2>
+  <p id="desc"></p>
+  <div id="hint"></div>
+</section>
+<canvas id="map" width="360" height="360" aria-label="Map"></canvas>
+<button id="fwd" type="button" aria-label="Walk forward">Walk</button>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  'use strict';
+  const lap = () => {};
+  const PI = Math.PI, $ = id => document.getElementById(id);
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x)), lerp = (a, b, t) => a + (b - a) * t, sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  let seed = 11;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  const rr = (a, b) => a + (b - a) * rnd();
+  const hash = (x, y) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967295; };
+  function noise(x, y) {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    return lerp(lerp(hash(xi, yi), hash(xi + 1, yi), u), lerp(hash(xi, yi + 1), hash(xi + 1, yi + 1), u), v) * 2 - 1;
+  }
+  const fbm = (x, y, o = 5) => { let s = 0, a = 0.5, f = 1; for (let i = 0; i < o; i++) { s += a * noise(x * f, y * f); f *= 2.03; a *= 0.5; } return s; };
+  const ridged = (x, y, o = 5) => { let s = 0, a = 0.5, f = 1; for (let i = 0; i < o; i++) { s += a * (1 - Math.abs(noise(x * f, y * f))); f *= 2.03; a *= 0.5; } return s; };
+  const C = h => new THREE.Color(h), CL = h => new THREE.Color(h).convertSRGBToLinear(), V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+  // ================================================================ the region
+  // 1.6 km square, north is -Z. Shrine highlands in the south (the monastery hub), the siege front across the middle along a broken
+  // fortress line, the dead hive city in the north. A pilgrim road runs from the hub's gate through the front into the hive.
+  const SIZE = 1600, HALF = SIZE / 2;
+  const HUB = V(20, 0, 560), GATE_Z = 498;
+  const ROAD = [[20, 500], [10, 430], [-40, 360], [-30, 280], [30, 200], [50, 120], [20, 40], [0, -20], [-30, -90], [-60, -170], [-40, -250], [10, -330], [30, -420], [0, -520], [-20, -640], [0, -800]];
+  // zone weights from a noise-warped north-south coordinate: 1 = shrine, 0 = siege, -1 = hive
+  function zones(x, z) {
+    const zw = z + fbm(x * 0.004 + 9, z * 0.004) * 110;
+    const s = sstep(110, 260, zw), h = sstep(110, 260, -zw); return [s, 1 - s - h, h];
+  }
+  // distance to the road polyline, and how far along it
+  function roadD(x, z) {
+    let best = 1e9;
+    for (let i = 0; i < ROAD.length - 1; i++) {
+      const [ax, az] = ROAD[i], [bx, bz] = ROAD[i + 1], dx = bx - ax, dz = bz - az, t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz), 0, 1);
+      const d = Math.hypot(x - ax - dx * t, z - az - dz * t); if (d < best) best = d;
+    }
+    return best;
+  }
+  // craters (siege band, a few in the hive) and zig-zag trench lines along the front
+  seed = 5;
+  const CRATERS = [];
+  for (let i = 0; i < 700; i++) { const x = rr(-HALF, HALF), z = rr(-330, 260); CRATERS.push([x, z, 2.5 + rnd() ** 2.2 * 13]); }
+  const TRENCH = [];
+  for (const [z0, x0, x1] of [[150, -700, 700], [95, -650, 600], [-60, -700, 700], [-120, -600, 680]]) {
+    const line = []; for (let x = x0; x <= x1; x += 22) line.push([x, z0 + (Math.floor((x - x0) / 22) % 2 ? 9 : -9) + fbm(x * 0.01, z0) * 20]); TRENCH.push(line);
+  }
+  const FORT_Z = 30;        // the broken fortress line between the two trench systems
+  const gridC = new Map();
+  for (const c of CRATERS) { const k = Math.floor(c[0] / 40) + ',' + Math.floor(c[1] / 40); (gridC.get(k) || gridC.set(k, []).get(k)).push(c); }
+  function trenchD(x, z) {
+    let best = 1e9;
+    for (const line of TRENCH) { if (Math.abs(z - line[0][1]) > 60) continue;
+      for (let i = 0; i < line.length - 1; i++) { const [ax, az] = line[i], [bx, bz] = line[i + 1]; if (x < Math.min(ax, bx) - 8 || x > Math.max(ax, bx) + 8) continue;
+        const dx = bx - ax, dz = bz - az, t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz), 0, 1), d = Math.hypot(x - ax - dx * t, z - az - dz * t); if (d < best) best = d; } }
+    return best;
+  }
+  // the hive city: a street grid, blocks either standing, gutted or collapsed into rubble
+  const BLOCKS = [];
+  seed = 21;
+  for (let gx = -6; gx <= 6; gx++) for (let gz = -10; gz <= -3; gz++) {
+    const cx = gx * 58 + rr(-6, 6), cz = gz * 62 + rr(-6, 6); if (Math.abs(cx - 0) < 34 && cz > -560) continue;       // the main avenue the road follows
+    if (rnd() < 0.18) continue;
+    const w = rr(24, 40), d = rr(24, 42), state = rnd(); BLOCKS.push({ x: cx, z: cz, w, d, h: state < 0.25 ? rr(6, 14) : rr(26, 70), state: state < 0.25 ? 'rubble' : state < 0.6 ? 'gutted' : 'standing', ry: rr(-0.05, 0.05) });
+  }
+  function cityF(x, z) { let k = 0; for (const b of BLOCKS) { const dx = Math.abs(x - b.x) - b.w / 2 - 6, dz = Math.abs(z - b.z) - b.d / 2 - 6; if (dx < 0 && dz < 0) return 1; k = Math.max(k, 1 - Math.max(dx, dz) / 10); } return clamp(k, 0, 1); }
+
+  // the ground height: each zone has its own shape, blended; then roads are levelled, trenches dug and craters punched
+  function hShrine(x, z) {
+    const hills = fbm(x * 0.0024, z * 0.0024) * 62 + Math.max(0, ridged(x * 0.003 + 4, z * 0.003) - 0.58) * 150 + fbm(x * 0.018, z * 0.018) * 2.2;
+    const hub = Math.max(0, 1 - Math.hypot(x - HUB.x, z - HUB.z) / 150);
+    return lerp(hills, 46, sstep(0, 0.55, hub)) + 12;
+  }
+  const hSiege = (x, z) => fbm(x * 0.0022, z * 0.0022) * 14 + fbm(x * 0.03, z * 0.03) * 1.0 + 16;
+  const hHive = (x, z) => { const dunes = Math.sin((x * 0.5 + z) * 0.04 + fbm(x * 0.004, z * 0.004) * 3) * 2.6 * (0.6 + 0.4 * fbm(x * 0.01, z * 0.01));
+    return fbm(x * 0.002 + 3, z * 0.002) * 20 + dunes * (1 - cityF(x, z) * 0.8) + 20; };
+  function baseH(x, z) { const [s, f, h] = zones(x, z); return (s ? s * hShrine(x, z) : 0) + (f ? f * hSiege(x, z) : 0) + (h ? h * hHive(x, z) : 0); }
+  function smoothH(x, z) { let s = 0; for (const [ox, oz] of [[0, 0], [12, 0], [-12, 0], [0, 12], [0, -12]]) s += baseH(x + ox, z + oz); return s / 5; }
+  function H(x, z) {
+    let y = baseH(x, z);
+    const [, f, hv] = zones(x, z), rd = roadD(x, z);
+    if (rd < 16) y = lerp(y, smoothH(x, z), sstep(16, 6, rd));
+    const fz = f + hv * 0.4;
+    if (fz > 0.05) {
+      const k = Math.floor(x / 40), m = Math.floor(z / 40);
+      for (let a = k - 1; a <= k + 1; a++) for (let b = m - 1; b <= m + 1; b++) { const L = gridC.get(a + ',' + b); if (!L) continue;
+        for (const c of L) { const d2 = (x - c[0]) ** 2 + (z - c[1]) ** 2, r2 = c[2] * c[2]; if (d2 > r2 * 2.6) continue; const q = d2 / r2;
+          y += fz * (q < 1 ? -(1 - q) * c[2] * 0.42 : Math.max(0, 1 - Math.abs(q - 1.25) * 1.8) * c[2] * 0.1) * (rd < 10 ? 0.15 : 1); } }
+      const td = trenchD(x, z); if (td < 4.5) y -= f * (1 - sstep(1.6, 3.6, td)) * 2.6 - f * Math.max(0, 1 - Math.abs(td - 3.6) / 1.2) * 0.55;
+    }
+    return y;
+  }
+  const WATER_Y = 6.5;      // the shrine lake and the flooded low ground of the front
+
+  lap('heights-fns');
+  // ================================================================ renderer, sky, light
+  const canvas = $('c'), renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75)); renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(62, 1, 0.25, 4000);
+  scene.fog = new THREE.FogExp2(0x000000, 0.0022);
+  const SUN = V(-0.55, 0.22, -0.8).normalize();
+  const skyU = { top: { value: CL(0x34405a) }, hor: { value: CL(0xd09868) }, low: { value: CL(0x5a4a40) }, sunCol: { value: CL(0xffb070) }, sun: { value: SUN }, time: { value: 0 } };
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(3000, 40, 20), new THREE.ShaderMaterial({ uniforms: skyU, side: THREE.BackSide, depthWrite: false, fog: false,
+    vertexShader: 'varying vec3 vd; void main(){ vd = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: `uniform vec3 top, hor, low, sunCol, sun; uniform float time; varying vec3 vd;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h(i), h(i + vec2(1,0)), f.x), mix(h(i + vec2(0,1)), h(i + vec2(1,1)), f.x), f.y); }
+      float fb(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++){ s += a * n(p); p *= 2.07; a *= 0.5; } return s; }
+      void main(){
+        float y = vd.y; vec3 c = y > 0.0 ? mix(hor, top, pow(min(1.0, y * 1.5), 0.55)) : mix(hor, low, min(1.0, -y * 5.0));
+        float s = max(0.0, dot(vd, sun)); c += sunCol * (pow(s, 900.0) * 4.0 + pow(s, 14.0) * 0.4 + pow(s, 3.0) * 0.12);
+        if (y > 0.0) {         // a deck of torn cloud, lit from below on the sun side
+          vec2 p = vd.xz / (y + 0.12) * 1.4 + vec2(time * 0.004, time * 0.0015);
+          float cl = smoothstep(0.48, 0.78, fb(p)) * smoothstep(0.0, 0.25, y);
+          vec3 cc = mix(vec3(0.16, 0.13, 0.14), sunCol * 0.9 + vec3(0.12), pow(s, 4.0) * 0.8 + 0.1);
+          c = mix(c, cc, cl * 0.75);
+        }
+        gl_FragColor = vec4(c, 1.0); }` }));
+  scene.add(sky);
+  const hemi = new THREE.HemisphereLight(CL(0xb8b4c8), CL(0x3a3028), 0.85);
+  const sunL = new THREE.DirectionalLight(0xffc89a, 1.7);
+  sunL.castShadow = true; sunL.shadow.mapSize.set(2048, 2048); Object.assign(sunL.shadow.camera, { left: -90, right: 90, top: 90, bottom: -90, near: 10, far: 700 });
+  sunL.shadow.bias = -0.0006; sunL.shadow.normalBias = 0.6;
+  scene.add(hemi, sunL, sunL.target);
+
+  // ================================================================ painted ground textures (canvas), tiling
+  function canvasTex(w, h, draw, rep = true) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; if (rep) t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+  }
+  const speck = (g, w, h, n, cols, r0, r1, a0 = 0.2, a1 = 0.7) => { for (let i = 0; i < n; i++) { g.globalAlpha = rr(a0, a1); g.fillStyle = cols[Math.floor(rnd() * cols.length)]; g.beginPath(); g.ellipse(rnd() * w, rnd() * h, rr(r0, r1), rr(r0, r1) * rr(0.5, 1), rnd() * 3, 0, 7); g.fill(); } g.globalAlpha = 1; };
+  // wrap-around drawing so the edges tile: draw each mark 9 times with offsets
+  const wrap = (g, w, h, f) => { for (const ox of [-w, 0, w]) for (const oy of [-h, 0, h]) { g.save(); g.translate(ox, oy); f(); g.restore(); } };
+  seed = 99;
+  const TEX = {
+    grass: canvasTex(512, 512, (g, w, h) => { g.fillStyle = '#4c5a2c'; g.fillRect(0, 0, w, h); speck(g, w, h, 900, ['#3a4a22', '#5e6a34', '#6a7038', '#42502a', '#7a7444'], 3, 16, 0.15, 0.45);
+      const S = []; for (let i = 0; i < 5000; i++) S.push([rnd() * w, rnd() * h, rr(-0.5, 0.5), rr(4, 11), ['#7e8a44', '#3a4a20', '#8a8a50', '#55652c', '#a09a5a'][Math.floor(rnd() * 5)], rr(0.3, 0.8)]);
+      wrap(g, w, h, () => { g.lineWidth = 1.2; for (const [x, y, a, l, c, al] of S) { g.globalAlpha = al; g.strokeStyle = c; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.sin(a) * l, y - Math.cos(a) * l); g.stroke(); } });
+      g.globalAlpha = 1; speck(g, w, h, 60, ['#8a8270', '#6a6458'], 1.5, 4, 0.5, 0.9); }),
+    rock: canvasTex(512, 512, (g, w, h) => { g.fillStyle = '#6a665e'; g.fillRect(0, 0, w, h); speck(g, w, h, 1400, ['#5a564e', '#7a766c', '#4a4640', '#858072', '#5e5a50'], 4, 30, 0.15, 0.5);
+      const L = []; for (let i = 0; i < 70; i++) { let x = rnd() * w, y = rnd() * h; const pts = [[x, y]]; for (let k = 0; k < 7; k++) { x += rr(-30, 30); y += rr(-14, 22); pts.push([x, y]); } L.push(pts); }
+      wrap(g, w, h, () => { for (const pts of L) { g.strokeStyle = 'rgba(30,28,24,.55)'; g.lineWidth = rr(1, 2.4); g.beginPath(); g.moveTo(...pts[0]); for (const p of pts) g.lineTo(...p); g.stroke(); g.strokeStyle = 'rgba(200,190,170,.18)'; g.lineWidth = 1; g.beginPath(); g.moveTo(pts[0][0] + 1.5, pts[0][1] + 1.5); for (const p of pts) g.lineTo(p[0] + 1.5, p[1] + 1.5); g.stroke(); } });
+      speck(g, w, h, 300, ['#5a6a3a', '#4a5a30'], 2, 8, 0.15, 0.35); }),
+    ash: canvasTex(512, 512, (g, w, h) => { g.fillStyle = '#5e5a52'; g.fillRect(0, 0, w, h); speck(g, w, h, 1200, ['#6a655a', '#848074', '#5e5950', '#8c8678', '#4e4a42'], 3, 22, 0.12, 0.4);
+      for (let y = 0; y < h; y += 7) { g.strokeStyle = `rgba(${rnd() < .5 ? '60,55,48' : '190,180,165'},${rr(0.08, 0.2)})`; g.lineWidth = rr(1, 2.5); g.beginPath(); for (let x = 0; x <= w; x += 8) g.lineTo(x, y + Math.sin(x / w * PI * 2 * 3 + y * 0.07) * 4); g.stroke(); }
+      speck(g, w, h, 500, ['#3a3430', '#4a4038', '#6a3a2a', '#8a8478'], 1.5, 6, 0.5, 0.9); speck(g, w, h, 60, ['#2a2622', '#5a544c'], 6, 18, 0.4, 0.8); }),
+    mud: canvasTex(512, 512, (g, w, h) => { g.fillStyle = '#4e4034'; g.fillRect(0, 0, w, h); speck(g, w, h, 1300, ['#3e3228', '#5e5040', '#463a2e', '#6a5a46', '#2e2620'], 4, 26, 0.15, 0.5);
+      for (let i = 0; i < 26; i++) { const x = rnd() * w, y = rnd() * h, r = rr(8, 30); wrap(g, w, h, () => { g.fillStyle = 'rgba(40,36,30,.6)'; g.beginPath(); g.ellipse(x, y, r, r * 0.6, rnd(), 0, 7); g.fill(); g.strokeStyle = 'rgba(150,140,130,.25)'; g.lineWidth = 1.5; g.stroke(); }); }
+      for (let i = 0; i < 120; i++) { const x = rnd() * w, y = rnd() * h; g.strokeStyle = 'rgba(28,22,18,.5)'; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + rr(-14, 14), y + rr(-4, 4)); g.stroke(); }
+      speck(g, w, h, 200, ['#7a7060', '#5a5450', '#8a8070'], 1.5, 4, 0.6, 1); }),
+    road: canvasTex(512, 512, (g, w, h) => { g.fillStyle = '#3e3832'; g.fillRect(0, 0, w, h);
+      for (let y = 0; y < h; y += 32) for (let x = (y / 32) % 2 ? -24 : 0; x < w; x += 48) { const c = 70 + Math.floor(rnd() * 50); g.fillStyle = `rgb(${c},${c - 6},${c - 14})`; g.fillRect(x + 2, y + 2, 44, 28); g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(x + 2, y + 26, 44, 4); g.fillStyle = 'rgba(255,240,220,.08)'; g.fillRect(x + 2, y + 2, 44, 3); }
+      speck(g, w, h, 600, ['#2a2622', '#5a5248', '#4a5a30'], 2, 10, 0.15, 0.45); }),
+    macro: canvasTex(256, 256, (g, w, h) => { const id = g.createImageData(w, h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = (fbm(x / 32, y / 32, 4) * 0.5 + 0.5) * 255; const i = (y * w + x) * 4; id.data[i] = id.data[i + 1] = id.data[i + 2] = v; id.data[i + 3] = 255; } g.putImageData(id, 0, 0); }),
+  };
+  TEX.macro.encoding = THREE.LinearEncoding;
+
+  lap('textures');
+  // ================================================================ terrain mesh, with per-vertex blend weights painted from zone, slope, road, craters
+  const SEG = 400;
+  const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG); geo.rotateX(-PI / 2);
+  const pa = geo.attributes.position, nV = pa.count;
+  for (let i = 0; i < nV; i++) pa.setY(i, H(pa.getX(i), pa.getZ(i)));
+  geo.computeVertexNormals();
+  const splat = new Float32Array(nV * 4), splat2 = new Float32Array(nV);
+  for (let i = 0; i < nV; i++) {
+    const x = pa.getX(i), z = pa.getZ(i), y = pa.getY(i), slope = 1 - geo.attributes.normal.getY(i);
+    const [s, f, h] = zones(x, z), rd = roadD(x, z), n = fbm(x * 0.02, z * 0.02);
+    let wg = s * (1 - sstep(0.12, 0.3, slope)), wr = sstep(0.14, 0.34, slope) * (0.6 + 0.4 * s), wa = h * (1 - sstep(0.2, 0.4, slope)), wm = f * (1 - sstep(0.25, 0.45, slope));
+    wm += s * sstep(0.3, 0.6, n) * 0.4;                       // muddy patches in the fields
+    wg += f * sstep(0.2, 0.55, n) * 0.6;                       // dead grass struggling through the front
+    if (y < WATER_Y + 1.2) { wm += 0.8; wg *= 0.4; }           // shoreline mud
+    const road = sstep(6.5, 4.0, rd + n * 2.5) * (1 - h * 0.35);
+    const t = wg + wr + wa + wm + 1e-4; splat.set([wg / t, wr / t, wa / t, wm / t], i * 4); splat2[i] = road;
+  }
+  geo.setAttribute('splat', new THREE.BufferAttribute(splat, 4)); geo.setAttribute('splat2', new THREE.BufferAttribute(splat2, 1));
+  const terrainM = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
+  terrainM.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, { tG: { value: TEX.grass }, tR: { value: TEX.rock }, tA: { value: TEX.ash }, tM: { value: TEX.mud }, tD: { value: TEX.road }, tN: { value: TEX.macro } });
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 splat; attribute float splat2; varying vec4 vSp; varying float vRd; varying vec3 vWP;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSp = splat; vRd = splat2; vWP = (modelMatrix * vec4(position, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+      uniform sampler2D tG, tR, tA, tM, tD, tN; varying vec4 vSp; varying float vRd; varying vec3 vWP;
+      vec3 two(sampler2D t, vec2 p){ return mix(texture2D(t, p * 0.28).rgb, texture2D(t, p * 0.045).rgb, 0.35); }`)
+      .replace('#include <map_fragment>', `
+      vec2 P = vWP.xz;
+      float mac = texture2D(tN, P * 0.0035).r, mac2 = texture2D(tN, P * 0.021 + 0.37).r;
+      vec4 w = vSp; w.x *= 0.7 + mac2 * 0.6; w.w *= 0.6 + (1.0 - mac2) * 0.8; w /= max(1e-3, w.x + w.y + w.z + w.w);
+      vec3 rockC = mix(texture2D(tR, vWP.xy * 0.12).rgb, texture2D(tR, vWP.zy * 0.12).rgb, 0.5);
+      vec3 g = two(tG, P) * w.x + rockC * w.y + two(tA, P) * w.z + two(tM, P) * w.w;
+      g = mix(g, texture2D(tD, P * 0.22).rgb, clamp(vRd, 0.0, 1.0));
+      g *= 0.72 + mac * 0.56;
+      g = pow(g, vec3(2.2));      // the canvas textures are sRGB; light works in linear
+      diffuseColor.rgb *= g;`);
+  };
+  const terrain = new THREE.Mesh(geo, terrainM); terrain.receiveShadow = true; scene.add(terrain);
+  lap('terrain');
+  // far land beyond the map, so the horizon is never a cliff: low hills south, hive spires north
+  { const g = new THREE.RingGeometry(HALF - 20, 3000, 128, 24); g.rotateX(-PI / 2); const p = g.attributes.position;
+    // starts under the map's edge at the edge's own height, then rolls away into low hills
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i), ex = clamp(x, -HALF + 1, HALF - 1), ez = clamp(z, -HALF + 1, HALF - 1), out = Math.hypot(x - ex, z - ez);
+      p.setY(i, lerp(H(ex, ez) - 0.6, fbm(x * 0.002, z * 0.002) * 70 + 40, sstep(0, 500, out))); }
+    g.computeVertexNormals(); const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: CL(0x5a5248), roughness: 1, flatShading: true })); m.receiveShadow = true; scene.add(m); }
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), new THREE.MeshStandardMaterial({ color: CL(0x2a3640), roughness: 0.06, metalness: 0.75, transparent: true, opacity: 0.9 }));
+  water.rotation.x = -PI / 2; water.position.y = WATER_Y; scene.add(water);
+
+  // ================================================================ building blocks
+  const mats = {};
+  const MAT = (key, c, o = {}) => mats[key] || (mats[key] = new THREE.MeshStandardMaterial(Object.assign({ color: CL(c), roughness: 0.9, flatShading: true }, o)));
+  // a geometry merger with per-part vertex colours, so one prop with several surfaces is still one draw call
+  function merge(parts) {
+    const pos = [], nor = [], col = [], uv = [];
+    for (const [g0, m, c] of parts) {
+      const g = (g0.index ? g0.toNonIndexed() : g0.clone()).applyMatrix4(m), P = g.attributes.position.array, N = g.attributes.normal.array, U = g.attributes.uv ? g.attributes.uv.array : null, cc = CL(c === undefined ? 0xffffff : c);
+      const flip = m.determinant() < 0;
+      for (let t = 0; t < P.length / 3; t += 3) for (const k of flip ? [0, 2, 1] : [0, 1, 2]) { const i = t + k; pos.push(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); nor.push(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]); col.push(cc.r, cc.g, cc.b); uv.push(U ? U[i * 2] : 0, U ? U[i * 2 + 1] : 0); }
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); return g;
+  }
+  const T = (x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx, sz = sx) => new THREE.Matrix4().compose(V(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), V(sx, sy, sz));
+  const B = (w, h, d) => new THREE.BoxGeometry(w, h, d), Cy = (r0, r1, h, n = 8) => new THREE.CylinderGeometry(r0, r1, h, n), Co = (r, h, n = 6) => new THREE.ConeGeometry(r, h, n);
+  // a rough rock: an icosphere pushed about by noise
+  function rockGeo(seedK, detail = 1) { const g = new THREE.IcosahedronGeometry(1, detail), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) { const v = V(p.getX(i), p.getY(i), p.getZ(i)); const k = 1 + fbm(v.x * 1.7 + seedK, v.y * 1.7 + v.z * 1.3 - seedK, 3) * 0.55; v.multiplyScalar(k); v.y *= 0.7; p.setXYZ(i, v.x, v.y, v.z); }
+    g.computeVertexNormals(); return g; }
+  const VC = { vertexColors: true };
+  const stoneM = MAT('stone', 0xffffff, Object.assign({ roughness: 0.92 }, VC));
+  const metalM = MAT('metal', 0xffffff, Object.assign({ roughness: 0.6, metalness: 0.45 }, VC));
+  // a stone texture for walls (ashlar courses), used by the monastery, chapels and the fortress line
+  const ashlar = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#7e786c'; g.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 32) for (let x = (y / 32) % 2 ? -32 : 0; x < w; x += 64) { const c = 104 + Math.floor(rnd() * 34); g.fillStyle = `rgb(${c},${c - 4},${c - 14})`; g.fillRect(x + 2, y + 2, 60, 28); g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(x + 2, y + 27, 60, 3); }
+    speck(g, w, h, 400, ['#4a4a3a', '#5a6a3a', '#2a2622'], 1, 6, 0.1, 0.35); });
+  const wallM = new THREE.MeshStandardMaterial({ map: ashlar, roughness: 0.9, vertexColors: true });
+  // boxes whose UVs are scaled to their size, so ashlar courses stay the same size on every wall
+  function wbox(w, h, d) { const g = B(w, h, d), uv = g.attributes.uv, n = g.attributes.normal;
+    for (let i = 0; i < uv.count; i++) { const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i)); const su = ax > 0.5 ? d : w, sv = ay > 0.5 ? d : h; uv.setXY(i, uv.getX(i) * su / 4, uv.getY(i) * sv / 4); } return g; }
+
+  const statics = new THREE.Group(); scene.add(statics);
+  function add(geo, mat, x, y, z, ry = 0, s = 1, cast = true) { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.y = ry; m.scale.setScalar(s); m.castShadow = cast; m.receiveShadow = true; statics.add(m); return m; }
+  // instanced scatter: many copies of one prop geometry, sat on the ground
+  function scatter(geo, mat, list, o = {}) {
+    if (!list.length) return null;
+    // r128 keeps one compiled program per material, so instanced copies get their own material rather than sharing with plain meshes
+    if (!mat.userData.inst) { mat.userData.inst = mat.clone(); if (mat.onBeforeCompile) mat.userData.inst.onBeforeCompile = mat.onBeforeCompile; }
+    const im = new THREE.InstancedMesh(geo, mat.userData.inst, list.length), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+    list.forEach((it, i) => { e.set(it.rx || 0, it.ry || 0, it.rz || 0); q.setFromEuler(e); m.compose(V(it.x, it.y, it.z), q, V(it.s * (it.sx || 1), it.s * (it.sy || 1), it.s * (it.sz || 1))); im.setMatrixAt(i, m);
+      im.setColorAt(i, CL(it.c === undefined ? 0xffffff : it.c).multiplyScalar(it.k || 1)); });      // always set, so a material shared between scatters compiles one way
+    im.castShadow = o.cast !== false; im.receiveShadow = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; scene.add(im); return im;
+  }
+  const slopeAt = (x, z) => Math.hypot(H(x + 1.5, z) - H(x - 1.5, z), H(x, z + 1.5) - H(x, z - 1.5)) / 3;
+  function place(n, test, gen, tries = 30) { const out = []; let k = 0; while (out.length < n && k++ < n * tries) { const x = rr(-HALF + 20, HALF - 20), z = rr(-HALF + 20, HALF - 20); if (!test(x, z)) continue; const it = gen(x, z); if (it) out.push(it); } return out; }
+  const nearRoad = (x, z, d) => roadD(x, z) < d, nearHub = (x, z, d) => Math.hypot(x - HUB.x, z - HUB.z) < d;
+
+  // ================================================================ the shrine highlands
+  seed = 301;
+  // the monastery hub on its hill: curtain wall with towers, gatehouse, keep, chapel with a spire, cloister, banners
+  const BAN = canvasTex(128, 256, (g, w, h) => { g.fillStyle = '#7a1410'; g.fillRect(0, 0, w, h); g.fillStyle = '#e8e0d0'; g.fillRect(w / 2 - 9, 40, 18, 120); g.fillRect(w / 2 - 44, 74, 88, 18);
+    g.fillStyle = '#c9a24a'; g.fillRect(0, 0, w, 8); g.fillStyle = '#0e0d0c'; for (let x = 0; x < w; x += 22) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + 11, h - 26); g.lineTo(x + 22, h); g.fill(); } }, false);
+  const bannerM = new THREE.MeshStandardMaterial({ map: BAN, side: THREE.DoubleSide, roughness: 0.85, alphaTest: 0.5, transparent: false });
+  const BANNERS = [];
+  function banner(x, y, z, ry, s = 1) { const g = new THREE.PlaneGeometry(2.2 * s, 4.4 * s, 4, 8); g.translate(0, -2.2 * s, 0); const m = new THREE.Mesh(g, bannerM); m.position.set(x, y, z); m.rotation.y = ry; m.castShadow = true; scene.add(m); BANNERS.push(m); return m; }
+  {
+    const y0 = 46 + 12, R = 54, parts = [], hx = HUB.x, hz = HUB.z;
+    for (let i = 0; i < 16; i++) {
+      const a0 = i / 16 * PI * 2, a1 = (i + 1) / 16 * PI * 2, am = (a0 + a1) / 2, len = 2 * R * Math.sin(PI / 16);
+      const isGate = Math.abs(Math.atan2(Math.sin(am - PI / 2), Math.cos(am - PI / 2))) < 0.15;    // the gate faces north (-Z) ... toward the road
+      const cx = hx + Math.cos(am) * R, cz = hz + Math.sin(am) * R;
+      if (!isGate) { parts.push([wbox(len + 0.5, 11, 3), T(cx, y0 + 4.5, cz, 0, -am + PI / 2, 0)]);
+        for (let k = -3; k <= 3; k++) parts.push([wbox(1.2, 1.4, 3.2), T(cx + Math.sin(am) * k * 3, y0 + 10.7, cz - Math.cos(am) * k * 3, 0, -am + PI / 2, 0)]); }
+      const tx = hx + Math.cos(a1) * R, tz = hz + Math.sin(a1) * R;
+      if (i % 2 === 0) { parts.push([Cy(4.2, 4.8, 17, 10), T(tx, y0 + 7.5, tz)]); parts.push([Co(5.2, 7, 10), T(tx, y0 + 19.5, tz), 0x8a6a5a]); }
+    }
+    // gatehouse on the north side
+    const gx = hx, gz = hz - R;
+    for (const sx of [-1, 1]) { parts.push([wbox(6, 18, 8), T(gx + sx * 6, y0 + 8, gz)]); parts.push([Co(4.6, 6, 4), T(gx + sx * 6, y0 + 20, gz, 0, PI / 4, 0)]); }
+    parts.push([wbox(6.5, 5, 8), T(gx, y0 + 14.5, gz)]);
+    // the keep, the chapel nave with buttresses and a tall spire, the cloister
+    parts.push([wbox(18, 30, 18), T(hx - 16, y0 + 14, hz + 14)]); for (const [ox, oz] of [[-9, -9], [9, -9], [-9, 9], [9, 9]]) parts.push([Cy(2.2, 2.2, 8, 8), T(hx - 16 + ox, y0 + 31, hz + 14 + oz)]);
+    parts.push([wbox(13, 18, 34), T(hx + 14, y0 + 8, hz + 4)]); parts.push([Co(10, 8, 4), T(hx + 14, y0 + 21, hz + 4, 0, PI / 4, 0, 0.95, 1, 2.6)]);
+    for (let k = -2; k <= 2; k++) for (const sx of [-1, 1]) parts.push([wbox(1.6, 14, 2.4), T(hx + 14 + sx * 7.4, y0 + 6, hz + 4 + k * 7, 0, 0, sx * 0.1)]);
+    parts.push([wbox(8, 26, 8), T(hx + 14, y0 + 12, hz - 16)]); parts.push([Co(5.8, 26, 4), T(hx + 14, y0 + 38, hz - 16, 0, PI / 4, 0)]);
+    for (let k = 0; k < 8; k++) { const a = k / 8 * PI * 2; parts.push([wbox(2, 6, 2), T(hx - 14 + Math.cos(a) * 11, y0 + 2, hz - 18 + Math.sin(a) * 11)]); }
+    for (const p of parts) if (p[2] === undefined) p[2] = 0xffffff;
+    add(merge(parts), wallM, 0, 0, 0, 0, 1);
+    // banners on the gatehouse and keep
+    for (const sx of [-1, 1]) banner(gx + sx * 6, y0 + 15, gz - 4.05, PI, 1);
+    banner(hx - 16, y0 + 27, hz + 4.9, PI, 1.4); banner(hx + 14, y0 + 30, hz - 20.1, PI, 1.2);
+    // a courtyard floor
+    const fl = new THREE.Mesh(new THREE.CircleGeometry(R - 1, 40), new THREE.MeshStandardMaterial({ map: TEX.road, roughness: 0.9 })); fl.material.map = TEX.road.clone(); fl.material.map.needsUpdate = true; fl.material.map.repeat.set(10, 10);
+    fl.rotation.x = -PI / 2; fl.position.set(hx, y0 - 0.9, hz); fl.receiveShadow = true; scene.add(fl);
+  }
+  // wayside shrines and chapels in the highlands, statues of saints, dry-stone field walls, pines, birches, bushes, boulders
+  const chapelGeo = (() => { const p = [];
+    for (let k = 0; k < 5; k++) for (const sx of [-1, 1]) { const h = rnd() < 0.35 ? rr(3, 8) : 13; p.push([wbox(1.8, h, 1.8), T(sx * 7, h / 2, -10 + k * 5)]); if (h > 12) p.push([new THREE.TorusGeometry(2.4, 0.45, 5, 12, PI), T(sx * 7, 13, -7.5 + k * 5, 0, PI / 2, 0)]); }
+    p.push([wbox(16, 17, 1.8), T(0, 8.5, -12.5)]); p.push([Co(9, 7, 4), T(0, 20.5, -12.5, 0, PI / 4, 0, 1, 1, 0.22)]);
+    p.push([new THREE.TorusGeometry(3, 0.6, 5, 14, PI), T(0, 10, -11.5)]); p.push([wbox(17, 0.8, 27), T(0, 0.2, -1)]);
+    p.push([wbox(3, 1.4, 1.6), T(0, 1.3, -10)]); for (let k = 0; k < 10; k++) p.push([wbox(rr(0.8, 2.4), rr(0.5, 1.4), rr(0.8, 2.4)), T(rr(-7, 7), 0.6, rr(-11, 12), rnd(), rnd() * 3, rnd())]);
+    for (const q of p) q[2] = 0xffffff; return merge(p); })();
+  const statueGeo = merge([[wbox(3.2, 2.6, 3.2), T(0, 1.3, 0), 0x8a8478], [B(1.9, 4.2, 1.2), T(0, 4.7, 0), 0xb8b2a4], [B(2.8, 1.1, 1.5), T(0, 6.6, 0), 0xb8b2a4], [new THREE.SphereGeometry(0.62, 10, 8), T(0, 7.6, 0), 0xb8b2a4], [B(0.28, 7, 0.28), T(1.4, 5.8, 0.45, 0, 0, 0.06), 0x9a9488], [Co(0.5, 1.4, 4), T(1.53, 9.8, 0.45), 0x9a9488], [new THREE.TorusGeometry(0.7, 0.07, 4, 14), T(0, 7.8, -0.35), 0xc9a24a], [B(1.8, 3.2, 0.25), T(0, 4.6, -0.75, 0.14, 0, 0), 0xa8a294], [B(2.2, 0.5, 1.5), T(0, 2.85, 0), 0x8a8478]]);
+  const shrines = place(14, (x, z) => zones(x, z)[0] > 0.9 && slopeAt(x, z) < 0.18 && !nearHub(x, z, 90) && H(x, z) > WATER_Y + 3, (x, z) => ({ x, z, y: H(x, z) - 0.4, ry: rnd() * PI * 2 }));
+  for (const c of shrines.slice(0, 6)) add(chapelGeo, wallM, c.x, c.y, c.z, c.ry);
+  for (const c of shrines.slice(6)) add(statueGeo, stoneM, c.x, c.y, c.z, c.ry, rr(0.9, 1.4));
+  for (let i = 0; i < 6; i++) { const r = ROAD[1 + i * 2]; if (zones(r[0], r[1])[0] < 0.6) continue; add(statueGeo, stoneM, r[0] + 9, H(r[0] + 9, r[1]) - 0.3, r[1], -PI / 2, 0.8); }
+  // dry-stone walls that follow the land, enclosing fields
+  { const parts = []; seed = 333;
+    for (let f = 0; f < 40; f++) {
+      let x = rr(-700, 700), z = rr(300, 760); if (zones(x, z)[0] < 0.95 || nearHub(x, z, 100)) continue;
+      let a = rnd() * PI * 2; const segs = 6 + Math.floor(rnd() * 14);
+      for (let k = 0; k < segs; k++) { const nx = x + Math.cos(a) * 5, nz = z + Math.sin(a) * 5; if (roadD(nx, nz) < 8 || H(nx, nz) < WATER_Y + 1 || slopeAt(nx, nz) > 0.35) break;
+        const y = (H(x, z) + H(nx, nz)) / 2; parts.push([B(5.3, 1.1, 0.8), T((x + nx) / 2, y + 0.35, (z + nz) / 2, 0, -a, (H(nx, nz) - H(x, z)) / 5 * 0.9), 0xffffff]);
+        if (rnd() < 0.5) parts.push([rockGeo(k, 0), T((x + nx) / 2 + rr(-1, 1), y + 1.0, (z + nz) / 2 + rr(-1, 1), rnd(), rnd(), 0, 0.4), 0xd0ccc0]);
+        x = nx; z = nz; a += rr(-0.25, 0.25) + (k % 7 === 6 ? PI / 2 : 0); } }
+    const m = add(merge(parts), wallM, 0, 0, 0); m.castShadow = true; }
+  // trees: pines (layered, jittered), birch-like broadleaves, and dead snags at the front
+  const pineGeo = (() => { const p = [[Cy(0.22, 0.42, 5, 6), T(0, 2.5, 0), 0x4a3424]]; let y = 2.8;
+    for (let k = 0; k < 6; k++) { const r = 3.4 - k * 0.5, h = 3.4 - k * 0.25; const g = Co(r, h, 9), q = g.attributes.position; for (let i = 0; i < q.count; i++) if (q.getY(i) < 0) q.setXYZ(i, q.getX(i) * (1 + (hash(i, k) - 0.5) * 0.4), q.getY(i) - hash(k, i) * 0.6, q.getZ(i) * (1 + (hash(k + 3, i) - 0.5) * 0.4)); g.computeVertexNormals();
+      p.push([g, T(0, y + h / 2, 0, 0, k * 0.7, 0), k % 2 ? 0x2a3a24 : 0x22321e]); y += h * 0.55; }
+    return merge(p); })();
+  const broadGeo = (() => { const p = [[Cy(0.2, 0.36, 6, 6), T(0, 3, 0), 0xd8d0c0], [Cy(0.1, 0.16, 3, 5), T(0.8, 5.4, 0, 0, 0, -0.6), 0xd8d0c0]];
+    for (let k = 0; k < 7; k++) { const a = k * 2.4; p.push([rockGeo(k * 3 + 1, 1), T(Math.cos(a) * 1.4, 7 + (k % 3) * 1.1, Math.sin(a) * 1.4, 0, a, 0, rr(1.4, 2.2), rr(1.2, 1.7), rr(1.4, 2.2)), [0x5a6a2a, 0x6a7a34, 0x7a6a2a][k % 3]]); }
+    return merge(p); })();
+  const snagGeo = merge([[Cy(0.14, 0.4, 7, 6), T(0, 3.5, 0, 0.05, 0, 0.05), 0x2a221c], [Cy(0.06, 0.14, 3, 5), T(0.7, 5, 0, 0, 0, -0.9), 0x2a221c], [Cy(0.05, 0.12, 2.4, 5), T(-0.6, 4.2, 0.2, 0.3, 0, 0.8), 0x2a221c], [Cy(0.04, 0.1, 2, 5), T(0.2, 6.4, -0.3, -0.5, 0, 0.2), 0x2a221c]]);
+  const bushGeo = merge([[rockGeo(5, 1), T(0, 0.5, 0, 0, 0, 0, 1.3, 0.9, 1.2), 0x3a4a22], [rockGeo(7, 1), T(0.9, 0.4, 0.4, 0, 0, 0, 0.9, 0.7, 0.9), 0x4a5a2a], [rockGeo(9, 1), T(-0.7, 0.35, -0.3, 0, 0, 0, 0.8, 0.6, 0.8), 0x34441e]]);
+  const leafM = MAT('leaf', 0xffffff, Object.assign({ roughness: 0.85 }, VC));
+  const treeOK = (x, z) => H(x, z) > WATER_Y + 1.5 && roadD(x, z) > 9 && !nearHub(x, z, 75) && slopeAt(x, z) < 0.5;
+  // trees grow in clumps: pick clump centres, then scatter around them
+  const clumps = place(70, (x, z) => zones(x, z)[0] > 0.7 && treeOK(x, z), (x, z) => [x, z]);
+  const pines = [], broads = [];
+  for (const [cx, cz] of clumps) { const n = 8 + Math.floor(rnd() * 26), kind = rnd() < 0.7;
+    for (let i = 0; i < n; i++) { const a = rnd() * 7, d = Math.sqrt(rnd()) * rr(14, 40), x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d; if (!treeOK(x, z) || zones(x, z)[0] < 0.6) continue;
+      (kind || rnd() < 0.25 ? pines : broads).push({ x, z, y: H(x, z) - 0.3, ry: rnd() * 7, s: rr(0.7, 1.5), rx: rr(-0.05, 0.05), rz: rr(-0.05, 0.05), c: 0xffffff, k: rr(0.8, 1.15) }); } }
+  scatter(pineGeo, leafM, pines); scatter(broadGeo, leafM, broads);
+  scatter(bushGeo, leafM, place(700, (x, z) => zones(x, z)[0] > 0.5 && treeOK(x, z), (x, z) => ({ x, z, y: H(x, z) - 0.2, ry: rnd() * 7, s: rr(0.6, 1.6), c: 0xffffff, k: rr(0.75, 1.2) })));
+  const snags = place(260, (x, z) => zones(x, z)[1] > 0.5 && H(x, z) > WATER_Y + 0.5 && roadD(x, z) > 8, (x, z) => ({ x, z, y: H(x, z) - 0.2, ry: rnd() * 7, s: rr(0.6, 1.4), rx: rr(-0.25, 0.25), rz: rr(-0.25, 0.25) }));
+  scatter(snagGeo, leafM, snags);
+  // boulders everywhere, rockier on slopes
+  const boulderGeos = [0, 1, 2].map(k => rockGeo(k * 7 + 2, 1));
+  const rockM = new THREE.MeshStandardMaterial({ map: TEX.rock, roughness: 0.95, flatShading: true, vertexColors: false });
+  boulderGeos.forEach((g, k) => scatter(g, rockM, place(240, (x, z) => (slopeAt(x, z) > 0.18 || rnd() < 0.25) && roadD(x, z) > 7 && !nearHub(x, z, 70) && H(x, z) > WATER_Y - 2,
+    (x, z) => { const s = rr(0.6, 2.4) * (rnd() < 0.08 ? 3 : 1); return { x, z, y: H(x, z) - s * 0.3, ry: rnd() * 7, rx: rr(-0.3, 0.3), s, sy: rr(0.6, 1.1), c: zones(x, z)[2] > 0.5 ? 0x9a948a : 0xffffff }; })));
+
+  lap('shrine');
+  // ================================================================ the siege front
+  seed = 501;
+  // the fortress line: a broken wall with bastions, breached where the road passes
+  { const parts = [];
+    for (let x = -780; x <= 780; x += 14) {
+      const z = FORT_Z + Math.sin(x * 0.006) * 14, y = H(x, z); if (Math.abs(x - 10) < 22) continue;          // the breach
+      const broken = noise(x * 0.05, 3) > 0.25, h = broken ? rr(2, 7) : 12;
+      parts.push([wbox(14.4, h, 5), T(x, y + h / 2 - 1, z, 0, Math.cos(x * 0.006) * 0.084, 0)]);
+      if (!broken) for (let k = -2; k <= 2; k++) parts.push([wbox(1.6, 1.6, 5.4), T(x + k * 2.9, y + 11.8, z)]);
+      if (broken) for (let k = 0; k < 6; k++) parts.push([wbox(rr(1, 3), rr(0.8, 2), rr(1, 3)), T(x + rr(-7, 7), y + 0.4, z + rr(-8, 8), rnd(), rnd() * 3, rnd())]);
+      if (Math.round(x / 14) % 9 === 0 && !broken) { parts.push([Cy(8, 9.5, 16, 10), T(x, y + 7, z - 6)]); parts.push([wbox(20, 3, 20), T(x, y + 15.5, z - 6)]); }
+    }
+    for (const p of parts) p[2] = 0xa09a90;
+    add(merge(parts), wallM, 0, 0, 0); }
+  // trench revetments: plank walls and sandbags along each trench, duckboards in the bottom, firing steps
+  { const planks = [], bags = [], boards = [];
+    for (const line of TRENCH) for (let i = 0; i < line.length - 1; i++) {
+      const [ax, az] = line[i], [bx, bz] = line[i + 1], len = Math.hypot(bx - ax, bz - az), a = Math.atan2(bz - az, bx - ax);
+      if (zones((ax + bx) / 2, (az + bz) / 2)[1] < 0.4 || roadD((ax + bx) / 2, (az + bz) / 2) < 10) continue;
+      for (let s = 0; s < len; s += 1.6) { const t = s / len, x = ax + (bx - ax) * t, z = az + (bz - az) * t, nx = -Math.sin(a), nz = Math.cos(a);
+        for (const side of [-1, 1]) { const px = x + nx * side * 1.7, pz = z + nz * side * 1.7, y = H(px, pz);
+          planks.push({ x: px, z: pz, y: y - 0.2, ry: -a, s: 1, rz: side * 0.12 });
+          if (rnd() < 0.8) bags.push({ x: x + nx * side * 2.8, z: z + nz * side * 2.8, y: H(x + nx * side * 2.8, z + nz * side * 2.8) + 0.1, ry: -a + rr(-0.2, 0.2), s: rr(0.9, 1.1), c: rnd() < 0.5 ? 0x8a7a5a : 0x6a5e46 });
+          if (rnd() < 0.5) bags.push({ x: x + nx * side * 2.8 + rr(-0.4, 0.4), z: z + nz * side * 2.8, y: H(x + nx * side * 2.8, z + nz * side * 2.8) + 0.45, ry: -a + rr(-0.3, 0.3), s: rr(0.9, 1.1), c: 0x7a6a50 }); }
+        boards.push({ x, z, y: H(x, z) + 0.08, ry: -a, s: 1 }); } }
+    scatter(merge([[B(1.55, 2.4, 0.12), T(0, 1.2, 0), 0x5a4630], [B(0.16, 2.8, 0.16), T(0.72, 1.3, 0.1), 0x3a2e20]]), metalM, planks);
+    scatter(merge([[rockGeo(3, 1), T(0, 0.22, 0, 0, 0, 0, 0.55, 0.26, 0.32), 0xffffff]]), MAT('bag', 0xffffff, Object.assign({ roughness: 1 }, VC)), bags);
+    scatter(merge([[B(1.5, 0.08, 1.0), T(0, 0, 0), 0x6a5236], [B(1.5, 0.1, 0.12), T(0, -0.05, -0.4), 0x4a3a28], [B(1.5, 0.1, 0.12), T(0, -0.05, 0.4), 0x4a3a28]]), metalM, boards, { cast: false });
+  }
+  // tank traps, wire, wrecked tanks, field guns, flooded craters, shell debris
+  const trapGeo = merge([[B(0.35, 0.35, 3.2), T(0, 0.85, 0, 0.62, 0, 0), 0x4a4440], [B(0.35, 0.35, 3.2), T(0, 0.85, 0, -0.62, 0, 0), 0x4a4440], [B(0.35, 3.2, 0.35), T(0, 0.85, 0, 0, 0, 0.62), 0x3e3834]]);
+  const frontOK = (x, z) => zones(x, z)[1] > 0.55 && roadD(x, z) > 7 && trenchD(x, z) > 5 && H(x, z) > WATER_Y + 0.3;
+  const traps = []; for (let i = 0; i < 26; i++) { const x0 = rr(-700, 700), z0 = rr(-40, 110); for (let k = 0; k < 9; k++) { const x = x0 + k * 4.2, z = z0 + Math.sin(k) * 1.5; if (frontOK(x, z)) traps.push({ x, z, y: H(x, z), ry: rr(-0.3, 0.3), s: rr(0.85, 1.1) }); } }
+  scatter(trapGeo, metalM, traps);
+  const wireGeo = (() => { const p = []; for (let k = 0; k < 5; k++) p.push([B(0.1, 1.5, 0.1), T(-8 + k * 4, 0.75, 0, 0, 0, rr(-0.2, 0.2)), 0x3a3028]); for (let k = 0; k < 14; k++) p.push([new THREE.TorusGeometry(0.62, 0.02, 3, 12), T(-8 + k * 1.2, 0.72, rr(-0.1, 0.1), 0, PI / 2 + rr(-0.3, 0.3), 0, 1, 1, 1), 0x2a2622]); return merge(p); })();
+  scatter(wireGeo, metalM, place(220, frontOK, (x, z) => ({ x, z, y: H(x, z), ry: rr(-0.4, 0.4) + (rnd() < 0.2 ? PI / 2 : 0), s: 1 })));
+  const tankGeo = merge([[B(6.6, 2.2, 10), T(0, 1.6, 0), 0x3a3a30], [B(8, 1.6, 11), T(0, 0.9, 0), 0x2a2a24], [B(4.4, 1.9, 4.8), T(0, 3.6, -0.6, 0, 0.5, 0), 0x3e3e34], [Cy(0.3, 0.32, 6.6, 8), T(-1.7, 3.8, 2.4, PI / 2 - 0.25, 0.5, 0), 0x2e2e28],
+    [B(1.8, 0.9, 2.6), T(2, 2.9, 3.6, 0.4, 0.5, 0.6), 0x2a2420], [Cy(0.7, 0.7, 0.5, 10), T(3.9, 0.8, -3, 0, 0, PI / 2), 0x1e1e1a], [Cy(0.7, 0.7, 0.5, 10), T(3.9, 0.8, 3, 0, 0, PI / 2), 0x1e1e1a], [B(1.1, 1.1, 1.1), T(-2, 3.4, -3, 0.3, 0.2, 0.1), 0x6a3420]]);
+  const tanks = place(14, (x, z) => frontOK(x, z) && slopeAt(x, z) < 0.25, (x, z) => ({ x, z, y: H(x, z) - 0.5, ry: rnd() * 7, rx: rr(-0.15, 0.15), rz: rr(-0.2, 0.2), s: rr(0.9, 1.1) }));
+  scatter(tankGeo, metalM, tanks);
+  const gunGeo = merge([[Cy(0.22, 0.28, 6, 8), T(0, 1.8, 2.2, PI / 2 - 0.35, 0, 0), 0x3a3a32], [B(2, 1.2, 2.4), T(0, 1.1, 0), 0x46463c], [B(2.6, 1.6, 0.12), T(0, 1.5, 1.2, -0.2, 0, 0), 0x3a3a32], [Cy(0.8, 0.8, 0.22, 12), T(1.2, 0.8, -0.3, 0, 0, PI / 2), 0x2a2420], [Cy(0.8, 0.8, 0.22, 12), T(-1.2, 0.8, -0.3, 0, 0, PI / 2), 0x2a2420], [B(0.18, 0.18, 4), T(0.5, 0.3, -2.4, 0.1, 0.15, 0), 0x3a3028], [B(0.18, 0.18, 4), T(-0.5, 0.3, -2.4, 0.1, -0.15, 0), 0x3a3028]]);
+  const guns = place(10, (x, z) => frontOK(x, z) && z > FORT_Z + 20 && slopeAt(x, z) < 0.2, (x, z) => ({ x, z, y: H(x, z), ry: PI + rr(-0.4, 0.4), s: 1 }));
+  scatter(gunGeo, metalM, guns);
+  // flooded craters: a water disc at the bottom of the bigger ones
+  { const discs = []; for (const c of CRATERS) { if (c[2] < 6 || zones(c[0], c[1])[1] < 0.5 || roadD(c[0], c[1]) < 12 || rnd() < 0.4) continue; discs.push({ x: c[0], z: c[1], y: H(c[0], c[1]) + c[2] * 0.12, s: c[2] * 0.5 }); }
+    const g = new THREE.CircleGeometry(1, 16); g.rotateX(-PI / 2); scatter(g, new THREE.MeshStandardMaterial({ color: CL(0x2e2a22), roughness: 0.05, metalness: 0.7 }), discs, { cast: false }); }
+  // debris: shell casings, crates, broken planks, helmets... small, many
+  { const debGeo = merge([[B(0.6, 0.4, 0.9), T(0, 0.2, 0, 0, 0.3, 0), 0x5a4a32], [Cy(0.09, 0.09, 0.7, 6), T(0.6, 0.09, 0.4, 0, 0, PI / 2), 0xb08a40], [B(2, 0.06, 0.2), T(-0.6, 0.05, -0.5, 0, 0.8, 0), 0x4a3a28]]);
+    scatter(debGeo, metalM, place(900, (x, z) => zones(x, z)[1] > 0.4 || (zones(x, z)[2] > 0.4 && rnd() < 0.5), (x, z) => ({ x, z, y: H(x, z), ry: rnd() * 7, s: rr(0.7, 1.3), rz: rr(-0.2, 0.2) }), 10), { cast: false }); }
+
+  lap('siege');
+  // ================================================================ the dead hive
+  seed = 701;
+  // hab block facades: rows of dark broken windows, some burnt, a few still faintly lit
+  const habT = canvasTex(256, 512, (g, w, h) => { g.fillStyle = '#4a4440'; g.fillRect(0, 0, w, h); speck(g, w, h, 400, ['#3a3430', '#5a544c', '#2a2420'], 4, 30, 0.15, 0.4);
+    for (let y = 10; y < h; y += 32) { g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, y + 22, w, 4);
+      for (let x = 8; x < w - 12; x += 30) { const r = rnd(); g.fillStyle = r < 0.04 ? '#c08040' : r < 0.25 ? '#060504' : '#141210'; g.fillRect(x, y, 18, 20); g.fillStyle = 'rgba(120,110,100,.3)'; g.fillRect(x, y + 20, 18, 2);
+        if (r > 0.85) { g.fillStyle = 'rgba(10,8,6,.6)'; g.beginPath(); g.ellipse(x + 9, y - 6, 14, 20, 0, 0, 7); g.fill(); } } }
+    for (let i = 0; i < 12; i++) { g.fillStyle = 'rgba(40,30,22,.35)'; g.fillRect(rnd() * w, 0, rr(4, 14), h); } });
+  const habM = new THREE.MeshStandardMaterial({ map: habT, roughness: 0.9, emissiveMap: habT, emissive: CL(0x6a4020), emissiveIntensity: 0.25 });
+  { const facades = [], conc = [];
+    for (const b of BLOCKS) {
+      const y = H(b.x, b.z) - 1;
+      if (b.state === 'rubble') { for (let k = 0; k < 14; k++) conc.push([rockGeo(k + b.x, 0), T(b.x + rr(-b.w / 2, b.w / 2), y + rr(0, b.h * 0.4), b.z + rr(-b.d / 2, b.d / 2), rnd(), rnd() * 3, rnd(), rr(3, 7), rr(1.5, 4), rr(3, 7)), 0x7a746a]);
+        for (let k = 0; k < 6; k++) conc.push([B(rr(4, 10), 0.5, rr(2, 5)), T(b.x + rr(-b.w / 2, b.w / 2), y + rr(1, b.h * 0.5), b.z + rr(-b.d / 2, b.d / 2), rr(-0.6, 0.6), rnd() * 3, rr(-0.6, 0.6)), 0x6a6458]); continue; }
+      // the shell, with a ragged top: a few slabs of differing height, and floor slabs showing where walls fell away
+      const cols = b.state === 'gutted' ? 3 : 2;
+      for (let i = 0; i < cols; i++) for (let j = 0; j < cols; j++) {
+        if (b.state === 'gutted' && rnd() < 0.3) continue;
+        const w = b.w / cols, d = b.d / cols, hh = b.h * rr(b.state === 'gutted' ? 0.35 : 0.75, 1), x = b.x - b.w / 2 + w * (i + 0.5), z = b.z - b.d / 2 + d * (j + 0.5);
+        const g = B(w, hh, d), uv = g.attributes.uv, n = g.attributes.normal; for (let k = 0; k < uv.count; k++) { const side = Math.abs(n.getX(k)) > 0.5 ? d : w; uv.setXY(k, uv.getX(k) * side / 18, uv.getY(k) * hh / 36); }
+        facades.push([g, T(x, y + hh / 2, z, 0, b.ry, 0), 0xffffff]);
+        if (b.state === 'gutted') for (let f = 4; f < hh; f += 4) if (rnd() < 0.4) conc.push([B(w * rr(0.4, 0.9), 0.4, d * 0.4), T(x + rr(-2, 2), y + f, z + d * 0.55, 0, b.ry, 0), 0x6a645a]);
+      }
+      // pipes and a gantry reaching to a neighbour
+      if (rnd() < 0.5) conc.push([Cy(0.7, 0.7, b.d + 10, 8), T(b.x + b.w / 2 + 1, y + rr(6, 14), b.z, PI / 2, 0, 0), 0x5a3a2a]);
+      if (rnd() < 0.3) conc.push([B(58, 1, 3), T(b.x + 29, y + rr(14, 24), b.z, 0, 0, rr(-0.08, 0.08)), 0x4a4440]);
+    }
+    const fm = add(merge(facades), habM, 0, 0, 0); fm.material = habM;
+    add(merge(conc), stoneM, 0, 0, 0);
+  }
+  // a toppled spire lying across the city, half buried, and the great hive spires on the northern horizon
+  { const p = []; let r = 16;
+    for (let k = 0; k < 9; k++) { const len = 26; p.push([Cy(r * 0.85, r, len, 10), T(0, 0, -k * 25, PI / 2, 0, 0), 0x5a544c]); if (k % 2) p.push([Cy(r + 1.5, r + 1.5, 3, 10), T(0, 0, -k * 25 + 10, PI / 2, 0, 0), 0x4a4440]); r *= 0.9; }
+    for (let k = 0; k < 12; k++) p.push([B(rr(4, 10), rr(4, 10), rr(4, 10)), T(rr(-20, 20), rr(-6, 4), rr(-210, 20), rnd(), rnd(), rnd()), 0x6a645a]);
+    const m = add(merge(p), stoneM, -300, H(-300, -470) + 2, -470, 0.7); m.rotation.z = 0.08;
+    const far = []; for (let i = 0; i < 9; i++) { const x = rr(-1400, 1400), z = rr(-1500, -1100), hh = rr(260, 620); let w = rr(60, 110), y = 0;
+      for (let k = 0; k < 7; k++) { const h = hh / 7; far.push([B(w, h, w * 0.8), T(x + rr(-6, 6), y + h / 2, z), 0x3a3634]); y += h; w *= 0.8; if (rnd() < 0.5) far.push([B(w * 2, 8, 10), T(x, y - 20, z, 0, rnd() * 3, 0), 0x2e2a28]); }
+      far.push([Co(w * 0.6, hh * 0.25, 4), T(x, y + hh * 0.12, z, 0, PI / 4, 0), 0x2e2a28]); }
+    const fs = new THREE.Mesh(merge(far), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true })); scene.add(fs);
+    // the southern mountains beyond the highlands
+    const mt = []; for (let i = 0; i < 26; i++) { const a = -0.3 - rnd() * (PI - 0.6), r2 = rr(1150, 1500); mt.push([Co(rr(180, 320), rr(160, 380), 7), T(Math.cos(a) * r2, 60, -Math.sin(a) * r2, 0, rnd() * 3, 0), i % 3 ? 0x4a4c50 : 0x5a5c5e]); }
+    scene.add(new THREE.Mesh(merge(mt), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }))); }
+  // ribs of something enormous in the ash, burnt vehicles, fallen statues along the avenue
+  { const ribGeo = merge([[Cy(0.9, 0.7, 30, 7), T(0, 0.6, 0, 0, 0, PI / 2), 0xd0c4a8], ...Array.from({ length: 10 }, (_, k) => [new THREE.TorusGeometry(7 - Math.abs(k - 4.5) * 0.5, 0.5, 5, 12, PI), T(-13 + k * 2.9, 0, 0, 0, PI / 2, 0), 0xd8ccb0]), [rockGeo(4, 1), T(16, 2, 0, 0, 0, 0, 3.5, 2.6, 3), 0xd0c4a8]]);
+    scatter(ribGeo, stoneM, place(5, (x, z) => zones(x, z)[2] > 0.8 && cityF(x, z) < 0.2 && roadD(x, z) > 20, (x, z) => ({ x, z, y: H(x, z) - 1.2, ry: rnd() * 7, rz: rr(-0.1, 0.1), s: rr(0.9, 1.4) })));
+    const carGeo = merge([[B(2.4, 1.2, 5), T(0, 0.9, 0), 0x3a2a22], [B(2.1, 0.9, 2.6), T(0, 1.9, -0.3, 0.05, 0, 0.05), 0x2a221e], [Cy(0.45, 0.45, 0.3, 8), T(1.2, 0.45, 1.6, 0, 0, PI / 2), 0x141210], [Cy(0.45, 0.45, 0.3, 8), T(-1.2, 0.45, -1.6, 0, 0, PI / 2), 0x141210]]);
+    scatter(carGeo, metalM, place(70, (x, z) => zones(x, z)[2] > 0.6 && cityF(x, z) < 0.8 && roadD(x, z) < 40, (x, z) => ({ x, z, y: H(x, z), ry: rnd() * 7, rz: rr(-0.3, 0.3), s: 1 })));
+    for (let i = 0; i < 5; i++) { const r = ROAD[9 + i]; if (!r) break; const m = add(statueGeo, stoneM, r[0] + 14, H(r[0] + 14, r[1]) + 0.6, r[1], 0, 1.3); m.rotation.z = PI / 2 - 0.15; }
+  }
+
+  lap('hive');
+  { seed = 777;
+    const nearCity = (x, z) => zones(x, z)[2] > 0.5 && cityF(x, z) > 0.15 && cityF(x, z) < 0.995;
+    const rub = [0, 1, 2].map(k => merge([[rockGeo(k * 5 + 1, 0), T(0, 0.3, 0, 0, 0, 0, 1.2, 0.6, 1), 0x8a847a], [rockGeo(k * 5 + 2, 0), T(1, 0.2, 0.5, 0, 1, 0, 0.7, 0.4, 0.7), 0x6e685e], [rockGeo(k * 5 + 3, 0), T(-0.8, 0.15, -0.4, 0, 2, 0, 0.6, 0.35, 0.6), 0x9a9488]]));
+    rub.forEach((g, k) => scatter(g, stoneM, place(700, (x, z) => nearCity(x, z) || (zones(x, z)[2] > 0.6 && rnd() < 0.08), (x, z) => ({ x, z, y: H(x, z) - 0.2, ry: rnd() * 7, s: rr(0.6, 2.6), c: 0xffffff, k: rr(0.8, 1.1) }))));
+    const slab = merge([[B(4, 0.35, 2.6), T(0, 0, 0), 0x7a746a], [Cy(0.03, 0.03, 1.8, 4), T(1.6, 0.6, 0.6, 0.3, 0, -0.5), 0x5a3a2a], [Cy(0.03, 0.03, 1.4, 4), T(1.8, 0.4, -0.4, -0.4, 0, -0.7), 0x5a3a2a], [Cy(0.03, 0.03, 1.6, 4), T(-1.7, 0.5, 0.2, 0.2, 0, 0.6), 0x5a3a2a]]);
+    scatter(slab, stoneM, place(380, nearCity, (x, z) => ({ x, z, y: H(x, z) + 0.2, ry: rnd() * 7, rx: rr(-0.5, 0.5), rz: rr(-0.5, 0.5), s: rr(0.8, 1.8) })));
+    const lamp = merge([[Cy(0.12, 0.18, 7, 6), T(0, 3.5, 0), 0x2a2622], [B(0.2, 0.2, 2.4), T(0, 6.9, 1.1), 0x2a2622], [B(0.6, 0.3, 0.8), T(0, 6.7, 2.2), 0x3a3430], [B(0.7, 0.4, 0.7), T(0, 0.2, 0), 0x3a3430]]);
+    const lamps = []; for (let i = 0; i < ROAD.length - 1; i++) { const [ax, az] = ROAD[i], [bx, bz] = ROAD[i + 1]; if (zones(ax, az)[2] < 0.6) continue; const a = Math.atan2(bx - ax, bz - az);
+      for (let t = 0; t < 1; t += 0.2) for (const side of [-1, 1]) { const x = ax + (bx - ax) * t + Math.cos(a) * side * 9, z = az + (bz - az) * t - Math.sin(a) * side * 9; lamps.push({ x, z, y: H(x, z), ry: a + (side > 0 ? -PI / 2 : PI / 2), rz: rnd() < 0.3 ? rr(-0.6, 0.6) : rr(-0.05, 0.05), s: 1 }); } }
+    scatter(lamp, metalM, lamps);
+    const barr = merge([[B(3.6, 1.2, 0.8), T(0, 0.6, 0), 0x6a645a], [B(3.2, 0.2, 0.9), T(0, 1.25, 0), 0x5a544c], [rockGeo(9, 0), T(1.9, 0.4, 0.5, 0, 0, 0, 0.6), 0x5a544c]]);
+    scatter(barr, stoneM, place(140, (x, z) => zones(x, z)[2] > 0.5 && cityF(x, z) < 0.9 && roadD(x, z) > 5 && roadD(x, z) < 30, (x, z) => ({ x, z, y: H(x, z), ry: rnd() * 7, s: rr(0.9, 1.2) }))); }
+
+  // ================================================================ grass: tufts in chunks around the walker, swaying
+  const grassT = canvasTex(128, 128, (g, w, h) => { g.clearRect(0, 0, w, h); for (let i = 0; i < 40; i++) { const x = rr(8, w - 8), lean = rr(-14, 14), hh = rr(h * 0.5, h * 0.98); const c = ['#9aaa58', '#7a8a40', '#b4b068', '#68783a', '#8a9a4c'][i % 5];
+    g.fillStyle = c; g.beginPath(); g.moveTo(x - 3, h); g.quadraticCurveTo(x + lean * 0.3, h - hh * 0.6, x + lean, h - hh); g.quadraticCurveTo(x + lean * 0.3 + 1, h - hh * 0.5, x + 3, h); g.fill(); } }, false);
+  const tuftGeo = (() => { const p = []; for (let k = 0; k < 4; k++) { const g = new THREE.PlaneGeometry(1.0, 0.6); g.translate(0, 0.3, 0); p.push([g, T(rr(-0.15, 0.15), 0, rr(-0.15, 0.15), 0, k * PI / 4, 0)]); } const m = merge(p); m.deleteAttribute('color'); return m; })();
+  const grassU = { time: { value: 0 } };
+  const grassM = new THREE.MeshStandardMaterial({ map: grassT, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 1 });
+  grassM.onBeforeCompile = sh => { sh.uniforms.time = grassU.time;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float time;').replace('#include <begin_vertex>', `#include <begin_vertex>
+      vec3 ip = vec3(instanceMatrix[3][0], 0.0, instanceMatrix[3][2]);
+      float sway = sin(time * 1.7 + ip.x * 0.21 + ip.z * 0.17) * 0.5 + sin(time * 3.1 + ip.x * 0.7) * 0.2;
+      transformed.x += sway * position.y * 0.22; transformed.z += sway * position.y * 0.12;`);
+    // normals pointing up, so the tufts light like the ground beneath them
+    sh.vertexShader = sh.vertexShader.replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);');
+    // both faces of a card keep the up normal (no back-face flip), so neither side goes dark
+    sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', 'vec3 normal = normalize(vNormal); vec3 geometryNormal = normal;')
+      // no specular: with an up normal seen edge-on, Fresnel and the GGX geometry term blow up and turned sunlit tufts white
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular = vec3(0.0); reflectedLight.indirectSpecular = vec3(0.0);'); };
+  const CH = 24, chunks = new Map();
+  // no tufts right under a fire's light: lit from above at close range they wash out to white
+  const nearFire = (x, z) => SMOKES.slice(0, 4).some(f => Math.hypot(f[0] - x, f[1] - z) < 26);
+  function grassChunk(cx, cz) {
+    const k = cx + ',' + cz; if (chunks.has(k)) return chunks.get(k);
+    seed = (cx * 7349 + cz * 1931) & 0x7fffffff || 1; const list = [];
+    for (let i = 0; i < 420; i++) { const x = (cx + rnd()) * CH, z = (cz + rnd()) * CH, [s, f] = zones(x, z), y = H(x, z);
+      const dens = s * 0.95 + f * 0.25; if (rnd() > dens || y < WATER_Y + 0.4 || roadD(x, z) < 5 || slopeAt(x, z) > 0.4 || nearHub(x, z, 50) || nearFire(x, z)) continue;
+      const dry = f > 0.4 || fbm(x * 0.01, z * 0.01) > 0.25;
+      list.push({ x, z, y, ry: rnd() * 7, s: rr(0.7, 1.5), sy: rr(0.7, 1.3), c: dry ? 0x847850 : 0x8a9858, k: rr(0.8, 1.15) }); }
+    const im = list.length ? scatter(tuftGeo, grassM, list, { cast: false }) : null; if (im) im.receiveShadow = true; chunks.set(k, im); return im;
+  }
+  function updateGrass(px, pz) {
+    const R = 5, cx0 = Math.floor(px / CH), cz0 = Math.floor(pz / CH);
+    for (const [k, im] of chunks) { if (!im) continue; const [a, b] = k.split(',').map(Number); im.visible = Math.abs(a - cx0) <= R && Math.abs(b - cz0) <= R; }
+    for (let a = cx0 - R; a <= cx0 + R; a++) for (let b = cz0 - R; b <= cz0 + R; b++) if (Math.abs(a * CH) < HALF && Math.abs(b * CH) < HALF) grassChunk(a, b);
+  }
+
+  // ================================================================ weather: ash fall over the hive, smoke over the front, mist in the highlands, embers
+  const dot = canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); }, false);
+  const FX = [];
+  function cloud(n, gen, m) { const pos = new Float32Array(n * 3); for (let i = 0; i < n; i++) pos.set(gen(i), i * 3); const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); const p = new THREE.Points(g, m); scene.add(p); FX.push(p); return p; }
+  seed = 909;
+  const ash = cloud(5000, () => { const x = rr(-HALF, HALF), z = rr(-HALF, -60); return [x, H(x, z) + rr(0, 90), z]; }, new THREE.PointsMaterial({ color: 0xc8c0b4, size: 0.35, map: dot, transparent: true, opacity: 0.8, depthWrite: false }));
+  ash.userData.fall = 1.6;
+  const SMOKES = []; for (let i = 0; i < 12; i++) { const x = rr(-650, 650), z = rr(-200, 160); SMOKES.push([x, z, H(x, z)]); }
+  cloud(2400, i => { const s = SMOKES[i % SMOKES.length], up = rnd(); return [s[0] + rr(-1, 1) * (3 + up * 30) + up * 60, s[2] + up * 180, s[1] + rr(-1, 1) * (3 + up * 30) + up * 12]; },
+    new THREE.PointsMaterial({ color: 0x2a2624, size: 16, map: dot, transparent: true, opacity: 0.32, depthWrite: false }));
+  cloud(900, () => { let x, z, k = 0; do { x = rr(-HALF, HALF); z = rr(200, HALF); } while ((H(x, z) > 40 || H(x, z) < WATER_Y) && k++ < 30); return [x, H(x, z) + rr(1.5, 7), z]; },
+    new THREE.PointsMaterial({ color: 0xe0dcd0, size: 30, map: dot, transparent: true, opacity: 0.1, depthWrite: false }));
+  const embers = cloud(500, i => { const s = SMOKES[i % SMOKES.length]; return [s[0] + rr(-4, 4), s[2] + rr(0, 20), s[1] + rr(-4, 4)]; }, new THREE.PointsMaterial({ color: 0xff8a30, size: 0.5, map: dot, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
+  embers.userData.rise = 1;
+  // fires at the smoke sources and braziers at the hub gate: real lights, but only a few
+  for (const s of SMOKES.slice(0, 4)) { /* r128 fades lights by range, not inverse-square, so 3 at 40 m outshone the sun */ const L = new THREE.PointLight(0xff7a30, 1.1, 24, 2); L.position.set(s[0], s[2] + 3, s[1]); scene.add(L); }
+  for (const sx of [-1, 1]) { const x = HUB.x + sx * 11, z = HUB.z - 60, y = H(x, z); add(merge([[Cy(0.8, 0.4, 0.7, 10), T(0, 1.6, 0), 0x2a2622], [Cy(0.1, 0.1, 1.4, 5), T(0, 0.7, 0), 0x2a2622]]), metalM, x, y, z); const L = new THREE.PointLight(0xff8a40, 2.4, 22, 2); L.position.set(x, y + 2.6, z); scene.add(L);
+    cloud(60, () => [x + rr(-0.3, 0.3), y + 2 + rr(0, 3), z + rr(-0.3, 0.3)], new THREE.PointsMaterial({ color: 0xffa040, size: 0.6, map: dot, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending })).userData.rise = 0.6; }
+
+  lap('weather');
+  // ================================================================ places, for the card, compass and travel
+  const PLACES = [
+    { id: 'hub', name: 'Monastery of the Sword', sub: 'Shrine highlands', desc: 'The Templars\' hill fortress and the hub of the region: walls, gatehouse, keep and chapel spire. The pilgrim road leaves from its gate.', x: HUB.x, z: HUB.z - 72, yaw: 0 },
+    { id: 'fields', name: 'The Pilgrim Fields', sub: 'Shrine highlands', desc: 'Walled fields, wayside chapels and saints in stone, pine woods on the ridges and a lake in the low ground.', x: -150, z: 360, yaw: 0.6 },
+    { id: 'front', name: 'The Breach', sub: 'Siege front', desc: 'Where the road passes through the broken fortress line. Trenches either side, wire, tank traps, wrecked armour and fires still burning.', x: 15, z: 95, yaw: 0 },
+    { id: 'trench', name: 'The Forward Trench', sub: 'Siege front', desc: 'A revetted trench with duckboards and sandbags, looking across no-man\'s-land toward the dead city.', x: -200, z: -28, yaw: 0, pitch: -0.25 },
+    { id: 'hive', name: 'The Dead Hive', sub: 'Hive ruins', desc: 'Street after street of gutted hab blocks under falling ash, the road running up the main avenue, and the great spires beyond.', x: 0, z: -430, yaw: 0 },
+    { id: 'spire', name: 'The Fallen Spire', sub: 'Hive ruins', desc: 'A hive spire that came down across the western blocks. It would make the region\'s first dungeon.', x: -230, z: -400, yaw: 1.1 },
+  ];
+  { const L = TRENCH[2], i = L.findIndex(p => p[0] > -200), t = PLACES.find(p => p.id === 'trench'); t.x = L[i][0]; t.z = L[i][1] + 5.5; }      // stand on the trench's back edge
+  const placeAt = (x, z) => { const [s, f] = zones(x, z); return s > 0.5 ? 'Shrine highlands' : f > 0.5 ? 'Siege front' : 'Hive ruins'; };
+
+  // ================================================================ walking and flying
+  const me = { x: 0, z: 0, y: 0, vy: 0, yaw: 0, pitch: -0.04 }, keys = {};
+  let mode = 'walk', flyYaw = 0.5, flyPitch = 0.42, flyDist = 900, flyHold = 0, fwdHeld = false;
+  function goTo(p) { me.x = p.x; me.z = p.z; me.yaw = p.yaw; me.pitch = p.pitch || -0.04; me.y = Math.max(H(me.x, me.z), WATER_Y - 0.5); me.vy = 0; updateGrass(me.x, me.z); }
+  addEventListener('keydown', e => { keys[e.code] = true; if (mode === 'walk' && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault(); });
+  addEventListener('keyup', e => { keys[e.code] = false; });
+  let drag = null; const ptrs = new Set();
+  canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); ptrs.add(e.pointerId); drag = [e.clientX, e.clientY]; });
+  canvas.addEventListener('pointermove', e => { if (!drag || !ptrs.has(e.pointerId)) return; const dx = e.clientX - drag[0], dy = e.clientY - drag[1]; drag = [e.clientX, e.clientY];
+    if (mode === 'walk') { me.yaw -= dx * 0.004; me.pitch = clamp(me.pitch - dy * 0.004, -1.3, 1.3); } else { flyYaw -= dx * 0.004; flyPitch = clamp(flyPitch + dy * 0.002, 0.12, 1.2); flyHold = 5; } });
+  const up = e => { ptrs.delete(e.pointerId); if (!ptrs.size) drag = null; };
+  canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+  canvas.addEventListener('wheel', e => { if (mode === 'fly') { flyDist = clamp(flyDist * (1 + Math.sign(e.deltaY) * 0.1), 200, 1500); e.preventDefault(); } }, { passive: false });
+  const fwd = $('fwd'); fwd.addEventListener('pointerdown', e => { fwdHeld = true; e.preventDefault(); }); for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) fwd.addEventListener(ev, () => { fwdHeld = false; });
+
+  let lastGrass = [1e9, 1e9];
+  function step(dt, t) {
+    if (mode === 'fly') {
+      if (flyHold > 0) flyHold -= dt; else flyYaw += dt * 0.03;
+      const cx = Math.sin(flyYaw) * flyDist * Math.cos(flyPitch), cz = Math.cos(flyYaw) * flyDist * Math.cos(flyPitch);
+      cam.position.set(cx, Math.max(H(cx, cz) + 40, Math.sin(flyPitch) * flyDist), cz); cam.lookAt(0, 20, 0);
+    } else {
+      const run = keys.ShiftLeft || keys.ShiftRight ? 2.4 : 1, sp = 6 * run * dt;
+      const f = (keys.KeyW || keys.ArrowUp || fwdHeld ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0), s = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+      if (keys.ArrowLeft) me.yaw += dt * 1.8; if (keys.ArrowRight) me.yaw -= dt * 1.8;
+      me.x = clamp(me.x + (-Math.sin(me.yaw) * f + Math.cos(me.yaw) * s) * sp, -HALF + 10, HALF - 10); me.z = clamp(me.z + (-Math.cos(me.yaw) * f - Math.sin(me.yaw) * s) * sp, -HALF + 10, HALF - 10);
+      const ground = Math.max(H(me.x, me.z), WATER_Y - 0.9);
+      if (keys.Space && me.y <= ground + 0.02) me.vy = 6; me.vy -= 18 * dt; me.y += me.vy * dt; if (me.y < ground) { me.y = ground; me.vy = 0; }
+      cam.position.set(me.x, me.y + 2.0 + (f ? Math.sin(t * 8 * run) * 0.035 : 0), me.z); cam.rotation.set(me.pitch, me.yaw, 0, 'YXZ');
+      if (Math.hypot(me.x - lastGrass[0], me.z - lastGrass[1]) > 8) { updateGrass(me.x, me.z); lastGrass = [me.x, me.z]; }
+    }
+    // the shadow box follows the camera
+    const cx = mode === 'walk' ? me.x : 0, cz = mode === 'walk' ? me.z : 0;
+    sunL.target.position.set(cx, 0, cz); sunL.position.set(cx + SUN.x * 400, SUN.y * 400, cz + SUN.z * 400);
+    Object.assign(sunL.shadow.camera, mode === 'walk' ? { left: -90, right: 90, top: 90, bottom: -90 } : { left: -700, right: 700, top: 700, bottom: -700 }); sunL.shadow.camera.updateProjectionMatrix();
+    // fog and light tint follow the zone the camera is in
+    const [zs, zf, zh] = zones(cam.position.x, cam.position.z);
+    fogCol.setRGB(0, 0, 0).add(FOG_S.clone().multiplyScalar(zs)).add(FOG_F.clone().multiplyScalar(zf)).add(FOG_H.clone().multiplyScalar(zh)); scene.fog.color.copy(fogCol);
+    scene.fog.density = mode === 'fly' ? 0.0007 : 0.0024 * zs + 0.0032 * zf + 0.004 * zh;
+    skyU.time.value = t; grassU.time.value = t;
+    for (const p of FX) { const a = p.geometry.attributes.position;
+      if (p.userData.fall) { for (let i = 0; i < a.count; i++) { let y = a.getY(i) - dt * p.userData.fall; const x = a.getX(i) + Math.sin(t * 0.6 + i) * dt * 0.8; if (y < H(x, a.getZ(i))) y += 90; a.setXY(i, x, y); } a.needsUpdate = true; }
+      if (p.userData.rise) { for (let i = 0; i < a.count; i++) { let y = a.getY(i) + dt * p.userData.rise * (2 + (i % 5)); if (y > 30 + (i % 7) * 4 + (p.userData.base || 0)) y -= 30; a.setY(i, y); } a.needsUpdate = true; } }
+    for (const b of BANNERS) { const p = b.geometry.attributes.position; if (!b.userData.base) b.userData.base = p.array.slice(); const o = b.userData.base;
+      for (let i = 0; i < p.count; i++) { const y = o[i * 3 + 1]; p.setZ(i, o[i * 3 + 2] + Math.sin(t * 2.2 + y * 0.8 + o[i * 3] * 0.6) * 0.12 * -y / 4); } p.needsUpdate = true; }
+  }
+  const FOG_S = CL(0x9a948a), FOG_F = CL(0x7a6458), FOG_H = CL(0x8a6a50), fogCol = new THREE.Color();
+
+  // ================================================================ map and compass
+  const mapC = $('map'), mg = mapC.getContext('2d'), mapImg = document.createElement('canvas'); mapImg.width = mapImg.height = 360;
+  { const g = mapImg.getContext('2d'), id = g.createImageData(360, 360);
+    for (let j = 0; j < 360; j++) for (let i = 0; i < 360; i++) { const x = (i / 360 - 0.5) * SIZE, z = (j / 360 - 0.5) * SIZE, y = H(x, z), [s, f, h] = zones(x, z), k = (i + j * 360) * 4;
+      let c = [s * 86 + f * 92 + h * 140, s * 100 + f * 78 + h * 132, s * 56 + f * 62 + h * 120]; if (y < WATER_Y) c = [50, 64, 74]; if (roadD(x, z) < 5) c = [60, 54, 48]; if (zones(x, z)[2] > 0.5 && cityF(x, z) > 0.99) c = [60, 56, 52];
+      const sh = clamp(1 + (H(x - 4, z - 4) - y) * 0.04, 0.6, 1.3); id.data.set([c[0] * sh, c[1] * sh, c[2] * sh, 255], k); }
+    g.putImageData(id, 0, 0); g.strokeStyle = '#a0988a'; g.lineWidth = 2; g.beginPath(); g.arc((HUB.x / SIZE + 0.5) * 360, (HUB.z / SIZE + 0.5) * 360, 54 / SIZE * 360, 0, 7); g.stroke();
+    g.fillStyle = '#c9a24a'; g.font = '15px "IM Fell English SC", serif'; for (const p of PLACES) g.fillText('· ' + p.name.replace('The ', ''), (p.x / SIZE + 0.5) * 360 - 6, (p.z / SIZE + 0.5) * 360); }
+  function drawMap() { mg.drawImage(mapImg, 0, 0); const px = mode === 'walk' ? me.x : cam.position.x, pz = mode === 'walk' ? me.z : cam.position.z, mx = (px / SIZE + 0.5) * 360, mz = (pz / SIZE + 0.5) * 360;
+    const yaw = mode === 'walk' ? me.yaw : Math.atan2(-cam.getWorldDirection(tmpV).x, -cam.getWorldDirection(tmpV).z);
+    mg.save(); mg.translate(mx, mz); mg.rotate(-yaw); mg.fillStyle = '#c0281e'; mg.beginPath(); mg.moveTo(0, -11); mg.lineTo(7, 8); mg.lineTo(0, 4); mg.lineTo(-7, 8); mg.fill(); mg.restore(); }
+  const tmpV = new THREE.Vector3();
+  const comp = $('compass');
+  function drawCompass() {
+    const yaw = mode === 'walk' ? me.yaw : Math.atan2(-cam.getWorldDirection(tmpV).x, -cam.getWorldDirection(tmpV).z), W = comp.clientWidth, px = cam.position.x, pz = cam.position.z, items = [];
+    const used = [];   // nearest places first; a label that would overlap one already placed is skipped
+    const mark = (ang, text, cls) => { const d = Math.atan2(Math.sin(ang - yaw), Math.cos(ang - yaw)), x = W / 2 - d / 1.2 * W / 2; if (Math.abs(d) >= 1.2) return;
+      if (cls && used.some(u => Math.abs(u - x) < 150)) return; if (cls) used.push(x); items.push(`<div class="${cls || ''}" style="left:${x}px">${text}</div>`); };
+    mark(0, 'N'); mark(PI / 2, 'W'); mark(PI, 'S'); mark(-PI / 2, 'E');
+    const far = PLACES.map(p => [p, Math.hypot(p.x - px, p.z - pz)]).filter(e => e[1] > 40).sort((a, b) => a[1] - b[1]);
+    for (const [p, d] of far) mark(Math.atan2(-(p.x - px), -(p.z - pz)), '◆ ' + p.name.replace('The ', '') + ' ' + Math.round(d) + 'm', 'poi');
+    comp.innerHTML = items.join('');
+  }
+
+  lap('map');
+  // ================================================================ UI
+  const touch = matchMedia('(pointer: coarse)').matches;
+  for (const p of PLACES) { const b = document.createElement('button'); b.type = 'button'; b.textContent = p.name.replace('The ', '').replace('Monastery of the Sword', 'Monastery'); b.addEventListener('click', () => { setMode('walk'); goTo(p); }); $('go').appendChild(b); }
+  function setMode(m) { mode = m; if (m === 'walk') updateGrass(me.x, me.z); ui(); }
+  $('mWalk').addEventListener('click', () => setMode('walk')); $('mFly').addEventListener('click', () => setMode('fly'));
+  $('mMin').addEventListener('click', () => { $('card').classList.toggle('min'); ui(); });
+  let lastPlace = '';
+  function ui() {
+    $('mWalk').setAttribute('aria-pressed', mode === 'walk'); $('mFly').setAttribute('aria-pressed', mode === 'fly');
+    const min = $('card').classList.contains('min'); $('mMin').textContent = min ? 'Show notes' : 'Hide notes'; $('mMin').setAttribute('aria-pressed', min);
+    $('hint').textContent = mode === 'fly' ? (touch ? 'Drag to turn the view.' : 'Drag to turn, scroll to zoom.') : (touch ? 'Drag to look, hold Walk to move.' : 'Drag to look. WASD or arrows to move, Shift to run, Space to jump.');
+    fwd.classList.toggle('on', mode === 'walk' && touch);
+  }
+  function placeCard() {
+    const px = cam.position.x, pz = cam.position.z; let near = null, nd = 1e9;
+    for (const p of PLACES) { const d = Math.hypot(p.x - px, p.z - pz); if (d < nd) { nd = d; near = p; } }
+    const p = mode === 'fly' ? { name: 'The Reach of Saint Ansgar', sub: 'Region · 1.6 km across', desc: 'Shrine highlands in the south, the siege front across the middle, the dead hive city to the north.' } : nd < 160 ? near : { name: placeAt(px, pz), sub: 'The Reach of Saint Ansgar', desc: 'Nearest: ' + near.name + ', ' + Math.round(nd) + ' m.' };
+    const key = p.name + p.desc; if (key === lastPlace) return; lastPlace = key; $('name').textContent = p.name; $('sub').textContent = p.sub; $('desc').textContent = p.desc;
+  }
+
+  function resize() { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = innerWidth / Math.max(1, innerHeight); cam.updateProjectionMatrix(); }
+  addEventListener('resize', resize); resize();
+  goTo(PLACES[0]); setMode('walk');
+  let last = performance.now(), uiT = 0;
+  // rAF can stamp the first frame before the slow build finished, so dt is kept from going negative
+  function frame(now) { const dt = clamp((now - last) / 1000, 0, 0.05); last = now; step(dt, now / 1000); renderer.render(scene, cam);
+    uiT -= dt; if (uiT <= 0) { uiT = 0.1; drawCompass(); drawMap(); placeCard(); } requestAnimationFrame(frame); }
+  requestAnimationFrame(frame);
+  window.__world = { goTo: id => goTo(PLACES.find(p => p.id === id)), look(yaw, pitch) { me.yaw = yaw; me.pitch = pitch; }, mode: setMode, fly(yaw, pitch, dist) { flyYaw = yaw; flyPitch = pitch; flyDist = dist; flyHold = 1e9; }, info: () => renderer.info.render, scene, renderer, cam };
+})();
+</script>

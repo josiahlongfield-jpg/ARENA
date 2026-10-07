@@ -791,14 +791,49 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
     if (lp) { const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp; o.connect(f); f.connect(g); } else o.connect(g);
     o.start(t0); o.stop(t0 + a + dur + 0.05);
   }
-  const live = () => actx && actx.state === 'running' && noiseBuf;
+  let offline = false;      // set while the test hook renders a sound into an OfflineAudioContext
+  const live = () => actx && (actx.state === 'running' || offline) && noiseBuf;
+  function outSweep(t, dur, pan0, pan1, wet) {     // like out(), but the pan travels with the blade
+    const g = actx.createGain(); if (!actx.createStereoPanner) { g.connect(master); return g; }
+    const p = actx.createStereoPanner(); p.pan.setValueAtTime(pan0, t); p.pan.linearRampToValueAtTime(pan1, t + dur);
+    g.connect(p); p.connect(master); if (verb) { const s = actx.createGain(); s.gain.value = wet; p.connect(s); s.connect(verb); }
+    return g;
+  }
+  // air torn by a blade: noise through a band that climbs to the fastest point of the arc and falls away after it.
+  // Loudest at the peak, not at the start, which is what makes it read as a swing rather than a hiss.
+  function air(t, dur, f0, fp, f1, q, peak, pan0, pan1, wet, at = 0.45) {
+    const s = actx.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+    const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = q; const tp = t + dur * at;
+    f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(fp, tp); f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    const g = outSweep(t, dur, pan0, pan1, wet);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, tp); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05);
+  }
+  // which way each cut travels across the screen (the camera sits behind the Templar's right shoulder)
+  const SWEEP = [[0.65, -0.65], [-0.55, 0.65], [0.05, -0.05]];
   const SYN = {
-    swing(k) { if (!live()) return; const t = actx.currentTime, hi = k === 2;
-      noise(t, hi ? 0.32 : 0.22, 'bandpass', hi ? 300 : 500, hi ? 1600 : 2600, 1.4, hi ? 0.7 : 0.55, 0.04, 0.1, 0.2);
-      tone(t, 0.25, 'sawtooth', 140, 70, 0.12, 0.02, 0, 0.2, 600); },
+    // the wind-up: the blade drawn back, a low breath of air
+    windup(k, dur) { if (!live()) return; const t = actx.currentTime, [a, b] = SWEEP[k];
+      air(t, dur + 0.05, 180, 420, 260, 0.9, k === 2 ? 0.45 : 0.3, b * 0.5, a, 0.15, 0.7); },
+    // the cut: a broad whoosh for the body of the blade, a thin whistle off its edge, and the power field buzzing louder as it moves
+    swing(k, dur) { if (!live()) return; const t = actx.currentTime, [a, b] = SWEEP[k], m = k === 2 ? 0.72 : 1, d = dur + (k === 2 ? 0.3 : 0.22);
+      air(t, d, 320 * m, 1150 * m, 380 * m, 1.1, k === 2 ? 1.2 : 1.0, a, b, 0.22, 0.4);
+      air(t, d * 0.9, 950 * m, 2700 * m, 1150 * m, 9, 0.38, a, b, 0.2, 0.42);
+      air(t, d * 0.8, 1900 * m, 4300 * m, 2100 * m, 14, 0.13, a, b, 0.15, 0.42);
+      const o = actx.createOscillator(); o.type = 'sawtooth'; const tp = t + d * 0.42;
+      o.frequency.setValueAtTime(92, t); o.frequency.exponentialRampToValueAtTime(150, tp); o.frequency.exponentialRampToValueAtTime(88, t + d);
+      const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 700; bp.Q.value = 1.5;
+      const g = outSweep(t, d, a * 0.6, b * 0.6, 0.15); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.14, tp); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(bp); bp.connect(g); o.start(t); o.stop(t + d + 0.05);
+      for (let i = 0; i < 4; i++) noise(t + rand(0.02, d * 0.7), 0.025, 'highpass', 6000, 4000, 0.7, rand(0.05, 0.12), 0.002, lerp(a, b, rand(0, 1)), 0.1);   // field crackle
+    },
+    // the bite: a fast "shhk" through flesh, a heavy thump, the field discharging, and a short ring off the blade
     swordHit(pos) { if (!live()) return; const t = actx.currentTime, s = spatial(pos);
-      noise(t, 0.12, 'highpass', 3000, 1200, 0.7, 0.5 * s.g, 0.003, s.pan); tone(t, 0.09, 'sawtooth', 1400, 180, 0.25 * s.g, 0.002, s.pan, 0.2, 4000);
-      tone(t, 0.25, 'sine', 120, 50, 0.6 * s.g, 0.004, s.pan); },
+      noise(t, 0.07, 'bandpass', 4200, 1300, 2.2, 0.75 * s.g, 0.002, s.pan, 0.2);
+      noise(t + 0.01, 0.16, 'lowpass', 1400, 300, 0.8, 0.45 * s.g, 0.004, s.pan, 0.3);
+      tone(t, 0.09, 'sawtooth', 1400, 180, 0.22 * s.g, 0.002, s.pan, 0.2, 4000);
+      tone(t, 0.25, 'sine', 120, 50, 0.65 * s.g, 0.004, s.pan);
+      for (const [f, gg] of [[2240, 0.06], [3390, 0.04]]) tone(t, 0.35, 'sine', f, f * 0.995, gg * s.g, 0.002, s.pan, 0.4); },
     slam(pos) { if (!live()) return; const t = actx.currentTime;
       tone(t, 0.7, 'sine', 90, 28, 1.0, 0.005, 0, 0.5); noise(t, 0.6, 'lowpass', 900, 120, 0.5, 0.7, 0.005, 0, 0.5); noise(t, 0.2, 'highpass', 4000, 2000, 0.7, 0.35, 0.002, 0); },
     bolt() { if (!live()) return; const t = actx.currentTime; tone(t, 0.35, 'sine', 85, 34, 0.7, 0.003, -0.15, 0.4); noise(t, 0.12, 'lowpass', 2500, 300, 0.6, 0.45, 0.002, -0.15, 0.3); },
@@ -1215,7 +1250,7 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
       const dx = C.target.pos.x - P.pos.x, dz = C.target.pos.z - P.pos.z, d = Math.hypot(dx, dz), reach = 1.75;
       if (d > reach) C.lungeV.set(dx / d, 0, dz / d).multiplyScalar(Math.min((d - reach) / (S.w + S.s * 0.5), 15));
     } else C.lungeV.set(-Math.sin(P.yaw), 0, -Math.cos(P.yaw)).multiplyScalar(2.5 * S.lunge);
-    SYN.swing(C.step);
+    SYN.windup(C.step, S.w);
   }
   function endCombo() { C.active = false; C.target = null; C.queued = false; C.phase = ''; humSet(false); }
   const _bb = new V3(), _bt = new V3(), _pb = new V3(), _pt = new V3();
@@ -1227,7 +1262,7 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
     if (C.target && C.target.alive) { const a = Math.atan2(-(C.target.pos.x - P.pos.x), -(C.target.pos.z - P.pos.z)); P.yaw += angDiff(P.yaw, a) * damp(16, dt); }
     if (C.phase === 'w') {
       lerpPose(pose, fromPose, S.k[0], smooth(Math.min(1, C.t / S.w)));
-      if (C.t >= S.w) { C.phase = 's'; C.t = 0; T.bladeBase.getWorldPosition(_pb); T.bladeTip.getWorldPosition(_pt); }
+      if (C.t >= S.w) { C.phase = 's'; C.t = 0; T.bladeBase.getWorldPosition(_pb); T.bladeTip.getWorldPosition(_pt); SYN.swing(C.step, S.s); }
     } else if (C.phase === 's') {
       const u = Math.min(1, C.t / S.s);
       swingPose(pose, S.k, 1 - Math.pow(1 - u, 1.6));
@@ -1589,6 +1624,14 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
         combo: { active: C.active, step: C.step, phase: C.phase, cam: C.cam, target: C.target ? ENEMIES.indexOf(C.target) : -1, pips: C.pips },
         enemies: ENEMIES.map(e => ({ type: e.type, hp: e.hp, alive: e.alive, state: e.state, pos: e.pos.toArray().map(x => +x.toFixed(2)) })), bolts: BOLTS.length,
         cam: cam.position.toArray().map(x => +x.toFixed(2)) };
+    },
+    async renderSound(code, dur) {
+      const save = { actx, master, verb, noiseBuf }, sr = 44100;
+      actx = new OfflineAudioContext(2, Math.round(sr * dur), sr); master = actx.createGain(); master.gain.value = 0.8; master.connect(actx.destination); verb = null;
+      noiseBuf = actx.createBuffer(1, sr, sr); { const d = noiseBuf.getChannelData(0); for (let i = 0; i < sr; i++) d[i] = Math.random() * 2 - 1; }
+      offline = true; try { new Function('SYN', 'STRIKES', 'v', code)(SYN, STRIKES, v); } finally { offline = false; }
+      const buf = await actx.startRendering(); ({ actx, master, verb, noiseBuf } = save);
+      return [Array.from(buf.getChannelData(0)), Array.from(buf.getChannelData(1))];
     },
     T, P, C, G
   };

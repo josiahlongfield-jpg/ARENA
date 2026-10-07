@@ -11,7 +11,8 @@ The whole game ships as one self-contained HTML file.
 ## Layout
 ```
 src/arena_template.html  THE source: HTML, CSS and all game JS in one IIFE. Sounds are injected at build time.
-data/sounds.json         MP3s (base64) borrowed from Last Light Avenue's city_sounds_mp3.json. Credits are in the menu.
+data/sounds.json         MP3s (base64): some borrowed from Last Light Avenue's city_sounds_mp3.json, plus the CC0 set. Credits are in the menu.
+assets/cc0/              CC0 sword, slice and bolt recordings (Kenney, Freesound via CDDA) with CREDITS.md. Keys in sounds.json: swing0-4, slice0-3, bdraw, bring, bscrape, bolt_k, bolt_t, bimp0-1
 build.py                 Inlines sounds -> dist/templar-arena.html, dist/artifact.html (no doc skeleton), test/game.html; syntax-checks with node
 test/run.js              Headless Playwright driver (node). Steps: begin, sim, eval, log, shot
 test/three.min.js        three.js r128 for offline tests
@@ -24,7 +25,9 @@ cd test && python3 -m http.server 8766 --bind 127.0.0.1 &
 NODE_PATH=/opt/node22/lib/node_modules node test/run.js steps.json outdir
 ```
 `window.__ta` is the test hook: begin, sim(s), set({pos,yaw,pitch,hp}), spawn(type,x,z,state), clear, fire, sword, dash, key,
-posePreview(strike, u, camPos, lookAt) to freeze the loop and render a strike pose, unfreeze, state().
+execute, breakE(i), wave(n), setArena(id), los(i), en(i), posePreview(strike, u, camPos, lookAt) to freeze the loop and render a strike pose,
+unfreeze, state(). Set `__ta.G.noWaves = true` to stop the wave director during a test.
+Note: the page's own animation frames keep running between test steps, so screenshots advance the game a little.
 
 ## How it works
 - Rig: `buildTemplar()` is the study model re-rigged. It faces +Z, right side is -X, limbs hang along local -Y, the sword blade runs
@@ -36,6 +39,20 @@ posePreview(strike, u, camPos, lookAt) to freeze the loop and render a strike po
   Hits test the blade's swept position each frame (`bladeHits`), with hit-stop. Firing the pistol cancels the combo.
 - Camera (`updateCamera`): first person at the eye; during the combo it blends over 0.25 s to an over-the-shoulder view,
   arcing up and right so it doesn't pass through the pack.
-- Enemies: ghouls (fast melee, at most two attack at once) and gunners (hold 9-17 m, strafe, aim 0.7 s, fire slow bolts the
-  sword can knock away). Waves come through four gates.
-- Audio: borrowed recordings for the pistol, footsteps, grunts and hits; everything else is synthesised (`SYN`, `humSet`).
+- Moves (`C.mode`): 'combo' (STRIKES), 'thrust' (sword within 0.22 s of a dash: `THRUST` drives forward and pierces, then can
+  chain into strike 2 via `next`), 'finisher' (fire during strike 2 or 3: the left arm aims the pistol at the target, `finisherShot`),
+  'exec' (executions). Each strike def has w/s/r timings, dmg, knock, src and three pose keys.
+- Executions: enemies get `broken` (gunner below 45% hp once, brute guard break or charge into a wall, champion below 12%).
+  E, or the sword right next to one, runs `EXEC_LIGHT` or `EXEC_HEAVY`: a timed pose track with events (chop, impale, rip),
+  the victim pinned in front (`execd`), a side camera (`execCam` picks the clearer side), slow-mo (`G.slowT`), heal +25/35/50.
+- Enemies (`TYPES`, mass scales knockback and whether hits interrupt): ghouls (fast melee, at most two attack at once), gunners
+  (hold 9-17 m, aim 0.7 s, slow bolts the sword can knock away), leapers (crouch tell, ballistic leap, landing AoE; can be shot
+  out of the air), brutes (shield blocks bolts from the front and soaks blades until `guard` breaks; maul smash; charge that
+  stuns them if they hit a pillar or wall), the Champion every fifth wave (cleave x3, leap slam, summons ghouls at 66%/33%, poise
+  staggers, armour 0.75, boss bar). Bodies: `buildGhoul(skin)`, `buildLeaper`, `buildGunner`, `buildHeavy(o)` for brute/champion.
+- Arenas (`ARENAS`, `buildArena(id)`): the Pit (circle), the Nave, the Hive and the Void Ship (rects). Each sets the sky shader
+  uniforms, fog and lights and fills PILLARS (round colliders), BOXES (axis-aligned), FIRES, SPAWNS and ALARMS. `clampBounds`,
+  `insideBy`, `collide` and `rayWorld` all read these. The menu picker saves the choice in localStorage.
+- Audio: recordings for the pistol, footsteps, grunts and hits; the CC0 sword recordings layer under the synthesis (`swordAudio`:
+  'mix' | 'rec' | 'synth', a menu toggle so they can be compared); everything else is synthesised (`SYN`, `humSet`).
+  No openly licensed 40k bolter/bolt pistol recording exists (see assets/cc0/CREDITS.md); the bolt is generic CC0 material.

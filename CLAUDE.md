@@ -25,7 +25,7 @@ cd test && python3 -m http.server 8766 --bind 127.0.0.1 &
 NODE_PATH=/opt/node22/lib/node_modules node test/run.js steps.json outdir
 ```
 `window.__ta` is the test hook: begin, sim(s), set({pos,yaw,pitch,hp}), spawn(type,x,z,state), clear, fire, sword, dash, key,
-execute, breakE(i), wave(n), setArena(id), los(i), en(i), posePreview(strike, u, camPos, lookAt) to freeze the loop and render a strike pose,
+execute, breakE(i), wave(n), setArena(id), setPaused(on), los(i), en(i), posePreview(strike, u, camPos, lookAt) to freeze the loop and render a strike pose,
 unfreeze, state(). Set `__ta.G.noWaves = true` to stop the wave director during a test.
 Note: the page's own animation frames keep running between test steps, so screenshots advance the game a little.
 
@@ -53,6 +53,8 @@ Note: the page's own animation frames keep running between test steps, so screen
 - Arenas (`ARENAS`, `buildArena(id)`): the Pit (circle), the Nave, the Hive and the Void Ship (rects). Each sets the sky shader
   uniforms, fog and lights and fills PILLARS (round colliders), BOXES (axis-aligned), FIRES, SPAWNS and ALARMS. `clampBounds`,
   `insideBy`, `collide` and `rayWorld` all read these. The menu picker saves the choice in localStorage.
+- Pause (`setPaused`): Esc leaves pointer lock, which opens the pause screen; it doubles as Settings from the main menu (`SET`:
+  sensitivity, invert Y, FOV, volume, sword sound, screen shake; saved in localStorage).
 - Audio: recordings for the pistol, footsteps, grunts and hits; the CC0 sword recordings layer under the synthesis (`swordAudio`:
   'mix' | 'rec' | 'synth', a menu toggle so they can be compared); everything else is synthesised (`SYN`, `humSet`).
   No openly licensed 40k bolter/bolt pistol recording exists (see assets/cc0/CREDITS.md); the bolt is generic CC0 material.

@@ -51,7 +51,6 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); 
 #vig { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 45%, rgba(150, 10, 10, .75) 100%); opacity: 0; }
 #dashbar { position: absolute; left: 50%; top: calc(50% + 26px); width: 40px; height: 3px; margin-left: -20px; background: rgba(255, 255, 255, .12); opacity: 0; transition: opacity .2s; }
 #dashbar i { display: block; height: 100%; width: 100%; background: var(--ink); }
-#hint { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font-size: .9rem; color: var(--dim); letter-spacing: .06em; display: none; }
 .screen { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 40%, rgba(40, 14, 12, .55), rgba(8, 7, 9, .92)); overflow: auto; padding: 16px; box-sizing: border-box; }
 .screen.off { display: none; }
 .card { width: min(560px, 100%); text-align: center; }
@@ -76,6 +75,15 @@ details.credits a { color: var(--gold); }
 .arenas button[aria-pressed="true"] { border-color: var(--gold); background: rgba(201, 162, 74, .14); }
 button.opt { display: block; margin: 12px auto 0; font: 500 .8rem var(--ui); letter-spacing: .06em; color: var(--dim); background: none; border: 1px solid var(--line); border-radius: 4px; padding: 5px 12px; cursor: pointer; }
 button.opt b { color: var(--ink); font-weight: 700; }
+.set { display: grid; grid-template-columns: auto 1fr auto; gap: 12px 14px; align-items: center; margin: 22px auto 0; max-width: 420px; text-align: left; font-size: .9rem; }
+.set label { color: var(--dim); }
+.set output { min-width: 3.2em; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; font-size: .85rem; }
+.set input[type=range] { width: 100%; accent-color: var(--wax); }
+.set input[type=checkbox] { accent-color: var(--wax); width: 18px; height: 18px; justify-self: start; }
+.set select { font: 500 .85rem var(--ui); color: var(--ink); background: rgba(0, 0, 0, .4); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; }
+.set input:focus-visible, .set select:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.pbtns { display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.pbtns button.opt { margin: 26px 0 0; padding: 10px 18px; font-size: .9rem; }
 button.opt:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .arenas button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 #exec { position: absolute; left: 50%; top: calc(50% + 46px); transform: translateX(-50%); font: 500 .85rem var(--ui); letter-spacing: .12em; text-transform: uppercase; color: #ff6a5a; text-shadow: 0 0 6px #000; opacity: 0; transition: opacity .1s; }
@@ -112,7 +120,6 @@ button.opt:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; 
   <div id="emark"></div>
   <div id="exec"><kbd>E</kbd>Execute</div>
   <div class="panel" id="bossbox"><div id="bossname">Champion of the Ruinous Powers</div><div id="bossbar"><div id="bossfill"></div></div></div>
-  <div id="hint">Click to fight on</div>
 </div>
 <div class="screen" id="menu">
   <div class="card">
@@ -127,15 +134,29 @@ button.opt:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; 
       <kbd>Space, then sword</kbd><span>Lunging thrust that runs them through</span>
       <kbd>Sword, sword, fire</kbd><span>Point-blank bolt to finish the combo</span>
       <kbd>E</kbd><span>Execute a staggered enemy (red marker) to restore armour</span>
-      <kbd>Esc</kbd><span>Pause</span>
+      <kbd>Esc</kbd><span>Pause and settings</span>
     </div>
     <div class="arenas" id="arenas" role="group" aria-label="Choose the arena"></div>
-    <button class="opt" id="saudio" type="button"></button>
+    <button class="opt" id="openSet" type="button">Settings</button>
     <button class="go" id="start" type="button">Enter the arena</button>
     <div class="best" id="best"></div>
     <details class="credits"><summary>Sound credits</summary>
       <p>Bolt pistol boom: <a href="https://freesound.org/s/473846/" target="_blank" rel="noopener">LilMati</a> (CC0). Magazine and slide: DoctorBoomstick (CC BY 4.0). Footsteps: <a href="https://freesound.org/s/336598/" target="_blank" rel="noopener">InspectorJ</a> (CC BY). Landing: <a href="https://freesound.org/s/406747/" target="_blank" rel="noopener">kretopi</a> (CC0). Grunts: <a href="https://freesound.org/s/413181/" target="_blank" rel="noopener">micahlg</a> (CC0). Body hits: <a href="https://freesound.org/s/383882/" target="_blank" rel="noopener">freesound user 7146007</a> (CC0). Stone impacts: <a href="https://freesound.org/s/342888/" target="_blank" rel="noopener">oscaraudiogeek</a> (CC0). Bone cracks: <a href="https://freesound.org/s/177783/" target="_blank" rel="noopener">dheming</a> (CC BY 4.0). Sword whooshes, blade draw, ring and scrape: <a href="https://kenney.nl/assets/foley-sounds" target="_blank" rel="noopener">Kenney</a> (CC0). Slices: Kenney RPG Audio (CC0), <a href="https://freesound.org/s/179222/" target="_blank" rel="noopener">Mixedupmoviestuff</a> (CC0) and <a href="https://freesound.org/s/522091/" target="_blank" rel="noopener">magnuswaker</a> (CC0). Bolt kick: <a href="https://freesound.org/s/163458/" target="_blank" rel="noopener">LeMudCrab</a> with Kenney Sci-Fi Sounds (CC0). Bolt detonations: <a href="https://freesound.org/s/140727/" target="_blank" rel="noopener">j1987</a> and Kenney (CC0). Everything else (the power field, enemies, roars, the horn) is synthesised in the browser. Collected via the <a href="https://github.com/Fris0uman/CDDA-Soundpacks" target="_blank" rel="noopener">CC-Sounds soundpack</a>.</p>
     </details>
+  </div>
+</div>
+<div class="screen off" id="pause">
+  <div class="card">
+    <h1 id="pauseTitle">Paused</h1>
+    <div class="set">
+      <label for="sSens">Mouse sensitivity</label><input id="sSens" type="range" min="0.2" max="3" step="0.05"><output id="oSens"></output>
+      <label for="sInv">Invert mouse Y</label><input id="sInv" type="checkbox"><span></span>
+      <label for="sFov">Field of view</label><input id="sFov" type="range" min="60" max="100" step="1"><output id="oFov"></output>
+      <label for="sVol">Volume</label><input id="sVol" type="range" min="0" max="1" step="0.05"><output id="oVol"></output>
+      <label for="sSword">Sword sound</label><select id="sSword"><option value="mix">Recorded + synth</option><option value="rec">Recorded only</option><option value="synth">Synth only</option></select><span></span>
+      <label for="sShake">Screen shake</label><input id="sShake" type="checkbox"><span></span>
+    </div>
+    <div class="pbtns"><button class="go" id="resume" type="button">Resume</button><button class="opt" id="quit" type="button">Quit to menu</button></div>
   </div>
 </div>
 <div class="screen off" id="over">
@@ -1117,7 +1138,7 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
     actx = new AC();
     const comp = actx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 5;
-    master = actx.createGain(); master.gain.value = 0.8; master.connect(comp); comp.connect(actx.destination);
+    master = actx.createGain(); master.gain.value = SET.vol; master.connect(comp); comp.connect(actx.destination);
     // stone arena: a couple of slaps off the wall, then a long open tail
     const sr = actx.sampleRate, n = Math.floor(sr * 2.4), ir = actx.createBuffer(2, n, sr);
     for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < n; i++) { const t = i / sr; d[i] = (Math.random() * 2 - 1) * Math.exp(-t / 0.6) * (1 - Math.exp(-t / 0.02)) * 0.3; }
@@ -1181,6 +1202,10 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
   const SWEEP = [[0.65, -0.65], [-0.55, 0.65], [0.05, -0.05]];
   // sword audio to trial the CC0 recordings: 'mix' layers them under the synthesis, 'rec' plays only them, 'synth' only the synthesis
   let swordAudio = 'mix'; try { swordAudio = localStorage.getItem('templar-arena-sword-audio') || 'mix'; } catch (_) {}
+  // player settings, kept in this browser (the pause screen edits them)
+  const SET = { sens: 1, invert: false, fov: 74, vol: 0.8, shake: true };
+  try { Object.assign(SET, JSON.parse(localStorage.getItem('templar-arena-settings') || '{}')); } catch (_) {}
+  const saveSet = () => { try { localStorage.setItem('templar-arena-settings', JSON.stringify(SET)); localStorage.setItem('templar-arena-sword-audio', swordAudio); } catch (_) {} };
   const SYN = {
     // the wind-up: the blade drawn back, a low breath of air
     windup(k, dur) { if (!live()) return; const t = actx.currentTime, [a, b] = SWEEP[k];
@@ -1331,7 +1356,7 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
   const P = { pos: v(0, 0, 8), vel: v(), yaw: 0, pitch: 0, hp: 100, alive: true, lastHurt: -99, lastDash: -99, dashT: 0, dashCd: 0, dashDir: v(), push: v(), walk: 0, stepIdx: 0, bob: 0, bobAmt: 0, iframes: 0, kick: 0 };
   const GUN = { mag: 8, ammo: 8, cd: 0, reloadT: 0, reloadDur: 1.55, kick: 0, sfxStage: 0 };
   const C = { active: false, mode: 'combo', move: null, ex: null, step: 0, phase: '', t: 0, queued: false, target: null, cam: 0, hits: new Set(), from: null, pips: 0, lungeV: v(), slamDone: false, end: 0 };
-  const G = { state: 'menu', wave: 0, kills: 0, toSpawn: [], spawnT: 0, breakT: 0, time: 0, shake: 0, hitStop: 0, slowT: 0, bestWave: 0 };
+  const G = { state: 'menu', paused: false, wave: 0, kills: 0, toSpawn: [], spawnT: 0, breakT: 0, time: 0, shake: 0, hitStop: 0, slowT: 0, bestWave: 0 };
   let ENEMIES = [];
   try { G.bestWave = +localStorage.getItem('templar-arena-best') || 0; } catch (_) {}
 
@@ -1717,13 +1742,18 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
   }
 
   // ================================================================ input
-  const keys = new Set(); let locked = false, mouseDown = false, lockFailed = false;
-  // pointer lock can be refused (some app views, phones): then the game runs unlocked and reads raw mouse movement
-  function lockMouse() { try { const r = canvas.requestPointerLock && canvas.requestPointerLock(); if (r && r.catch) r.catch(() => { lockFailed = true; }); } catch (_) { lockFailed = true; } }
-  document.addEventListener('pointerlockerror', () => { lockFailed = true; });
+  const keys = new Set(); let locked = false, mouseDown = false, lockFailed = false, everLocked = false;
+  // pointer lock can be refused (some app views, phones): then the game runs unlocked and reads raw mouse movement.
+  // A refusal after it has worked once is the browser's cool-down after Esc, not a real failure: stay paused instead.
+  const lockRefused = () => { if (!everLocked) { lockFailed = true; if (G.paused) setPaused(false); } };
+  function lockMouse() { try { const r = canvas.requestPointerLock && canvas.requestPointerLock(); if (r && r.catch) r.catch(lockRefused); } catch (_) { lockRefused(); } }
+  document.addEventListener('pointerlockerror', lockRefused);
   const canvas = renderer.domElement;
   addEventListener('keydown', e => {
     if (G.state !== 'play') return;
+    // with pointer lock the browser takes Esc itself and the lock change opens the pause screen; without it, Esc toggles it here
+    if (e.code === 'Escape' && !locked) { if (lockFailed || window.__taNoLock) setPaused(!G.paused); return; }
+    if (G.paused) return;
     keys.add(e.code);
     if (e.code === 'KeyR') reload();
     if (e.code === 'KeyF' && !e.repeat) swordInput();
@@ -1734,19 +1764,22 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
   addEventListener('blur', () => { keys.clear(); mouseDown = false; });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('mousedown', e => {
-    if (G.state !== 'play') return;
+    if (G.state !== 'play' || G.paused) return;
     if (!locked && !lockFailed) { lockMouse(); initAudio(); return; }
     if (e.button === 0) { mouseDown = true; fire(); }
     if (e.button === 2) swordInput();
   });
   addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; });
-  document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; $('hint').style.display = (!locked && G.state === 'play') ? 'block' : 'none'; });
+  document.addEventListener('pointerlockchange', () => {
+    locked = document.pointerLockElement === canvas; if (locked) everLocked = true;
+    if (G.state === 'play') setPaused(!locked);
+  });
   addEventListener('mousemove', e => {
-    if ((!locked && !lockFailed) || G.state !== 'play') return;
-    const k = 0.0022;
+    if ((!locked && !lockFailed) || G.state !== 'play' || G.paused) return;
+    const k = 0.0022 * SET.sens;
     if (C.active && C.target && C.target.alive) { P.yaw -= e.movementX * k * 0.25; }   // soft lock: the mouse only nudges
     else P.yaw -= e.movementX * k;
-    P.pitch = clamp(P.pitch - e.movementY * k, -1.4, 1.4);
+    P.pitch = clamp(P.pitch - e.movementY * k * (SET.invert ? -1 : 1), -1.4, 1.4);
   });
 
   // ================================================================ the heavy bolt pistol
@@ -2202,8 +2235,8 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
     cam.position.lerpVectors(eyeW, tpPos, k);
     const arc = Math.sin(k * PI); cam.position.x += rx * arc * 0.45; cam.position.z += rz * arc * 0.45; cam.position.y += arc * 0.4;
     cam.quaternion.copy(qFP).slerp(qTP, k);
-    cam.fov = lerp(74, 62, k); cam.updateProjectionMatrix();
-    if (G.shake > 0) { const s = G.shake * 0.12; cam.position.x += rand(-s, s); cam.position.y += rand(-s, s); cam.position.z += rand(-s, s); G.shake = Math.max(0, G.shake - dt * 1.6); }
+    cam.fov = lerp(SET.fov, 62, k); cam.updateProjectionMatrix();
+    if (G.shake > 0) { const s = G.shake * 0.12 * (SET.shake ? 1 : 0); cam.position.x += rand(-s, s); cam.position.y += rand(-s, s); cam.position.z += rand(-s, s); G.shake = Math.max(0, G.shake - dt * 1.6); }
   }
 
   // ================================================================ waves
@@ -2289,7 +2322,7 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
     Object.assign(G, { wave: 0, kills: 0, toSpawn: [], spawnT: 0, breakT: 0, shake: 0, hitStop: 0, slowT: 0 });
   }
   function begin() {
-    initAudio(); resetGame(); G.state = 'play';
+    initAudio(); resetGame(); G.state = 'play'; G.paused = false; $('pause').classList.add('off'); $('hud').style.visibility = '';
     $('menu').classList.add('off'); $('over').classList.add('off'); $('hud').classList.remove('off');
     lockMouse();
     startWave(1);
@@ -2306,16 +2339,38 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
     mark();
   }
   $('again').addEventListener('click', begin);
-  { // trial the CC0 sword recordings against the synthesis
-    const L = { mix: 'recorded + synth', rec: 'recorded only', synth: 'synth only' }, order = ['mix', 'rec', 'synth'], b = $('saudio');
-    const show = () => { b.innerHTML = `Sword sound: <b>${L[swordAudio] || L.mix}</b>`; };
-    b.addEventListener('click', () => { swordAudio = order[(order.indexOf(swordAudio) + 1) % 3]; show(); try { localStorage.setItem('templar-arena-sword-audio', swordAudio); } catch (_) {} initAudio().then(() => { SYN.swing(0, 0.15); }); });
-    show();
+  // pause screen, which doubles as the settings page from the main menu
+  function setPaused(on) {
+    if (G.state !== 'play') on = false;
+    G.paused = on; keys.clear(); mouseDown = false;
+    $('pauseTitle').textContent = 'Paused'; $('resume').textContent = 'Resume'; $('quit').style.display = '';
+    $('pause').classList.toggle('off', !on); $('hud').style.visibility = on ? 'hidden' : '';
+    if (on && actx && actx.state === 'running') actx.suspend(); else if (!on && actx && actx.state === 'suspended' && G.state !== 'menu') actx.resume();
   }
-  if (G.bestWave) $('best').textContent = `Furthest so far: wave ${G.bestWave}`;
-  document.addEventListener('pointerlockchange', () => {
-    if (!locked && G.state === 'play') { /* paused by Esc: the hint says click to carry on */ }
+  function openSettings() {
+    $('pauseTitle').textContent = 'Settings'; $('resume').textContent = 'Back'; $('quit').style.display = 'none';
+    $('menu').classList.add('off'); $('pause').classList.remove('off');
+  }
+  { const sens = $('sSens'), fov = $('sFov'), vol = $('sVol'), show = () => { $('oSens').textContent = SET.sens.toFixed(2) + '\u00d7'; $('oFov').textContent = SET.fov + '\u00b0'; $('oVol').textContent = Math.round(SET.vol * 100) + '%'; };
+    sens.value = SET.sens; fov.value = SET.fov; vol.value = SET.vol; $('sInv').checked = SET.invert; $('sShake').checked = SET.shake; $('sSword').value = swordAudio; show();
+    sens.addEventListener('input', () => { SET.sens = +sens.value; show(); saveSet(); });
+    fov.addEventListener('input', () => { SET.fov = +fov.value; show(); saveSet(); });
+    vol.addEventListener('input', () => { SET.vol = +vol.value; if (master) master.gain.value = SET.vol; show(); saveSet(); });
+    $('sInv').addEventListener('change', e => { SET.invert = e.target.checked; saveSet(); });
+    $('sShake').addEventListener('change', e => { SET.shake = e.target.checked; saveSet(); });
+    $('sSword').addEventListener('change', e => { swordAudio = e.target.value; saveSet(); initAudio().then(() => { if (actx.state !== 'running') actx.resume().then(() => SYN.swing(0, 0.15)); else SYN.swing(0, 0.15); }); });
+  }
+  $('openSet').addEventListener('click', () => { initAudio(); openSettings(); });
+  $('resume').addEventListener('click', () => {
+    if (G.state !== 'play') { $('pause').classList.add('off'); $('menu').classList.remove('off'); return; }
+    if (lockFailed || window.__taNoLock) setPaused(false); else lockMouse();      // the lock coming back closes the screen
   });
+  $('quit').addEventListener('click', () => {
+    setPaused(false); resetGame(); G.state = 'menu';
+    $('hud').classList.add('off'); $('over').classList.add('off'); $('menu').classList.remove('off');
+    if (G.bestWave) $('best').textContent = `Furthest so far: wave ${G.bestWave}`;
+  });
+  if (G.bestWave) $('best').textContent = `Furthest so far: wave ${G.bestWave}`;
 
   // ================================================================ main loop
   function resize() {
@@ -2328,7 +2383,7 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
     // hit-stop: the world almost freezes for a few frames when the blade bites
     if (G.hitStop > 0) { G.hitStop -= dt; dt *= 0.05; }
     else if (G.slowT > 0) { G.slowT -= dt; dt *= 0.35; }     // slow motion for the execution's big moments
-    const paused = G.state === 'play' && !locked && !lockFailed && !window.__taNoLock;
+    const paused = G.state === 'play' && (G.paused || (!locked && !lockFailed && !window.__taNoLock));
     if (G.state === 'menu' || paused) dt = 0;
     G.time += dt;
     if (dt > 0) {
@@ -2375,6 +2430,7 @@ const SND = {"shot_g":"SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAA
     key(code, on) { if (on) keys.add(code); else keys.delete(code); },
     dash() { dash(); },
     norender(on) { noRender = on; },
+    setPaused(on) { setPaused(on); return G.paused; },
     setArena(id) { buildArena(id); return { arena: arenaId, pillars: PILLARS.length, boxes: BOXES.length, fires: FIRES.length, spawns: SPAWNS.length }; },
     // freeze the loop and show the Templar mid-strike from a chosen viewpoint (for checking the poses)
     posePreview(k, u, cp, lk) {

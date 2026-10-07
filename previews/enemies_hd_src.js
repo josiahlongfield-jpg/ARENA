@@ -287,10 +287,10 @@
       mesh(new THREE.BoxGeometry(0.16, 0.14, 0.16), M.joint, el, { p: [0, -0.42, 0], edge: false });     // gauntlet
       J['sh' + side] = sh; J['el' + side] = el;
     }
-    J.weapon = grp(J.elR, [0, -0.42, 0], [-1.2, 0, 0]);
+    J.weapon = grp(J.elR, [0, -0.42, 0], [WEAPON_REST, 0, 0]);
     o.weapon(J.weapon);
     if (o.shield) {
-      const sg = grp(J.elL, [0.02, -0.22, 0.2]); J.shield = sg;
+      const hold = grp(J.elL, [0, -0.22, 0]), sg = grp(hold, SHIELD_AT); J.shield = hold; J.shieldBody = sg;
       const sh = new THREE.Shape(); sh.moveTo(-0.5, 0.72); sh.lineTo(0.5, 0.72); sh.lineTo(0.5, -0.4); sh.quadraticCurveTo(0.45, -0.75, 0, -0.95); sh.quadraticCurveTo(-0.45, -0.75, -0.5, -0.4); sh.closePath();
       mesh(ext(sh, 0.08, 0.02), A, sg, { p: [0, 0, 0.05], edge: false });
       const rim = new THREE.Shape(); rim.moveTo(-0.53, 0.75); rim.lineTo(0.53, 0.75); rim.lineTo(0.53, -0.42); rim.quadraticCurveTo(0.48, -0.8, 0, -1.0); rim.quadraticCurveTo(-0.48, -0.8, -0.53, -0.42); rim.closePath();
@@ -339,9 +339,10 @@
       weapon(w) { seg(v(0, -0.3, 0), v(0, 1.6, 0), 0.035, 0.035, M.rifle, 6, w, { edge: false });
         for (let k = 0; k < 7; k++) mesh(new THREE.TorusGeometry(0.04, 0.009, 3, 8), H.brass, w, { p: [0, -0.2 + k * 0.05, 0], r: [PI / 2, 0, 0], edge: false, cast: false });
         const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.quadraticCurveTo(0.42, -0.05, 0.6, -0.25); sh.quadraticCurveTo(0.72, 0.2, 0.62, 0.62); sh.quadraticCurveTo(0.4, 0.4, 0, 0.52); sh.closePath();
+        const hd = grp(w, [0, 1.0, 0], [0, PI / 2, 0]);       // blades in the swing plane, so an edge leads the chop
         for (const sx of [-1, 1]) { const g = ext(sh, 0.035, 0.012); g.translate(0, 0, -0.0175);
-          mesh(g, M.steel, w, { p: [0, 1.0, 0], s: [sx, 1, 1], edge: false });
-          mesh(new THREE.PlaneGeometry(0.4, 0.4), H.runes, w, { p: [sx * 0.34, 1.26, sx * 0.025], r: [0, sx > 0 ? 0 : PI, 0], edge: false, cast: false }); }
+          mesh(g, M.steel, hd, { s: [sx, 1, 1], edge: false });
+          mesh(new THREE.PlaneGeometry(0.4, 0.4), H.runes, hd, { p: [sx * 0.34, 0.26, sx * 0.025], r: [0, sx > 0 ? 0 : PI, 0], edge: false, cast: false }); }
         mesh(new THREE.SphereGeometry(0.07, 8, 6), H.brass, w, { p: [0, 1.25, 0], edge: false });
         mesh(new THREE.ConeGeometry(0.05, 0.36, 5), H.brass, w, { p: [0, 1.78, 0], edge: false });
         mesh(new THREE.SphereGeometry(0.05, 6, 5), H.brass, w, { p: [0, -0.32, 0], edge: false }); } });

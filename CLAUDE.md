@@ -47,7 +47,8 @@ Note: the page's own animation frames keep running between test steps, so screen
   the victim pinned in front (`execd`), a side camera (`execCam` picks the clearer side), slow-mo (`G.slowT`), heal +25/35/50.
 - Enemies (`TYPES`, mass scales knockback and whether hits interrupt): ghouls (fast melee, at most two attack at once), gunners
   (hold 9-17 m, aim 0.7 s, slow bolts the sword can knock away), leapers (crouch tell, ballistic leap, landing AoE; can be shot
-  out of the air), brutes (shield blocks bolts from the front and soaks blades until `guard` breaks; maul smash; charge that
+  out of the air), brutes (the shield is solid: `shieldRay` stops any bolt that meets `J.shieldBody`, no damage or splash gets through it, and
+  blades from the front only wear down `guard` until it breaks; `holdHeavy` keeps the shield facing forward and the weapon head-up; maul smash; charge that
   stuns them if they hit a pillar or wall), the Champion every fifth wave (cleave x3, leap slam, summons ghouls at 66%/33%, poise
   staggers, armour 0.75, boss bar). Bodies: `buildGhoul(skin)`, `buildLeaper`, `buildGunner`, `buildHeavy(o)` for brute/champion.
 - Arenas (`ARENAS`, `buildArena(id)`): the Pit (circle), the Nave, the Hive and the Void Ship (rects). Each sets the sky shader

@@ -50,7 +50,9 @@ Note: the page's own animation frames keep running between test steps, so screen
   out of the air), brutes (the shield is solid: `shieldRay` stops any bolt that meets `J.shieldBody`, no damage or splash gets through it, and
   blades from the front only wear down `guard` until it breaks; `holdHeavy` keeps the shield facing forward and the weapon head-up; maul smash; charge that
   stuns them if they hit a pillar or wall), the Champion every fifth wave (cleave x3, leap slam, summons ghouls at 66%/33%, poise
-  staggers, armour 0.75, boss bar). Bodies: `buildGhoul(skin)`, `buildLeaper`, `buildGunner`, `buildHeavy(o)` for brute/champion.
+  staggers, armour 0.75, boss bar). Bodies: `buildGhoulHD`, `buildLeaperHD`, `buildGunnerHD`, `buildHeavyHD(o)` for brute/champion,
+  with painted materials in `HD.M`. `mergeParts(J)` runs on each spawn and merges every joint's parts per material (about 200 parts
+  down to 30-60 meshes) while leaving anything named in J alone. `previews/` is the enemy studies viewer that came before them (frozen).
 - Arenas (`ARENAS`, `buildArena(id)`): the Pit (circle), the Nave, the Hive and the Void Ship (rects). Each sets the sky shader
   uniforms, fog and lights and fills PILLARS (round colliders), BOXES (axis-aligned), FIRES, SPAWNS and ALARMS. `clampBounds`,
   `insideBy`, `collide` and `rayWorld` all read these. The menu picker saves the choice in localStorage.

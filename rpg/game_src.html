@@ -103,6 +103,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); 
 #nums span.crit { color: var(--gold); font-size: 1.3rem; }
 #nums span.heal { color: #9fe08a; }
 #nums span.blk { color: var(--field); font-size: .85rem; }
+#nums span.xp { color: var(--gold); font-size: .85rem; }
 #labels span { position: absolute; transform: translate(-50%, -100%); font: 400 1rem var(--display); color: var(--gold); text-shadow: 0 1px 4px #000; white-space: nowrap; display: none; }
 #labels span small { display: block; text-align: center; font: 500 .7rem var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
 #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .5s; z-index: 20; }
@@ -340,7 +341,7 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
 
   // ================================================================ the region: the Reach of Saint Ansgar (built once, inside its own scope)
   async function buildRegion(say) {
-  const root = new THREE.Group(); root.add(root);
+  const root = new THREE.Group(); scene.add(root);
   const lap = () => {};
   const PI = Math.PI, $ = id => document.getElementById(id);
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x)), lerp = (a, b, t) => a + (b - a) * t, sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -1370,10 +1371,11 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   let ARENA = null, arenaId = 'pit';
   const arenaRoot = grp(DG);
   function clampBounds(p, m) {
+    if (ZONE === 'world') return W.clampB(p, m);
     if (ARENA.shape === 'circle') { const d = Math.hypot(p.x, p.z), lim = ARENA.R - m; if (d > lim) { p.x *= lim / d; p.z *= lim / d; } }
     else { p.x = clamp(p.x, -ARENA.hx + m, ARENA.hx - m); p.z = clamp(p.z, -ARENA.hz + m, ARENA.hz - m); }
   }
-  const insideBy = (p, m) => ARENA.shape === 'circle' ? Math.hypot(p.x, p.z) < ARENA.R - m : Math.abs(p.x) < ARENA.hx - m && Math.abs(p.z) < ARENA.hz - m;
+  const insideBy = (p, m) => ZONE === 'world' ? true : ARENA.shape === 'circle' ? Math.hypot(p.x, p.z) < ARENA.R - m : Math.abs(p.x) < ARENA.hx - m && Math.abs(p.z) < ARENA.hz - m;
   function addFire(g, x, y, z, s, power, range) {      // flames come from the particle system; this is the flickering light and the spot they rise from
     const L = new THREE.PointLight(0xff7a2a, power, range, 2); L.position.set(x, y + 0.8 * s, z); g.add(L);
     FIRES.push({ x, y, z, s, L, base: power, t: rnd() * 10 });
@@ -2486,13 +2488,13 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     let head = 0;
     return {
       matl,
-      spawn(p, vel, c, s, life, grav = 0, drag = 0, grow = 0) { const q = P[head]; head = (head + 1) % PMAX; q.p.copy(p); q.v.copy(vel); q.c = c; q.s = s; q.life = q.max = life; q.g = grav; q.dr = drag; q.grow = grow; },
+      spawn(p, vel, c, s, life, grav = 0, drag = 0, grow = 0) { const q = P[head]; head = (head + 1) % PMAX; q.p.copy(p); q.v.copy(vel); q.c = c; q.s = s; q.life = q.max = life; q.g = grav; q.dr = drag; q.grow = grow; q.fl = grav > 0 ? GY(p.x, p.z) + 0.02 : -1e9; },
       update(dt) {
         for (let i = 0; i < PMAX; i++) {
           const q = P[i];
           if (q.life <= 0) { size[i] = 0; continue; }
           q.life -= dt; q.v.y -= q.g * dt; q.v.multiplyScalar(1 - Math.min(1, q.dr * dt)); q.p.addScaledVector(q.v, dt);
-          if (q.p.y < 0.02 && q.g > 0) { q.p.y = 0.02; q.v.set(0, 0, 0); }
+          if (q.p.y < q.fl) { q.p.y = q.fl; q.v.set(0, 0, 0); }
           const f = Math.max(0, q.life / q.max);
           pos[i * 3] = q.p.x; pos[i * 3 + 1] = q.p.y; pos[i * 3 + 2] = q.p.z;
           col[i * 4] = q.c[0]; col[i * 4 + 1] = q.c[1]; col[i * 4 + 2] = q.c[2]; col[i * 4 + 3] = q.c[3] * f;
@@ -2538,9 +2540,11 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   const BOLTS = []; const boltM = new THREE.MeshBasicMaterial({ color: 0xff6a30 }), boltHaloM = new THREE.MeshBasicMaterial({ color: 0xff4010, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
   const boltGeo = new THREE.SphereGeometry(0.09, 8, 6), haloGeo = new THREE.SphereGeometry(0.22, 8, 6);
   // flames and embers rising from every fire (braziers, candles, wrecks), and the void ship's alarm beacons
+  const WFIRES = [];      // the region's fires: flames only, no lights (filled once the region is built)
   function fireFX(dt) {
-    for (const b of FIRES) {
-      b.t += dt; b.L.intensity = b.base * (0.92 + Math.sin(b.t * 9.1) * 0.1 + Math.sin(b.t * 23.7) * 0.06);
+    for (const b of ZONE === 'world' ? WFIRES : FIRES) {
+      if (ZONE === 'world' && Math.abs(b.x - P.pos.x) + Math.abs(b.z - P.pos.z) > 160) continue;
+      b.t += dt; if (b.L) b.L.intensity = b.base * (0.92 + Math.sin(b.t * 9.1) * 0.1 + Math.sin(b.t * 23.7) * 0.06);
       const s = b.s, k = s / 0.6;
       if (Math.random() < dt * 40 * Math.min(k, 2)) glowFX.spawn(tmp.set(b.x + rand(-0.6, 0.6) * s, b.y + 0.05, b.z + rand(-0.6, 0.6) * s), v(rand(-0.2, 0.2), rand(1.2, 2.4) * Math.sqrt(k), rand(-0.2, 0.2)), [1, rand(0.35, 0.6), 0.12, 0.9], rand(0.3, 0.53) * s, rand(0.35, 0.6) * Math.sqrt(k), -1, 1.5, -0.6);
       if (Math.random() < dt * 6 * k) glowFX.spawn(tmp.set(b.x, b.y + 0.4 * s, b.z), v(rand(-0.6, 0.6), rand(1.5, 3), rand(-0.6, 0.6)), [1, 0.55, 0.2, 1], 0.03, rand(1.5, 3), -0.2, 0.3);
@@ -2549,16 +2553,48 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   }
 
   // ================================================================ state
+  // ZONE is 'world' (the Reach, built once at load into W) or 'dungeon' (an arena rebuilt inside DG). The ground is W's terrain in the world, y = 0 in a dungeon.
+  let W = null, ZONE = 'world', DUN = null;
+  function GY(x, z) { return ZONE === 'world' && W ? Math.max(W.gH(x, z), W.WATER_Y - 0.9) : 0; }
+  const inWater = (x, z) => ZONE === 'world' && W && W.gH(x, z) < W.WATER_Y - 0.6;
   const T = buildTemplar(); scene.add(T.root);
-  const P = { pos: v(0, 0, 8), vel: v(), yaw: 0, pitch: 0, hp: 100, alive: true, lastHurt: -99, lastDash: -99, dashT: 0, dashCd: 0, dashDir: v(), push: v(), walk: 0, stepIdx: 0, bob: 0, bobAmt: 0, iframes: 0, kick: 0 };
+  const P = { pos: v(0, 0, 8), vel: v(), yaw: 0, pitch: 0, hp: 100, maxHp: 100, alive: true, lastHurt: -99, lastDash: -99, dashT: 0, dashCd: 0, dashDir: v(), push: v(), walk: 0, stepIdx: 0, bob: 0, bobAmt: 0, iframes: 0, kick: 0, healT: 0, healR: 0 };
   const GUN = { mag: 8, ammo: 8, cd: 0, reloadT: 0, reloadDur: 1.55, kick: 0, sfxStage: 0 };
   const C = { active: false, mode: 'combo', move: null, ex: null, step: 0, phase: '', t: 0, queued: false, target: null, cam: 0, hits: new Set(), from: null, pips: 0, lungeV: v(), slamDone: false, end: 0 };
-  const G = { state: 'menu', paused: false, wave: 0, kills: 0, toSpawn: [], spawnT: 0, breakT: 0, time: 0, shake: 0, hitStop: 0, slowT: 0, bestWave: 0 };
+  const G = { state: 'menu', paused: false, ui: null, fading: false, time: 0, shake: 0, hitStop: 0, slowT: 0, hunted: false, saveT: 0 };
   let ENEMIES = [];
-  try { G.bestWave = +localStorage.getItem('templar-arena-best') || 0; } catch (_) {}
+  const eUp = (e, h) => v(e.pos.x, e.pos.y + h, e.pos.z);
 
-  // ================================================================ collision
+  // ================================================================ the Templar's progress: level, oaths, wargear (everything a save keeps)
+  const freshR = () => ({ lvl: 1, xp: 0, pts: 0, oath: { blade: 0, bolt: 0, bastion: 0 }, gold: 0, ung: 2, eq: { blade: null, pistol: null, armour: null, relic: null }, bag: [],
+    quest: -1, cleared: {}, opened: {}, found: {}, kills: 0, deaths: 0, stock: [], stockLvl: 0, seen: {} });
+  let R = freshR();
+  const ST = {};
+  const xpNext = L => Math.round(80 * Math.pow(L, 1.6));
+  const MAXLVL = 20, OATHMAX = 10;
+  function calcStats() {
+    const o = R.oath, L = R.lvl - 1, a = { sword: 0, bolt: 0, hp: 0, crit: 0, exec: 0, leech: 0, mag: 0, reload: 0, regen: 0, dr: 0, dash: 0, xp: 0, gold: 0 };
+    for (const it of Object.values(R.eq)) if (it) for (const [k, x] of Object.entries(it.st)) a[k] += x;
+    ST.sword = 1 + 0.08 * o.blade + 0.03 * L + a.sword / 100;
+    ST.bolt = 1 + 0.08 * o.bolt + 0.03 * L + a.bolt / 100;
+    ST.crit = Math.min(0.6, 0.05 + a.crit / 100);
+    ST.execHeal = 1 + 0.03 * o.blade + a.exec / 100;
+    ST.leech = a.leech / 100;
+    ST.mag = 8 + Math.floor(o.bolt / 2) + a.mag;
+    ST.reload = Math.min(0.6, 0.04 * o.bolt + a.reload / 100);
+    ST.maxHp = 100 + 10 * L + 15 * o.bastion + a.hp;
+    ST.regen = 1 + 0.1 * o.bastion + a.regen / 100;
+    ST.dr = Math.min(0.6, 0.02 * o.bastion + a.dr / 100);
+    ST.dash = Math.min(0.6, a.dash / 100);
+    ST.xp = 1 + a.xp / 100; ST.gold = 1 + a.gold / 100;
+    const was = P.maxHp; P.maxHp = ST.maxHp; if (P.maxHp > was) P.hp += P.maxHp - was; P.hp = Math.min(P.hp, P.maxHp);
+    GUN.mag = ST.mag; GUN.ammo = Math.min(GUN.ammo, GUN.mag); GUN.reloadDur = 1.55 * (1 - ST.reload);
+  }
+  calcStats();
+
+  // ================================================================ collision: the region's colliders and terrain in the world, the arena's pillars and walls in a dungeon
   function collide(p, r) {
+    if (ZONE === 'world') return W.collide(p, r);
     for (const c of PILLARS) {
       const dx = p.x - c.x, dz = p.z - c.z, d2 = dx * dx + dz * dz, R = c.r + r;
       if (d2 < R * R && d2 > 1e-8) { const d = Math.sqrt(d2); p.x = c.x + dx / d * R; p.z = c.z + dz / d * R; }
@@ -2571,8 +2607,9 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     }
     clampBounds(p, 0.6 + r);
   }
-  // the first thing a ray from o along unit d hits: pillar, wall or floor. Returns the distance.
+  // the first thing a ray from o along unit d hits: ground, pillar, wall or collider. Returns the distance.
   function rayWorld(o, d, max) {
+    if (ZONE === 'world') return W.ray(o, d, max);
     let best = max;
     if (d.y < -1e-4) { const t = -o.y / d.y; if (t > 0 && t < best) best = t; }
     for (const c of PILLARS) {
@@ -2597,29 +2634,35 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   function segPointDist(a, b, p) { tmp2.subVectors(b, a); const l2 = tmp2.lengthSq(); const t = l2 > 0 ? clamp(tmp.subVectors(p, a).dot(tmp2) / l2, 0, 1) : 0; return tmp.copy(a).addScaledVector(tmp2, t).distanceTo(p); }
 
   // ================================================================ enemies
-  // mass scales knockback (and whether a hit interrupts an attack); lockY is where the lock ring and execute marker sit
+  // mass scales knockback (and whether a hit interrupts an attack); lockY is where the lock ring and execute marker sit; xp is per kill at level 1
   const TYPES = {
-    ghoul: { hp: 45, speed: 6.4, r: 0.45, mass: 1, lockY: 1.1, build: () => mergeParts(buildGhoulHD()), spheres: [[0, 0.95, 0.15, 0.42, false], [0, 1.25, 0.55, 0.2, true]] },
-    gunner: { hp: 110, speed: 3.2, r: 0.42, mass: 1, lockY: 1.3, build: () => mergeParts(buildGunnerHD()), spheres: [[0, 0.55, 0, 0.36, false], [0, 1.2, 0, 0.36, false], [0, 1.7, 0.03, 0.18, true]] },
-    leaper: { hp: 55, speed: 5.6, r: 0.42, mass: 1, lockY: 1.0, build: () => mergeParts(buildLeaperHD()), spheres: [[0, 0.9, 0.14, 0.4, false], [0, 1.18, 0.52, 0.19, true]] },
-    brute: { hp: 380, speed: 2.9, r: 0.75, mass: 4, lockY: 1.7, guard: 140, build: () => mergeParts(buildBruteHD()), spheres: [[0, 0.75, 0, 0.5, false], [0, 1.65, 0, 0.62, false], [0, 2.4, 0.05, 0.28, true]] },
-    champion: { hp: 2200, speed: 3.8, r: 0.9, mass: 12, lockY: 2.1, poise: 180, armour: 0.75, build: () => mergeParts(buildChampionHD()), spheres: [[0, 0.95, 0, 0.6, false], [0, 2.05, 0, 0.8, false], [0, 3.0, 0.05, 0.34, true]] }
+    ghoul: { name: 'Plague ghoul', hp: 45, speed: 6.4, r: 0.45, mass: 1, lockY: 1.1, xp: 8, build: () => mergeParts(buildGhoulHD()), spheres: [[0, 0.95, 0.15, 0.42, false], [0, 1.25, 0.55, 0.2, true]] },
+    gunner: { name: 'Renegade gunner', hp: 110, speed: 3.2, r: 0.42, mass: 1, lockY: 1.3, xp: 16, build: () => mergeParts(buildGunnerHD()), spheres: [[0, 0.55, 0, 0.36, false], [0, 1.2, 0, 0.36, false], [0, 1.7, 0.03, 0.18, true]] },
+    leaper: { name: 'Leaper', hp: 55, speed: 5.6, r: 0.42, mass: 1, lockY: 1.0, xp: 14, build: () => mergeParts(buildLeaperHD()), spheres: [[0, 0.9, 0.14, 0.4, false], [0, 1.18, 0.52, 0.19, true]] },
+    brute: { name: 'Brute', hp: 380, speed: 2.9, r: 0.75, mass: 4, lockY: 1.7, guard: 140, xp: 60, build: () => mergeParts(buildBruteHD()), spheres: [[0, 0.75, 0, 0.5, false], [0, 1.65, 0, 0.62, false], [0, 2.4, 0.05, 0.28, true]] },
+    champion: { name: 'Champion', hp: 2200, speed: 3.8, r: 0.9, mass: 12, lockY: 2.1, poise: 180, armour: 0.75, xp: 400, build: () => mergeParts(buildChampionHD()), spheres: [[0, 0.95, 0, 0.6, false], [0, 2.05, 0, 0.8, false], [0, 3.0, 0.05, 0.34, true]] }
   };
   const _bp = new V3();
   const ATTACKING = new Set(['wind', 'lunge', 'aim', 'crouch']);
-  function spawnEnemy(type, x, z) {
+  // o: lvl, pack (the encounter it belongs to), boss (a named foe: more health, a bar), name, sc (size), state
+  function spawnEnemy(type, x, z, o = {}) {
     const D = TYPES[type], J = D.build(); scene.add(J.root);
-    const e = { type, D, J, pos: v(x, 0, z), vel: v(), vy: 0, yaw: Math.atan2(-x, -z), hp: D.hp, maxHp: D.hp, alive: true, state: 'enter', t: 0, cd: rand(0.5, 1.5), ccd: rand(2, 4), stag: 0, run: rand(0, 6),
-      deadT: 0, fall: v(), side: Math.random() < 0.5 ? -1 : 1, sideT: rand(2, 4), aimP: 0, hitT: 0, struck: false, guard: D.guard || 0, poise: D.poise || 0, brokenT: 0, brokeOnce: false, breakCd: 0,
-      cdir: v(), swing: 0, sum: 0, lift: 0 };
-    if (type === 'champion') { e.hp = e.maxHp = D.hp + Math.max(0, Math.floor(G.wave / 5) - 1) * 800; }
+    const lvl = o.lvl || 1, boss = !!o.boss, sc = o.sc || (boss ? 1.2 : 1);
+    const hpK = type === 'champion' ? 0.06 : D.mass > 1 ? 0.15 : 0.28, hp = Math.round(D.hp * (1 + hpK * (lvl - 1)) * (boss && type !== 'champion' ? (type === 'brute' ? 2.6 : 6) : 1));
+    const e = { type, D, J, pos: v(x, GY(x, z), z), vel: v(), vy: 0, yaw: o.yaw !== undefined ? o.yaw : rand(-PI, PI), hp, maxHp: hp, alive: true, state: o.state || 'idle', t: 0, cd: rand(0.5, 1.5), ccd: rand(2, 4), stag: 0, run: rand(0, 6),
+      deadT: 0, fall: v(), side: Math.random() < 0.5 ? -1 : 1, sideT: rand(2, 4), aimP: 0, hitT: 0, struck: false, guard: (D.guard || 0) * (boss ? 1.6 : 1) * (1 + 0.1 * (lvl - 1)), poise: D.poise || 0, brokenT: 0, brokeOnce: false, breakCd: 0,
+      cdir: v(), swing: 0, sum: 0, lift: 0, sink: 0, lvl, boss, name: o.name || '', pack: o.pack || null, home: { x, z }, wander: null, wT: rand(1, 5), seeT: rand(0, 0.25), aggro: false,
+      dm: 1 + 0.16 * (lvl - 1), sc, r: D.r * sc, ly: D.lockY * sc, xp: Math.round(D.xp * (1 + 0.2 * (lvl - 1)) * (boss ? 3 : 1)) };
+    e.guard0 = e.guard;
+    if (sc !== 1) J.root.scale.setScalar(sc);
     J.root.position.copy(e.pos); ENEMIES.push(e); return e;
   }
+  function removeEnemy(e) { e.gone = true; scene.remove(e.J.root); e.J.root.traverse(n => { if (n.geometry) n.geometry.dispose(); }); }
   const _hs = new V3();
   function enemySpheres(e, cb) {
-    const s = Math.sin(e.yaw), c = Math.cos(e.yaw);
+    const s = Math.sin(e.yaw), c = Math.cos(e.yaw), k = e.sc;
     const low = ((e.type === 'ghoul' || e.type === 'leaper') && (e.state === 'wind' || e.state === 'crouch')) ? -0.15 : (e.state === 'broken' || e.state === 'execd') && e.type !== 'ghoul' ? -0.3 * (e.type === 'champion' ? 1.5 : 1) : 0;
-    for (const [x, y, z, r, head] of e.D.spheres) { _hs.set(e.pos.x + x * c + z * s, e.pos.y + y + low + e.lift, e.pos.z - x * s + z * c); if (cb(_hs, r, head)) return; }
+    for (const [x, y, z, r, head] of e.D.spheres) { _hs.set(e.pos.x + (x * c + z * s) * k, e.pos.y + (y + low) * k + e.lift, e.pos.z + (-x * s + z * c) * k); if (cb(_hs, r * k, head)) return; }
   }
   const BLADE = new Set(['sword', 'slam', 'thrust', 'exec', 'finisher']);
   // A raised brute shield is solid: a bolt that meets it stops there and does nothing to the brute. Returns the distance, or Infinity.
@@ -2629,19 +2672,27 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     if (!shieldUp(e)) return Infinity;
     e.J.root.updateMatrixWorld(true);
     _sm.copy(e.J.shieldBody.matrixWorld).invert();
-    _so.copy(o).applyMatrix4(_sm); _sd.copy(o).add(d).applyMatrix4(_sm).sub(_so);      // the ray in the shield's own space (same t, since we keep d's length)
+    _so.copy(o).applyMatrix4(_sm); _sd.copy(o).add(d).applyMatrix4(_sm).sub(_so);      // the ray in the shield's own space
+    const L = _sd.length(); _sd.divideScalar(L);         // (a scaled boss's shield space is scaled too: measure in its own units, then convert back)
     let t0 = 0, t1 = Infinity;
     for (const [oo, dd, lo, hi] of [[_so.x, _sd.x, -0.52, 0.52], [_so.y, _sd.y, -0.95, 0.72], [_so.z, _sd.z, -0.05, 0.3]]) {
       if (Math.abs(dd) < 1e-9) { if (oo < lo || oo > hi) return Infinity; continue; }
       let ta = (lo - oo) / dd, tb = (hi - oo) / dd; if (ta > tb) [ta, tb] = [tb, ta];
       t0 = Math.max(t0, ta); t1 = Math.min(t1, tb); if (t0 > t1) return Infinity;
     }
-    return t0 > 0 ? t0 : Infinity;
+    return t0 > 0 ? t0 / L : Infinity;
   }
   const shieldCovers = (e, p) => shieldUp(e) && (p.x - e.pos.x) * Math.sin(e.yaw) + (p.z - e.pos.z) * Math.cos(e.yaw) > 0;     // a blast in front lands on the shield
-  function damageEnemy(e, dmg, dir, knock, src) {
+  // the Templar's own blows: wargear and oaths scale them, and some land as critical hits
+  function strike(e, base, dir, knock, src) {
+    const crit = src !== 'exec' && Math.random() < ST.crit;
+    const k = src === 'bolt' || src === 'finisher' ? ST.bolt : src === 'exec' ? 1 : ST.sword;
+    return damageEnemy(e, base * k * (crit ? 1.8 : 1), dir, knock, src, crit);
+  }
+  function damageEnemy(e, dmg, dir, knock, src, crit) {
     if (!e.alive || (e.state === 'execd' && src !== 'exec')) return false;
-    const at = v(e.pos.x, e.pos.y + e.D.lockY, e.pos.z);
+    if (!e.aggro && ZONE === 'world') alertPack(e);
+    const at = eUp(e, e.ly);
     // the brute's shield soaks most of a blade from the front, until its guard breaks (bolts are stopped by the shield itself, in fire)
     if (e.type === 'brute' && e.guard > 0 && e.state !== 'broken' && e.state !== 'execd' && src !== 'bolt') {
       const front = dir.x * Math.sin(e.yaw) + dir.z * Math.cos(e.yaw) < -0.3;
@@ -2649,16 +2700,21 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
         e.guard -= dmg * (src === 'slam' ? 1.6 : src === 'thrust' || src === 'finisher' ? 1.4 : 1);
         sparks(at, 16, [0.6, 0.85, 1, 1], 6); SYN.clang(); sfxAt('bring', at, 0.7, rand(0.75, 0.9));
         if (e.guard <= 0) { breakEnemy(e, 4.5); banner('Guard broken', 'Execute it'); return false; }
-        dmg *= 0.3; knock *= 0.3;
+        dmg *= 0.3; knock *= 0.3; num(at, 'Blocked', 'blk');
       }
     }
     if (e.D.armour && src !== 'exec') dmg *= e.D.armour;
+    // a named foe can't be finished by one execution while it still has its strength: the blade takes a third of it instead
+    if (src === 'exec' && e.boss && e.hp > e.maxHp * 0.34) dmg = e.maxHp * 0.34;
+    dmg = Math.round(dmg);
     e.hp -= dmg; e.hitT = 0.12;
+    if (src !== 'exec' || e.boss) num(at, dmg, crit ? 'crit' : '');
+    if (BLADE.has(src) && src !== 'exec' && ST.leech > 0 && P.alive) P.hp = Math.min(P.maxHp, P.hp + dmg * ST.leech);
     blood(at, dir, BLADE.has(src) ? 14 : 9, e.type === 'ghoul' || e.type === 'leaper' ? [0.35, 0.42, 0.18, 0.95] : [0.45, 0.04, 0.03, 0.95]);
     sfxAt('flesh' + Math.floor(Math.random() * 4), at, 0.9, rand(0.8, 1.05) * (e.D.mass > 1 ? 0.8 : 1));
     if (knock && e.state !== 'execd') {
-      e.vel.addScaledVector(dir, knock / e.D.mass);
-      if (e.D.mass <= 1) {
+      e.vel.addScaledVector(dir, knock / e.D.mass / (e.boss ? 2 : 1));
+      if (e.D.mass <= 1 && !(e.boss && Math.random() < 0.6)) {
         e.stag = Math.max(e.stag, BLADE.has(src) ? 0.45 : 0.25);
         if (ATTACKING.has(e.state)) { e.state = 'chase'; e.t = 0; e.J.glow && (e.J.glow.material.opacity = 0); }
         if (e.state === 'leap') { e.state = 'fall'; e.t = 0; }        // knocked out of the air: no landing strike
@@ -2669,17 +2725,18 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
       if (e.poise <= 0) { e.poise = e.D.poise; e.stag = 1.1; if (e.state !== 'leap' && e.state !== 'roar') { e.state = 'chase'; e.t = 0; } SYN.roar(at, 0.6); }
     }
     if (e.hp <= 0) {
-      e.alive = false; e.state = 'dead'; e.deadT = 0; e.fall.copy(dir); e.lift = 0; G.kills++;
+      e.alive = false; e.state = 'dead'; e.deadT = 0; e.fall.copy(dir); e.lift = 0;
       if (e.type === 'ghoul' || e.type === 'leaper') SYN.screech(at, true);
-      if (e.type === 'champion') { SYN.roar(at, 1.4); banner('The Champion falls', 'Glory to the Emperor'); }
+      if (e.type === 'champion') SYN.roar(at, 1.4);
       if (Math.random() < 0.5 || e.D.mass > 1) sfxAt('crack' + Math.floor(Math.random() * 3), at, 0.8);
-      if (BLADE.has(src) && src !== 'exec' && P.alive) { P.hp = Math.min(100, P.hp + 4); }
-      hitMarker(true);
+      if (BLADE.has(src) && src !== 'exec' && P.alive) P.hp = Math.min(P.maxHp, P.hp + P.maxHp * 0.04);
+      hitMarker(true); onKill(e, at);
       return true;
     }
     if (e.state !== 'broken' && e.state !== 'execd') {
-      if (e.type === 'gunner' && !e.brokeOnce && e.hp <= e.maxHp * 0.45) breakEnemy(e, 3.5);
-      if (e.type === 'champion' && e.breakCd <= 0 && e.hp <= e.maxHp * 0.12) { breakEnemy(e, 5); banner('The Champion kneels', 'Execute him'); }
+      const brk = e.boss ? 0.12 : 0.45;
+      if (e.type === 'gunner' && !e.brokeOnce && e.hp <= e.maxHp * brk) breakEnemy(e, 3.5);
+      if (e.type === 'champion' && e.breakCd <= 0 && e.hp <= e.maxHp * 0.12) { breakEnemy(e, 5); banner(e.name || 'The Champion', 'He kneels: execute him'); }
       if (e.type === 'champion' && e.sum < 2 && e.hp < e.maxHp * (e.sum ? 0.33 : 0.66) && e.state !== 'leap') { e.sum++; e.state = 'roar'; e.t = 0; e.vel.set(0, 0, 0); SYN.roar(at, 1.2); }
     }
     hitMarker(false);
@@ -2689,53 +2746,85 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   function breakEnemy(e, dur) {
     e.state = 'broken'; e.t = 0; e.brokenT = dur; e.brokeOnce = true; e.stag = 0; e.vel.multiplyScalar(0.3);
     if (e.J.glow) e.J.glow.material.opacity = 0;
-    const at = v(e.pos.x, e.D.lockY, e.pos.z); sfxAt('crack' + Math.floor(Math.random() * 3), at, 1, 0.8); SYN.screech(at, true);
+    const at = eUp(e, e.ly); sfxAt('crack' + Math.floor(Math.random() * 3), at, 1, 0.8); SYN.screech(at, true);
   }
-  function summon(n) {      // the Champion calls the swarm: ghouls pour in through the nearest doors
-    for (let i = 0; i < n; i++) { const g = SPAWNS[i % SPAWNS.length]; spawnEnemy('ghoul', g.x + rand(-1, 1), g.z + rand(-1, 1)); }
+  function summon(e, n) {      // the Champion calls the swarm: ghouls pour in through the nearest doors (or rise around him, out in the world)
+    for (let i = 0; i < n; i++) {
+      const g = ZONE === 'dungeon' && SPAWNS.length ? SPAWNS[i % SPAWNS.length] : v(e.pos.x + Math.cos(i * 1.6) * 7, 0, e.pos.z + Math.sin(i * 1.6) * 7);
+      const s = spawnEnemy('ghoul', g.x + rand(-1, 1), g.z + rand(-1, 1), { lvl: e.lvl, pack: e.pack, state: ZONE === 'dungeon' ? 'enter' : 'chase' }); s.aggro = true;
+    }
   }
-  function leapTo(e, tgt, Tf) {     // a ballistic hop that lands on tgt after Tf seconds
+  function leapTo(e, tgt, Tf) {     // a ballistic hop that lands on tgt after Tf seconds (over uneven ground: the rise is part of the throw)
     clampBounds(tgt, 1.2);
-    e.vel.set((tgt.x - e.pos.x) / Tf, 0, (tgt.z - e.pos.z) / Tf); e.vy = 0.5 * 22 * Tf; e.pos.y = 0.001;
+    const dy = GY(tgt.x, tgt.z) - e.pos.y;
+    e.vel.set((tgt.x - e.pos.x) / Tf, 0, (tgt.z - e.pos.z) / Tf); e.vy = (dy + 0.5 * 22 * Tf * Tf) / Tf; e.pos.y += 0.001;
     e.state = 'leap'; e.t = 0;
   }
   function landShock(e, R, dmg, push) {
-    const c = v(e.pos.x, 0.02, e.pos.z); shock(c, R, e.type === 'champion' ? 0xff7a30 : 0xd8a070);
+    const c = v(e.pos.x, e.pos.y + 0.02, e.pos.z); shock(c, R, e.type === 'champion' ? 0xff7a30 : 0xd8a070);
     dust(c, e.type === 'champion' ? 30 : 14, R * 0.5); SYN.slam(c, e.type === 'champion' ? 1 : 0.45);
     G.shake = Math.max(G.shake, (e.type === 'champion' ? 0.5 : 0.2) * clamp(1.4 - P.pos.distanceTo(c) / 12, 0, 1));
-    if (Math.hypot(P.pos.x - c.x, P.pos.z - c.z) < R) hurtPlayer(dmg, c, push);
+    if (Math.hypot(P.pos.x - c.x, P.pos.z - c.z) < R && Math.abs(P.pos.y - c.y) < 2) hurtPlayer(dmg * e.dm, c, push);
+  }
+  // a pack wakes together: one of them sees you, or is hit, and all of them come
+  function alertPack(e) {
+    const wake = o => { if (!o.alive || o.aggro) return; o.aggro = true; if (o.state === 'idle' || o.state === 'return') { o.state = 'chase'; o.t = 0; } };
+    wake(e);
+    if (e.pack) for (const o of ENEMIES) if (o.pack === e.pack) wake(o);
+    if (e.boss && e.name) { banner(e.name, e.type === 'champion' ? 'Champion of Ruin' : 'Level ' + e.lvl); SYN.roar(eUp(e, 2), 1); }
+    else if (e.type === 'ghoul' || e.type === 'leaper') SYN.screech(eUp(e, 1)); else if (e.D.mass > 1) SYN.roar(eUp(e, 2), 0.6);
   }
   function updateEnemies(dt) {
     const pp = P.pos;
     for (const e of ENEMIES) {
       const J = e.J;
       e.hitT = Math.max(0, e.hitT - dt); e.breakCd = Math.max(0, e.breakCd - dt);
-      if (!e.alive) {          // fall over away from the blow, lie still, then sink into the floor
+      if (!e.alive) {          // fall over away from the blow, lie still, then sink into the ground
         e.deadT += dt;
         const f = Math.min(1, e.deadT / 0.45);
-        e.vel.multiplyScalar(1 - Math.min(1, 6 * dt)); e.pos.addScaledVector(e.vel, dt); if (e.pos.y > 0) e.pos.y = Math.max(0, e.pos.y - dt * 6); collide(e.pos, e.D.r);
+        e.vel.multiplyScalar(1 - Math.min(1, 6 * dt)); e.pos.x += e.vel.x * dt; e.pos.z += e.vel.z * dt; collide(e.pos, e.r);
+        if (e.deadT > 4) e.sink += dt * 0.5;
+        const g = GY(e.pos.x, e.pos.z) - e.sink; e.pos.y = e.pos.y > g ? Math.max(g, e.pos.y - dt * 6) : g;
         J.root.rotation.set(0, 0, 0); J.root.rotation.y = e.yaw;
         J.root.rotateX(-smooth(f) * PI / 2 * (e.fall.dot(tmp.set(Math.sin(e.yaw), 0, Math.cos(e.yaw))) > 0 ? -1 : 1));
-        if (e.deadT > 4) e.pos.y -= dt * 0.5;
         J.root.position.copy(e.pos);
-        if (e.deadT > 6) { e.gone = true; scene.remove(J.root); }
+        if (e.deadT > 6) removeEnemy(e);
         continue;
       }
       tmp.subVectors(pp, e.pos); tmp.y = 0; const dist = tmp.length(); const dir = tmp.normalize().clone();
+      // far from the Templar and asleep: stand still and save the work
+      if (e.state === 'idle' && dist > 110) { J.root.visible = dist < 220; continue; }
+      J.root.visible = true;
       e.t += dt; e.cd -= dt; e.ccd -= dt; e.stag = Math.max(0, e.stag - dt);
       const want = v(), before = _bp.copy(e.pos);
-      let steer = true, face = true;
+      let steer = true, face = true, faceTo = null;
+      const air = e.state === 'leap' || e.state === 'fall';
       if (e.state === 'execd') { steer = false; face = false; }       // held on the blade: the execution moves it
       else if (e.state === 'enter') { want.set(-e.pos.x, 0, -e.pos.z).normalize().multiplyScalar(e.D.speed * 0.8); if (insideBy(e.pos, 2.5)) { e.state = 'chase'; e.t = 0; } }
+      else if (e.state === 'idle') {      // mill about near home; every quarter second, look for the Templar
+        e.wT -= dt;
+        if (e.wT <= 0) { e.wT = rand(3, 8); e.wander = Math.random() < 0.6 ? { x: e.home.x + rand(-7, 7), z: e.home.z + rand(-7, 7) } : null; }
+        if (e.wander) { const dx = e.wander.x - e.pos.x, dz = e.wander.z - e.pos.z, d = Math.hypot(dx, dz); if (d > 0.8) { want.set(dx / d, 0, dz / d).multiplyScalar(e.D.speed * 0.25); faceTo = Math.atan2(dx, dz); } else e.wander = null; }
+        e.seeT -= dt;
+        if (e.seeT <= 0 && P.alive && G.state === 'play') { e.seeT = 0.25;
+          const sight = e.type === 'gunner' ? 34 : 26;
+          if (dist < 9 || (dist < sight && Math.abs(pp.y - e.pos.y) < 14 && losTo(e))) alertPack(e); }
+      }
+      else if (e.state === 'return') {    // lost the Templar: walk home and mend
+        const dx = e.home.x - e.pos.x, dz = e.home.z - e.pos.z, d = Math.hypot(dx, dz);
+        if (d < 3) { e.state = 'idle'; e.hp = e.maxHp; e.guard = e.guard0; }
+        else { want.set(dx / d, 0, dz / d).multiplyScalar(e.D.speed * 0.8); faceTo = Math.atan2(dx, dz); e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.1 * dt); }
+      }
       else if (e.state === 'broken') {
         face = false; e.brokenT -= dt;
-        if (e.brokenT <= 0) { e.state = 'chase'; e.t = 0; e.cd = 0.6; if (e.type === 'brute') e.guard = e.D.guard; if (e.type === 'champion') e.breakCd = 3; }
+        if (e.brokenT <= 0) { e.state = 'chase'; e.t = 0; e.cd = 0.6; if (e.type === 'brute') e.guard = e.guard0; if (e.type === 'champion') e.breakCd = 3; }
       }
-      else if (e.state === 'leap' || e.state === 'fall') {
+      else if (air) {
         steer = false; face = e.state === 'leap';
         e.vy -= 22 * dt; e.pos.y += e.vy * dt; e.pos.x += e.vel.x * dt; e.pos.z += e.vel.z * dt;
-        if (e.pos.y <= 0 && e.t > 0.08) {
-          e.pos.y = 0; e.vy = 0;
+        const g = GY(e.pos.x, e.pos.z);
+        if (e.pos.y <= g && e.t > 0.08) {
+          e.pos.y = g; e.vy = 0;
           if (e.state === 'leap') { if (e.type === 'champion') landShock(e, 4.5, 25, 9); else landShock(e, 2.2, 16, 6); }
           e.state = 'recover'; e.t = 0; e.vel.multiplyScalar(0.15);
         }
@@ -2745,24 +2834,31 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
       else if (e.type === 'leaper') aiLeaper(e, dist, dir, want);
       else if (e.type === 'brute') { const r = aiBrute(e, dt, dist, dir, want); if (r === false) steer = false; }
       else aiChampion(e, dist, dir, want);
+      // the leash: a pack dragged too far from home gives up once the Templar is out of reach
+      if (e.aggro && ZONE === 'world' && !air && e.state !== 'execd' && e.state !== 'broken') {
+        const hd = Math.hypot(e.pos.x - e.home.x, e.pos.z - e.home.z);
+        if (!P.alive || (hd > 60 && dist > 25) || dist > 90) { e.aggro = false; e.state = 'return'; e.t = 0; if (e.J.glow) e.J.glow.material.opacity = 0; }
+      }
       // steer, with a heavy stagger when struck
       if (steer) {
         const acc = damp(e.stag > 0 ? 1.5 : (e.state === 'lunge' ? 2 : e.D.mass > 1 ? 5 : 8), dt);
         if (e.state === 'wind' || e.state === 'aim' || e.state === 'recover' || e.state === 'crouch' || e.state === 'smash' || e.state === 'cwind' || e.state === 'roar' || e.state === 'broken') want.multiplyScalar(0.15);
+        if (inWater(e.pos.x, e.pos.z)) want.multiplyScalar(0.6);
         e.vel.x += (want.x - e.vel.x) * acc; e.vel.z += (want.z - e.vel.z) * acc;
-        e.pos.addScaledVector(e.vel, dt);
+        e.pos.x += e.vel.x * dt; e.pos.z += e.vel.z * dt;
       }
-      if (e.state !== 'enter' && e.state !== 'execd') collide(e.pos, e.D.r);
+      if (e.state !== 'enter' && e.state !== 'execd') collide(e.pos, e.r);
+      if (!air && e.state !== 'execd') e.pos.y = GY(e.pos.x, e.pos.z);
       // a charging brute that runs into a pillar or a wall stuns itself
       if (e.state === 'charge' && e.t > 0.15 && Math.hypot(e.pos.x - before.x, e.pos.z - before.z) < 11 * dt * 0.45) {
-        breakEnemy(e, 2.6); sparks(e.pos.clone().setY(1.6).addScaledVector(e.cdir, 0.8), 20, [1, 0.8, 0.5, 1], 6); dust(e.pos, 16, 1.2);
+        breakEnemy(e, 2.6); sparks(eUp(e, 1.6).addScaledVector(e.cdir, 0.8), 20, [1, 0.8, 0.5, 1], 6); dust(e.pos, 16, 1.2);
         SYN.slam(e.pos, 0.6); G.shake = Math.max(G.shake, 0.2); banner('Stunned', 'Execute it');
       }
       // keep out of the Templar
-      if (e.state !== 'execd' && e.pos.y < 0.5) { const dx = e.pos.x - pp.x, dz = e.pos.z - pp.z, d = Math.hypot(dx, dz), R = e.D.r + 0.5; if (d < R && d > 1e-4) { e.pos.x = pp.x + dx / d * R; e.pos.z = pp.z + dz / d * R; } }
+      if (e.state !== 'execd' && Math.abs(e.pos.y - pp.y) < 1.5) { const dx = e.pos.x - pp.x, dz = e.pos.z - pp.z, d = Math.hypot(dx, dz), R = e.r + 0.5; if (d < R && d > 1e-4) { e.pos.x = pp.x + dx / d * R; e.pos.z = pp.z + dz / d * R; } }
       if (face) {
-        const fa = e.state === 'charge' ? Math.atan2(e.cdir.x, e.cdir.z) : e.state === 'leap' ? Math.atan2(e.vel.x, e.vel.z) : Math.atan2(dir.x, dir.z);
-        e.yaw += angDiff(e.yaw, fa) * damp(e.stag > 0 ? 2 : e.D.mass > 1 ? 5 : 10, dt);
+        const fa = faceTo !== null ? faceTo : e.state === 'idle' ? e.yaw : e.state === 'charge' ? Math.atan2(e.cdir.x, e.cdir.z) : e.state === 'leap' ? Math.atan2(e.vel.x, e.vel.z) : Math.atan2(dir.x, dir.z);
+        e.yaw += angDiff(e.yaw, fa) * damp(e.stag > 0 ? 2 : e.D.mass > 1 ? 5 : faceTo !== null ? 4 : 10, dt);
       }
       animateEnemy(e, dt, dist);
     }
@@ -2774,31 +2870,32 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
       want.copy(dir).multiplyScalar(e.D.speed);
       if (busy >= 2 && dist < 4.2) { want.multiplyScalar(dist < 3.2 ? -0.5 : 0.1); want.x += -dir.z * e.side * 3; want.z += dir.x * e.side * 3; }
       separate(e, want);
-      if (dist < 2.6 && e.cd <= 0 && e.stag <= 0 && P.alive && busy < 2) { e.state = 'wind'; e.t = 0; SYN.screech(e.pos.clone().setY(1)); }
+      if (dist < 2.6 * e.sc && e.cd <= 0 && e.stag <= 0 && P.alive && busy < 2 && Math.abs(P.pos.y - e.pos.y) < 2) { e.state = 'wind'; e.t = 0; SYN.screech(eUp(e, 1)); }
     } else if (e.state === 'wind') {
       if (e.t > 0.32) { e.state = 'lunge'; e.t = 0; e.struck = false; e.vel.copy(dir).multiplyScalar(10); }
     } else if (e.state === 'lunge') {
       want.copy(e.vel);
-      if (!e.struck && e.t > 0.1 && dist < 1.55) { e.struck = true; hurtPlayer(9, e.pos); }
+      if (!e.struck && e.t > 0.1 && dist < 1.55 * e.sc && Math.abs(P.pos.y - e.pos.y) < 1.8) { e.struck = true; hurtPlayer(9 * e.dm, e.pos); }
       if (e.t > 0.24) { e.state = 'recover'; e.t = 0; }
     } else if (e.state === 'recover') { if (e.t > 0.45) { e.state = 'chase'; e.cd = rand(1.0, 1.8); } }
     else e.state = 'chase';
   }
-  function separate(e, want) { for (const o of ENEMIES) { if (o === e || !o.alive) continue; const dx = e.pos.x - o.pos.x, dz = e.pos.z - o.pos.z, d2 = dx * dx + dz * dz, R = (e.D.r + o.D.r) * 1.4; if (d2 < R * R && d2 > 1e-4) { want.x += dx / d2 * 1.6 * R; want.z += dz / d2 * 1.6 * R; } } }
+  function separate(e, want) { for (const o of ENEMIES) { if (o === e || !o.alive) continue; const dx = e.pos.x - o.pos.x, dz = e.pos.z - o.pos.z, d2 = dx * dx + dz * dz, R = (e.r + o.r) * 1.4; if (d2 < R * R && d2 > 1e-4) { want.x += dx / d2 * 1.6 * R; want.z += dz / d2 * 1.6 * R; } } }
   function aiGunner(e, dt, dist, dir, want) {     // hold a firing range, strafe, stop to aim, fire
     const J = e.J;
     e.sideT -= dt; if (e.sideT < 0) { e.side *= -1; e.sideT = rand(2, 4); }
     if (e.state === 'chase') {
       const los = losTo(e);
-      if (dist > 17) want.copy(dir).multiplyScalar(e.D.speed);
+      if (dist > 17 || !los) want.copy(dir).multiplyScalar(e.D.speed);
       else if (dist < 9) want.copy(dir).multiplyScalar(-e.D.speed);
       want.x += -dir.z * e.side * e.D.speed * 0.7; want.z += dir.x * e.side * e.D.speed * 0.7;
-      if (e.cd <= 0 && los && e.stag <= 0 && P.alive && dist < 30) { e.state = 'aim'; e.t = 0; SYN.charge(e.pos.clone().setY(1.5)); }
+      if (e.cd <= 0 && los && e.stag <= 0 && P.alive && dist < 30) { e.state = 'aim'; e.t = 0; e.burst = e.boss ? 3 : 1; SYN.charge(eUp(e, 1.5)); }
     } else if (e.state === 'aim') {
       J.glow.material.opacity = 0.2 + e.t * 1.1; J.glow.scale.setScalar(0.6 + e.t * 1.2);
-      if (e.t > 0.7) {
-        J.glow.material.opacity = 0; e.state = 'chase'; e.cd = rand(1.6, 3.0);
+      if (e.t > (e.burst < 3 && e.boss ? 0.25 : 0.7)) {
+        J.glow.material.opacity = 0;
         if (losTo(e)) fireBolt(e);
+        if (--e.burst > 0) e.t = 0; else { e.state = 'chase'; e.cd = rand(1.6, 3.0) * (e.boss ? 0.8 : 1); }
       }
     } else e.state = 'chase';
   }
@@ -2808,7 +2905,7 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
       else if (dist < 5) want.copy(dir).multiplyScalar(-e.D.speed * 0.7);
       want.x += -dir.z * e.side * 2.5; want.z += dir.x * e.side * 2.5;
       separate(e, want);
-      if (dist > 4 && dist < 12.5 && e.cd <= 0 && e.stag <= 0 && P.alive && losTo(e)) { e.state = 'crouch'; e.t = 0; SYN.screech(e.pos.clone().setY(1)); SYN.screech(e.pos.clone().setY(1), true); }
+      if (dist > 4 && dist < 12.5 && e.cd <= 0 && e.stag <= 0 && P.alive && losTo(e)) { e.state = 'crouch'; e.t = 0; SYN.screech(eUp(e, 1)); SYN.screech(eUp(e, 1), true); }
     } else if (e.state === 'crouch') {
       if (e.t > 0.6) leapTo(e, v(P.pos.x + P.vel.x * 0.35, 0, P.pos.z + P.vel.z * 0.35), clamp(dist / 10, 0.55, 0.85));
     } else if (e.state === 'recover') { if (e.t > 0.8) { e.state = 'chase'; e.cd = rand(2.5, 4); } }
@@ -2817,15 +2914,15 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   function aiBrute(e, dt, dist, dir, want) {
     if (e.state === 'chase') {
       want.copy(dir).multiplyScalar(e.D.speed); separate(e, want);
-      if (dist < 3.0 && e.cd <= 0 && P.alive) { e.state = 'smash'; e.t = 0; e.struck = false; SYN.roar(e.pos.clone().setY(2), 0.5); }
-      else if (dist > 7 && dist < 16 && e.ccd <= 0 && P.alive && losTo(e)) { e.state = 'cwind'; e.t = 0; SYN.roar(e.pos.clone().setY(2), 0.9); }
+      if (dist < 3.0 * e.sc && e.cd <= 0 && P.alive) { e.state = 'smash'; e.t = 0; e.struck = false; SYN.roar(eUp(e, 2), 0.5); }
+      else if (dist > 7 && dist < 16 && e.ccd <= 0 && P.alive && losTo(e)) { e.state = 'cwind'; e.t = 0; SYN.roar(eUp(e, 2), 0.9); }
     } else if (e.state === 'smash') {        // overhead maul: a long wind-up you can see coming, then a cone in front
       if (!e.struck && e.t > 0.65) {
         e.struck = true;
-        const c = e.pos.clone().add(v(Math.sin(e.yaw), 0, Math.cos(e.yaw)).multiplyScalar(1.9)); dust(c, 14, 0.8); SYN.slam(c, 0.55); sparks(c.clone().setY(0.2), 10, [1, 0.7, 0.4, 1], 5);
+        const c = e.pos.clone().add(v(Math.sin(e.yaw), 0, Math.cos(e.yaw)).multiplyScalar(1.9 * e.sc)); c.y = GY(c.x, c.z); dust(c, 14, 0.8); SYN.slam(c, 0.55); sparks(c.clone().setY(c.y + 0.2), 10, [1, 0.7, 0.4, 1], 5);
         G.shake = Math.max(G.shake, 0.25 * clamp(1.4 - dist / 10, 0, 1));
         const fd = (dir.x * Math.sin(e.yaw) + dir.z * Math.cos(e.yaw));
-        if (dist < 3.4 && fd > 0.3) hurtPlayer(22, e.pos, 7);
+        if (dist < 3.4 * e.sc && fd > 0.3 && Math.abs(P.pos.y - e.pos.y) < 2.2) hurtPlayer(22 * e.dm, e.pos, 7);
       }
       if (e.t > 1.4) { e.state = 'chase'; e.cd = rand(1.6, 2.6); }
     } else if (e.state === 'cwind') {        // head down, a roar, then the charge in a straight line
@@ -2834,7 +2931,7 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     } else if (e.state === 'charge') {
       e.vel.copy(e.cdir).multiplyScalar(11); e.pos.addScaledVector(e.vel, dt);
       if (Math.random() < 0.5) dust(e.pos, 1, 0.4);
-      if (!e.struck && dist < e.D.r + 0.9) { e.struck = true; hurtPlayer(18, e.pos, 11); }
+      if (!e.struck && dist < e.r + 0.9 && Math.abs(P.pos.y - e.pos.y) < 2) { e.struck = true; hurtPlayer(18 * e.dm, e.pos, 11); }
       if (e.t > 1.5) { e.state = 'recover'; e.t = 0; }
       return false;
     } else if (e.state === 'recover') { if (e.t > 0.7) { e.state = 'chase'; e.ccd = rand(5, 8); e.cd = 0.8; } }
@@ -2844,32 +2941,32 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     if (e.state === 'chase') {
       want.copy(dir).multiplyScalar(e.stag > 0 ? 0 : e.D.speed); separate(e, want);
       if (e.stag > 0) return;
-      if (dist < 3.9 && e.cd <= 0 && P.alive) { e.state = 'cleave'; e.t = 0; e.swing = 0; e.struck = false; SYN.roar(e.pos.clone().setY(2.5), 0.5); }
-      else if (dist > 7.5 && e.ccd <= 0 && P.alive && losTo(e)) { e.state = 'crouch'; e.t = 0; SYN.roar(e.pos.clone().setY(2.5), 0.9); }
+      if (dist < 3.9 && e.cd <= 0 && P.alive) { e.state = 'cleave'; e.t = 0; e.swing = 0; e.struck = false; SYN.roar(eUp(e, 2.5), 0.5); }
+      else if (dist > 7.5 && e.ccd <= 0 && P.alive && losTo(e)) { e.state = 'crouch'; e.t = 0; SYN.roar(eUp(e, 2.5), 0.9); }
     } else if (e.state === 'cleave') {         // three great swings, alternating sides, stepping in on each
       const T0 = 0.82, k = e.t - e.swing * T0;
       if (k > 0.42 && k < 0.6) want.copy(dir).multiplyScalar(5);
       if (!e.struck && k > 0.5) {
-        e.struck = true; SYN.heavySwing(e.pos.clone().setY(2.2));
+        e.struck = true; SYN.heavySwing(eUp(e, 2.2));
         const fd = dir.x * Math.sin(e.yaw) + dir.z * Math.cos(e.yaw);
-        if (dist < 4.1 && fd > 0.15) hurtPlayer(20, e.pos, 8);
+        if (dist < 4.1 && fd > 0.15 && Math.abs(P.pos.y - e.pos.y) < 2.5) hurtPlayer(20 * e.dm, e.pos, 8);
       }
       if (k > T0) { e.swing++; e.struck = false; if (e.swing >= 3) { e.state = 'recover'; e.t = 0; } }
     } else if (e.state === 'crouch') {
       if (e.t > 0.7) leapTo(e, v(P.pos.x + P.vel.x * 0.3, 0, P.pos.z + P.vel.z * 0.3), 0.95);
     } else if (e.state === 'roar') {
-      if (e.t > 0.5 && !e.summoned) { e.summoned = true; summon(4); }
+      if (e.t > 0.5 && !e.summoned) { e.summoned = true; summon(e, 4); }
       if (e.t > 1.4) { e.state = 'chase'; e.summoned = false; e.cd = 0.5; }
     } else if (e.state === 'recover') { if (e.t > 0.9) { e.state = 'chase'; e.cd = rand(1.4, 2.4); if (e.ccd < 1) e.ccd = rand(5, 8); } }
     else e.state = 'chase';
   }
   function losTo(e) {
-    tmp.set(e.pos.x, 1.6, e.pos.z); tmp2.set(P.pos.x, 1.6, P.pos.z).sub(tmp); const L = tmp2.length(); tmp2.divideScalar(L);
+    tmp.set(e.pos.x, e.pos.y + 1.6 * e.sc, e.pos.z); tmp2.set(P.pos.x, P.pos.y + 1.6, P.pos.z).sub(tmp); const L = tmp2.length(); tmp2.divideScalar(L);
     return rayWorld(tmp, tmp2, L) >= L - 0.01;
   }
   function animateEnemy(e, dt, dist) {
     const J = e.J, sp = Math.hypot(e.vel.x, e.vel.z);
-    e.run += sp * dt * (e.type === 'ghoul' || e.type === 'leaper' ? 2.0 : e.D.mass > 1 ? 1.9 : 2.6);
+    e.run += sp * dt * (e.type === 'ghoul' || e.type === 'leaper' ? 2.0 : e.D.mass > 1 ? 1.9 : 2.6) / e.sc;
     const s = Math.sin(e.run), amp = Math.min(1, sp / 4);
     J.root.position.copy(e.pos); J.root.position.y += e.lift; J.root.rotation.set(0, e.yaw, 0);
     const down = e.state === 'broken' || (e.state === 'execd' && e.D.mass > 1), held = e.state === 'execd' && !down;
@@ -2892,8 +2989,8 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
       J.hipL.rotation.x = down ? 0.15 : s * 0.6 * amp; J.hipR.rotation.x = down ? -1.45 : -s * 0.6 * amp;
       J.kneeL.rotation.x = down ? 1.55 : Math.max(0, -s) * 0.7 * amp; J.kneeR.rotation.x = down ? 1.45 : Math.max(0, s) * 0.7 * amp;
       J.torso.rotation.x = down ? 0.5 : held ? -0.35 : e.stag > 0 ? -0.35 : 0.05;
-      // aim pitch: the rifle comes up and tracks the Templar's chest
-      const wantP = down || held ? 1.1 : e.state === 'aim' ? Math.atan2(1.5 - 1.45, Math.max(dist, 1)) : 0.5;
+      // aim pitch: the rifle comes up and tracks the Templar's chest (positive is down)
+      const wantP = down || held ? 1.1 : e.state === 'aim' ? Math.atan2(e.pos.y + 1.45 * e.sc - P.pos.y - 1.35, Math.max(dist, 1)) : 0.5;
       e.aimP += (wantP - e.aimP) * damp(8, dt); J.aim.rotation.x = e.aimP;
       J.head.rotation.x = down ? 0.4 : held ? -0.5 : e.state === 'aim' ? 0 : 0.15;
     } else animateHeavy(e, dt, s, amp, down);
@@ -2931,20 +3028,20 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   const _mz = new V3();
   function fireBolt(e) {
     e.J.muzzle.getWorldPosition(_mz);
-    const target = v(P.pos.x, 1.35, P.pos.z), flight = _mz.distanceTo(target) / 19;
+    const target = v(P.pos.x, P.pos.y + 1.35, P.pos.z), flight = _mz.distanceTo(target) / 19;
     target.x += P.vel.x * flight * 0.55; target.z += P.vel.z * flight * 0.55;
     const vel = target.sub(_mz).normalize().multiplyScalar(19);
     const m = new THREE.Mesh(boltGeo, boltM); const h = new THREE.Mesh(haloGeo, boltHaloM); m.add(h); m.position.copy(_mz); scene.add(m);
-    BOLTS.push({ m, vel, life: 3 }); SYN.zap(_mz); flash(_mz, 0xff5020, 2, 0.08);
+    BOLTS.push({ m, vel, life: 3, dm: e.dm }); SYN.zap(_mz); flash(_mz, 0xff5020, 2, 0.08);
   }
   function updateBolts(dt) {
     for (const b of BOLTS) {
       b.life -= dt; const p = b.m.position; const from = p.clone(); p.addScaledVector(b.vel, dt);
       if (Math.random() < 0.6) glowFX.spawn(p, v(rand(-0.3, 0.3), rand(-0.3, 0.3), rand(-0.3, 0.3)), [1, 0.4, 0.15, 0.8], 0.12, 0.2);
       // the sword knocks bolts out of the air mid-swing
-      if (C.active && C.phase === 's' && p.distanceTo(tmp.set(P.pos.x, 1.3, P.pos.z)) < 2.2) { b.life = 0; sparks(p, 16, [0.6, 0.85, 1, 1], 7); SYN.clang(); sfx('bring', 0.7, rand(0.9, 1.05)); continue; }
-      tmp.set(P.pos.x, clamp(p.y, 0.2, 2.1), P.pos.z);
-      if (P.alive && segPointDist(from, p, tmp) < 0.55) { b.life = 0; if (P.iframes <= 0) hurtPlayer(9, from); sparks(p, 10, [1, 0.5, 0.2, 1], 4); continue; }
+      if (C.active && C.phase === 's' && p.distanceTo(tmp.set(P.pos.x, P.pos.y + 1.3, P.pos.z)) < 2.2) { b.life = 0; sparks(p, 16, [0.6, 0.85, 1, 1], 7); SYN.clang(); sfx('bring', 0.7, rand(0.9, 1.05)); continue; }
+      tmp.set(P.pos.x, clamp(p.y, P.pos.y + 0.2, P.pos.y + 2.1), P.pos.z);
+      if (P.alive && segPointDist(from, p, tmp) < 0.55) { b.life = 0; if (P.iframes <= 0) hurtPlayer(9 * b.dm, from); sparks(p, 10, [1, 0.5, 0.2, 1], 4); continue; }
       tmp2.copy(b.vel).normalize(); const L = from.distanceTo(p);
       if (rayWorld(from, tmp2, L) < L) { b.life = 0; sparks(p, 8, [1, 0.5, 0.2, 1], 3); continue; }
     }
@@ -2954,6 +3051,7 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   function hurtPlayer(dmg, from, push) {
     if (!P.alive || G.state !== 'play') return;
     if (P.iframes > 0) return;
+    dmg *= 1 - ST.dr;
     P.hp -= dmg; P.lastHurt = G.time; G.shake = Math.max(G.shake, 0.25 + (push ? 0.15 : 0));
     if (push && from) { const dx = P.pos.x - from.x, dz = P.pos.z - from.z, d = Math.hypot(dx, dz) || 1; P.push.set(dx / d * push, 0, dz / d * push); }
     vigT = 0.5; sfx('hurt' + Math.floor(Math.random() * 4), 0.9, rand(0.72, 0.82));
@@ -2968,22 +3066,33 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   function lockMouse() { try { const r = canvas.requestPointerLock && canvas.requestPointerLock(); if (r && r.catch) r.catch(lockRefused); } catch (_) { lockRefused(); } }
   document.addEventListener('pointerlockerror', lockRefused);
   const canvas = renderer.domElement;
+  const noLock = () => lockFailed || window.__taNoLock;
   addEventListener('keydown', e => {
+    if (G.state !== 'play' && G.state !== 'dead') return;
+    if (e.code === 'Tab') e.preventDefault();
+    // a screen is open (character, map, talk): its own keys close it
+    if (G.ui) {
+      if (e.code === 'Escape' || (e.code === 'KeyI' && G.ui === 'inv') || (e.code === 'Tab' && G.ui === 'inv') || (e.code === 'KeyM' && G.ui === 'map')) closeUI();
+      return;
+    }
     if (G.state !== 'play') return;
     // with pointer lock the browser takes Esc itself and the lock change opens the pause screen; without it, Esc toggles it here
-    if (e.code === 'Escape' && !locked) { if (lockFailed || window.__taNoLock) setPaused(!G.paused); return; }
-    if (G.paused) return;
+    if (e.code === 'Escape' && !locked) { if (noLock()) setPaused(!G.paused); return; }
+    if (G.paused || G.fading) return;
+    if (e.code === 'KeyI' || e.code === 'Tab') { if (!e.repeat) openUI('inv'); return; }
+    if (e.code === 'KeyM') { if (!e.repeat) openUI('map'); return; }
     keys.add(e.code);
     if (e.code === 'KeyR') reload();
     if (e.code === 'KeyF' && !e.repeat) swordInput();
-    if (e.code === 'KeyE' && !e.repeat) tryExecute();
+    if (e.code === 'KeyE' && !e.repeat) { if (!tryExecute(true)) interact(); }
+    if (e.code === 'KeyQ' && !e.repeat) useUnguent();
     if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) dash(); }
   });
   addEventListener('keyup', e => keys.delete(e.code));
   addEventListener('blur', () => { keys.clear(); mouseDown = false; });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('mousedown', e => {
-    if (G.state !== 'play' || G.paused) return;
+    if (G.state !== 'play' || G.paused || G.ui) return;
     if (!locked && !lockFailed) { lockMouse(); initAudio(); return; }
     if (e.button === 0) { mouseDown = true; fire(); }
     if (e.button === 2) swordInput();
@@ -2991,10 +3100,11 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; });
   document.addEventListener('pointerlockchange', () => {
     locked = document.pointerLockElement === canvas; if (locked) everLocked = true;
+    if (G.ui) return;          // the screens release the mouse on purpose
     if (G.state === 'play') setPaused(!locked);
   });
   addEventListener('mousemove', e => {
-    if ((!locked && !lockFailed) || G.state !== 'play' || G.paused) return;
+    if ((!locked && !lockFailed) || G.state !== 'play' || G.paused || G.ui) return;
     const k = 0.0022 * SET.sens;
     if (C.active && C.target && C.target.alive) { P.yaw -= e.movementX * k * 0.25; }   // soft lock: the mouse only nudges
     else P.yaw -= e.movementX * k;
@@ -3014,9 +3124,9 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     // aim from the eye, a touch of spread
     const o = cam.position.clone(), d = v(0, 0, -1).applyQuaternion(cam.quaternion);
     d.x += rand(-0.006, 0.006); d.y += rand(-0.006, 0.006); d.normalize();
-    let best = rayWorld(o, d, 120), hitE = null, head = false, blockE = null;
+    let best = rayWorld(o, d, 140), hitE = null, head = false, blockE = null;
     for (const e of ENEMIES) {
-      if (!e.alive) continue;
+      if (!e.alive || e.pos.distanceTo(o) > best + 4) continue;
       enemySpheres(e, (c, r, h) => { const t = raySphere(o, d, c, r); if (t < best) { best = t; hitE = e; head = h; blockE = null; } });
       const ts = shieldRay(e, o, d); if (ts < best) { best = ts; hitE = null; blockE = e; }
     }
@@ -3025,15 +3135,14 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     flash(_mz, 0xffa040, 3.5, 0.06);
     for (let i = 0; i < 8; i++) glowFX.spawn(_mz, d.clone().multiplyScalar(rand(2, 6)).add(v(rand(-1, 1), rand(-1, 1), rand(-1, 1))), [1, 0.6, 0.25, 1], rand(0.04, 0.09), 0.08);
     // mass-reactive round: it detonates where it lands
-    setTimeout(() => {}, 0);
-    sparks(hp, 18, [1, 0.6, 0.25, 1], 6, 0.3); flash(hp, 0xff8a30, 4, 0.12); dust(hp, 6, 0.4, [0.3, 0.25, 0.2, 0.6]);
-    SYN.boom(hp); sfxAt('bimp' + ((Math.random() * 2) | 0), hp, 0.8, rand(0.9, 1.05));
-    if (hitE) damageEnemy(hitE, head ? 90 : 50, d.clone().setY(0).normalize(), 3, 'bolt');
-    else if (blockE) { sparks(hp, 16, [1, 0.7, 0.3, 1], 6); SYN.clang(); sfxAt('bring', hp, 0.7, rand(0.75, 0.9)); hitMarker(false); }
-    else sfxAt('imp_con' + Math.floor(Math.random() * 4), hp, 0.9);
+    if (best < 139) { sparks(hp, 18, [1, 0.6, 0.25, 1], 6, 0.3); flash(hp, 0xff8a30, 4, 0.12); dust(hp, 6, 0.4, [0.3, 0.25, 0.2, 0.6]);
+      SYN.boom(hp); sfxAt('bimp' + ((Math.random() * 2) | 0), hp, 0.8, rand(0.9, 1.05)); }
+    if (hitE) strike(hitE, head ? 90 : 50, d.clone().setY(0).normalize(), 3, 'bolt');
+    else if (blockE) { sparks(hp, 16, [1, 0.7, 0.3, 1], 6); SYN.clang(); sfxAt('bring', hp, 0.7, rand(0.75, 0.9)); hitMarker(false); num(hp, 'Blocked', 'blk'); alertPack(blockE); }
+    else if (best < 139) sfxAt('imp_con' + Math.floor(Math.random() * 4), hp, 0.9);
     for (const e of ENEMIES) {      // a little splash from the detonation (the shield takes it all for the brute behind it)
       if (!e.alive || e === hitE || e === blockE || shieldCovers(e, hp)) continue;
-      const dd = Math.hypot(e.pos.x - hp.x, e.pos.z - hp.z); if (dd < 1.6 && Math.abs(hp.y - 1) < 1.5) damageEnemy(e, 14, tmp.set(e.pos.x - hp.x, 0, e.pos.z - hp.z).normalize().clone(), 2, 'bolt');
+      const dd = Math.hypot(e.pos.x - hp.x, e.pos.z - hp.z); if (dd < 1.6 && Math.abs(hp.y - e.pos.y - 1) < 1.5) strike(e, 14, tmp.set(e.pos.x - hp.x, 0, e.pos.z - hp.z).normalize().clone(), 2, 'bolt');
     }
     if (GUN.ammo === 0) setTimeout(reload, 250);
   }
@@ -3078,8 +3187,8 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   function pickTarget() {
     const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw); let best = null, bs = Infinity;
     for (const e of ENEMIES) {
-      if (!e.alive || e.state === 'enter' || e.state === 'execd') continue;
-      const dx = e.pos.x - P.pos.x, dz = e.pos.z - P.pos.z, d = Math.hypot(dx, dz) - (e.D.r - 0.45); if (d > 8.5) continue;
+      if (!e.alive || e.state === 'enter' || e.state === 'execd' || Math.abs(e.pos.y - P.pos.y) > 3) continue;
+      const dx = e.pos.x - P.pos.x, dz = e.pos.z - P.pos.z, d = Math.hypot(dx, dz) - (e.r - 0.45); if (d > 8.5) continue;
       const cosA = (dx * fx + dz * fz) / (d || 1); if (cosA < 0.45 && d > 2.2) continue;     // about 63 degrees either side, unless it is right on us
       const score = d * (1.6 - cosA); if (score < bs) { bs = score; best = e; }
     }
@@ -3100,14 +3209,14 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     ev: [[0.47, 'chop'], [0.92, 'impale'], [1.47, 'rip']] };
   function execTarget() {      // the nearest broken enemy within a step and a reach
     let best = null, bd = 3.4;
-    for (const e of ENEMIES) { if (!e.alive || e.state !== 'broken') continue; const d = Math.hypot(e.pos.x - P.pos.x, e.pos.z - P.pos.z) - e.D.r; if (d < bd) { bd = d; best = e; } }
+    for (const e of ENEMIES) { if (!e.alive || e.state !== 'broken' || Math.abs(e.pos.y - P.pos.y) > 2) continue; const d = Math.hypot(e.pos.x - P.pos.x, e.pos.z - P.pos.z) - e.r; if (d < bd) { bd = d; best = e; } }
     return best;
   }
   function swordInput() {
     if (!P.alive || G.state !== 'play') return;
     if (C.active && (C.mode === 'exec' || C.mode === 'finisher')) return;
     if (!C.active) {
-      { const x = execTarget(); if (x && Math.hypot(x.pos.x - P.pos.x, x.pos.z - P.pos.z) - x.D.r < 1.9) { tryExecute(); return; } }
+      { const x = execTarget(); if (x && Math.hypot(x.pos.x - P.pos.x, x.pos.z - P.pos.z) - x.r < 1.9) { tryExecute(); return; } }
       if (P.dashT > 0 || G.time - P.lastDash < 0.22) { startCombo('thrust'); return; }
       startCombo('combo');
     }
@@ -3129,7 +3238,7 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
       if (C.target) P.yaw = Math.atan2(-(C.target.pos.x - P.pos.x), -(C.target.pos.z - P.pos.z));
       C.lungeV.set(-Math.sin(P.yaw), 0, -Math.cos(P.yaw)).multiplyScalar(S.drive);
     } else if (C.target) {
-      const dx = C.target.pos.x - P.pos.x, dz = C.target.pos.z - P.pos.z, d = Math.hypot(dx, dz), reach = 1.75 + C.target.D.r - 0.45;
+      const dx = C.target.pos.x - P.pos.x, dz = C.target.pos.z - P.pos.z, d = Math.hypot(dx, dz), reach = 1.75 + C.target.r - 0.45;
       if (d > reach) C.lungeV.set(dx / d, 0, dz / d).multiplyScalar(Math.min((d - reach) / (S.w + S.s * 0.5), 15));
     } else C.lungeV.set(-Math.sin(P.yaw), 0, -Math.cos(P.yaw)).multiplyScalar(2.5 * S.lunge);
     if (S.w > 0.08) SYN.windup(S.snd ?? C.step, S.w);
@@ -3162,7 +3271,7 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     // the step in towards the target (the thrust drives on through the cut)
     if (C.phase === 'w' || (C.phase === 's' && C.t < S.s * (S.drive ? 0.8 : 0.5))) {
       P.pos.addScaledVector(C.lungeV, dt);
-      if (!S.drive && C.target && C.target.alive) { const d = Math.hypot(C.target.pos.x - P.pos.x, C.target.pos.z - P.pos.z); if (d < 1.6 + C.target.D.r - 0.45) C.lungeV.multiplyScalar(0); }
+      if (!S.drive && C.target && C.target.alive) { const d = Math.hypot(C.target.pos.x - P.pos.x, C.target.pos.z - P.pos.z); if (d < 1.6 + C.target.r - 0.45) C.lungeV.multiplyScalar(0); }
       if (S.drive && Math.random() < 0.6) dust(P.pos, 1, 0.3);
     }
   }
@@ -3172,7 +3281,7 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     T.bladeBase.getWorldPosition(_bb); T.bladeTip.getWorldPosition(_bt);
     const S = C.move;
     for (const e of ENEMIES) {
-      if (!e.alive || C.hits.has(e) || e.state === 'execd') continue;
+      if (!e.alive || C.hits.has(e) || e.state === 'execd' || Math.abs(e.pos.x - P.pos.x) + Math.abs(e.pos.z - P.pos.z) > 9) continue;
       let hit = false;
       enemySpheres(e, (c, r) => {
         const d1 = segPointDist(_bb, _bt, c), d2 = segPointDist(_pt, _bt, c), d3 = segPointDist(_pb, _bb, c);
@@ -3181,7 +3290,7 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
       if (hit) {
         C.hits.add(e);
         const dir = v(e.pos.x - P.pos.x, 0, e.pos.z - P.pos.z).normalize();
-        damageEnemy(e, S.dmg, dir, S.knock, S.src || 'sword');
+        strike(e, S.dmg, dir, S.knock, S.src || 'sword');
         const at = _bt.clone().lerp(_bb, 0.4);
         sparks(at, 22, [0.55, 0.85, 1, 1], 7, 0.3); flash(at, 0x6ab8ff, 3, 0.1); SYN.swordHit(at, S.slam || S.drive);
         G.hitStop = Math.max(G.hitStop, S.slam ? 0.09 : S.drive ? 0.04 : 0.06); G.shake = Math.max(G.shake, 0.12);
@@ -3208,7 +3317,7 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     GUN.ammo--; GUN.cd = 0.45; GUN.kick = 1;
     T.muzzle.getWorldPosition(_mz);
     const e = C.target && C.target.alive && C.target.pos.distanceTo(P.pos) < 5.5 ? C.target : null;
-    const aim = e ? v(e.pos.x, e.pos.y + e.D.lockY, e.pos.z) : _mz.clone().add(v(-Math.sin(P.yaw), 0, -Math.cos(P.yaw)).multiplyScalar(8));
+    const aim = e ? eUp(e, e.ly) : _mz.clone().add(v(-Math.sin(P.yaw), 0, -Math.cos(P.yaw)).multiplyScalar(8));
     const d = aim.clone().sub(_mz).normalize();
     let best = rayWorld(_mz, d, 30), hitE = null;
     for (const o of ENEMIES) { if (!o.alive || o.state === 'execd') continue; enemySpheres(o, (c, r) => { const t = raySphere(_mz, d, c, r + 0.15); if (t < best) { best = t; hitE = o; } }); }
@@ -3218,20 +3327,20 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     sparks(hp, 30, [1, 0.6, 0.25, 1], 8, 0.35); dust(hp, 10, 0.6, [0.3, 0.25, 0.2, 0.6]);
     sfx('shot_g', 1.2, rand(0.7, 0.76), 0, 0, 0.5); sfx('bolt_k', 1.1, 0.9, 0, 0, 0.4); SYN.bolt(); SYN.boom(hp); sfxAt('bimp1', hp, 1.1);
     G.shake = Math.max(G.shake, 0.35); G.hitStop = Math.max(G.hitStop, 0.1);
-    if (hitE) damageEnemy(hitE, 150, d.clone().setY(0).normalize(), 14, 'finisher');
-    for (const o of ENEMIES) { if (!o.alive || o === hitE || o.state === 'execd' || shieldCovers(o, hp)) continue; const dd = Math.hypot(o.pos.x - hp.x, o.pos.z - hp.z); if (dd < 2.4) damageEnemy(o, 40, v(o.pos.x - hp.x, 0, o.pos.z - hp.z).normalize(), 6, 'bolt'); }
+    if (hitE) strike(hitE, 150, d.clone().setY(0).normalize(), 14, 'finisher');
+    for (const o of ENEMIES) { if (!o.alive || o === hitE || o.state === 'execd' || shieldCovers(o, hp)) continue; const dd = Math.hypot(o.pos.x - hp.x, o.pos.z - hp.z); if (dd < 2.4 && Math.abs(o.pos.y - hp.y) < 2.5) strike(o, 40, v(o.pos.x - hp.x, 0, o.pos.z - hp.z).normalize(), 6, 'bolt'); }
     C.pips = 3;
     if (GUN.ammo === 0) setTimeout(reload, 400);
   }
-  function tryExecute() {
+  function tryExecute(quiet) {
     if (!P.alive || G.state !== 'play' || (C.active && (C.mode === 'exec' || C.mode === 'finisher'))) return false;
-    const e = execTarget(); if (!e) { SYN.deny(); return false; }
+    const e = execTarget(); if (!e) { if (!quiet) SYN.deny(); return false; }
     if (C.active) endCombo();
     const heavy = e.D.mass > 1, track = heavy ? EXEC_HEAVY : EXEC_LIGHT;
     C.active = true; C.mode = 'exec'; C.phase = 'x'; C.t = 0; C.target = e; copyPose(fromPose, pose);
-    C.ex = { e, track, ev: 0, heavy, side: 1, big: e.type === 'champion' ? 1.45 : heavy ? 1.2 : 1 };
+    C.ex = { e, track, ev: 0, heavy, side: 1, big: (e.type === 'champion' ? 1.45 : heavy ? 1.2 : 1) * Math.max(1, e.sc * 0.9) };
     { // film from whichever side has the clearer view (wrecks and pillars get in the way)
-      const P0 = v((P.pos.x + e.pos.x) / 2, 1.6, (P.pos.z + e.pos.z) / 2), score = sd => { let s = 0; for (const t of [0, 0.6, 1.2]) { const c = execCam(sd, t, v()), d = c.clone().sub(P0), L = d.length(); s += Math.min(rayWorld(P0, d.divideScalar(L), L), L) / L; tmp.set(c.x, c.y - 0.9, c.z).sub(P0); const L2 = tmp.length(); s += Math.min(rayWorld(P0, tmp.divideScalar(L2), L2), L2) / L2; } return s; };
+      const P0 = v((P.pos.x + e.pos.x) / 2, P.pos.y + 1.6, (P.pos.z + e.pos.z) / 2), score = sd => { let s = 0; for (const t of [0, 0.6, 1.2]) { const c = execCam(sd, t, v()), d = c.clone().sub(P0), L = d.length(); s += Math.min(rayWorld(P0, d.divideScalar(L), L), L) / L; tmp.set(c.x, c.y - 0.9, c.z).sub(P0); const L2 = tmp.length(); s += Math.min(rayWorld(P0, tmp.divideScalar(L2), L2), L2) / L2; } return s; };
       const a = score(1), b = score(-1); C.ex.side = Math.abs(a - b) < 0.05 ? (Math.random() < 0.5 ? 1 : -1) : a > b ? 1 : -1; }
     e.state = 'execd'; e.vel.set(0, 0, 0); e.lift = 0;
     P.iframes = track.dur + 0.6; P.vel.set(0, 0, 0); P.dashT = 0;
@@ -3251,24 +3360,25 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     C.t += dt;
     trackPose(pose, tr, C.t);
     // the victim is held at the blade's length, facing the Templar
-    const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), pin = tr.pin + (e.type === 'champion' ? 0.35 : 0);
+    const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), pin = tr.pin + (e.type === 'champion' ? 0.35 : 0) + (e.sc - 1) * 0.8;
     if (e.alive) {
       const a = Math.atan2(-(e.pos.x - P.pos.x), -(e.pos.z - P.pos.z)); P.yaw += angDiff(P.yaw, a) * damp(10, dt);
-      const k = damp(10, dt); e.pos.x += (P.pos.x + fx * pin - e.pos.x) * k; e.pos.z += (P.pos.z + fz * pin - e.pos.z) * k; e.pos.y = 0;
+      const k = damp(10, dt); e.pos.x += (P.pos.x + fx * pin - e.pos.x) * k; e.pos.z += (P.pos.z + fz * pin - e.pos.z) * k; e.pos.y = GY(e.pos.x, e.pos.z);
       e.yaw += angDiff(e.yaw, Math.atan2(P.pos.x - e.pos.x, P.pos.z - e.pos.z)) * damp(12, dt);
       const lifted = !X.heavy && C.t > 0.42 && C.t < 0.97;
       e.lift += ((lifted ? 0.32 : 0) - e.lift) * damp(lifted ? 6 : 14, dt);
-      if (C.t > 0.42 && Math.random() < dt * 20) blood(v(e.pos.x, e.D.lockY + e.lift, e.pos.z), v(-fx, 0, -fz), 2, e.type === 'ghoul' || e.type === 'leaper' ? [0.35, 0.42, 0.18, 0.95] : [0.45, 0.04, 0.03, 0.95]);
+      if (C.t > 0.42 && Math.random() < dt * 20) blood(eUp(e, e.ly + e.lift), v(-fx, 0, -fz), 2, e.type === 'ghoul' || e.type === 'leaper' ? [0.35, 0.42, 0.18, 0.95] : [0.45, 0.04, 0.03, 0.95]);
     }
     while (X.ev < tr.ev.length && C.t >= tr.ev[X.ev][0]) {
-      const name = tr.ev[X.ev++][1], at = v(e.pos.x, e.D.lockY + e.lift, e.pos.z);
+      const name = tr.ev[X.ev++][1], at = eUp(e, e.ly + e.lift);
       if (name === 'chop') { SYN.swordHit(at, true); SYN.slam(at, 0.4); sparks(at.clone().setY(at.y + 0.5), 26, [0.55, 0.85, 1, 1], 7); flash(at, 0x6ab8ff, 4, 0.15); G.hitStop = 0.1; G.shake = 0.25; blood(at, v(0, 1, 0), 18, [0.45, 0.04, 0.03, 0.95]); }
       if (name === 'impale') { SYN.impale(at); sparks(at, 30, [0.55, 0.85, 1, 1], 6); flash(at, 0x6ab8ff, 5, 0.2); blood(at, v(-fx, 0.3, -fz), 22, [0.45, 0.04, 0.03, 0.95]); G.hitStop = 0.08; G.slowT = 0.25; G.shake = 0.22; }
       if (name === 'rip') {
         const side = v(Math.cos(P.yaw), 0, -Math.sin(P.yaw)).multiplyScalar(-1);
         SYN.rip(at); blood(at, side, 40, e.type === 'ghoul' || e.type === 'leaper' ? [0.35, 0.42, 0.18, 0.95] : [0.45, 0.04, 0.03, 0.95]); sparks(at, 24, [0.55, 0.85, 1, 1], 8);
         e.lift = 0; damageEnemy(e, 99999, side, 7, 'exec'); G.slowT = 0.3; G.shake = 0.3;
-        const heal = e.type === 'champion' ? 50 : X.heavy ? 35 : 25; P.hp = Math.min(100, P.hp + heal); moveToast(`Executed  +${heal}`);
+        const heal = Math.round((e.type === 'champion' ? 50 : X.heavy ? 35 : 25) * P.maxHp / 100 * ST.execHeal); P.hp = Math.min(P.maxHp, P.hp + heal); moveToast(`Executed  +${heal}`);
+        num(v(P.pos.x, P.pos.y + 2.2, P.pos.z), '+' + heal, 'heal');
         C.pips = 3;
       }
     }
@@ -3276,14 +3386,14 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   }
   function slam() {
     C.slamDone = true;
-    T.bladeTip.getWorldPosition(_bt); const c = v(_bt.x, 0.02, _bt.z);
+    T.bladeTip.getWorldPosition(_bt); const c = v(_bt.x, GY(_bt.x, _bt.z) + 0.04, _bt.z);
     ring.position.copy(c); ring.visible = true; ringT = 0.5; ring.scale.setScalar(0.3);
-    dust(c, 30, 1.2); sparks(c, 40, [0.55, 0.85, 1, 1], 9, 0.45); flash(c.clone().setY(0.5), 0x6ab8ff, 6, 0.2);
+    dust(c, 30, 1.2); sparks(c, 40, [0.55, 0.85, 1, 1], 9, 0.45); flash(c.clone().setY(c.y + 0.5), 0x6ab8ff, 6, 0.2);
     SYN.slam(c); G.shake = Math.max(G.shake, 0.4); G.hitStop = Math.max(G.hitStop, 0.08);
     for (const e of ENEMIES) {
-      if (!e.alive || e.state === 'execd') continue;
-      const dx = e.pos.x - c.x, dz = e.pos.z - c.z, d = Math.max(0, Math.hypot(dx, dz) - (e.D.r - 0.45));
-      if (d < 3.4) { const dir = v(dx, 0, dz).normalize(); damageEnemy(e, Math.round(lerp(70, 30, d / 3.4)), dir, 10 * (1 - d / 4), 'slam'); C.pips = 3; }
+      if (!e.alive || e.state === 'execd' || Math.abs(e.pos.y - c.y) > 2.5) continue;
+      const dx = e.pos.x - c.x, dz = e.pos.z - c.z, d = Math.max(0, Math.hypot(dx, dz) - (e.r - 0.45));
+      if (d < 3.4) { const dir = v(dx, 0, dz).normalize(); strike(e, Math.round(lerp(70, 30, d / 3.4)), dir, 10 * (1 - d / 4), 'slam'); C.pips = 3; }
     }
   }
 
@@ -3293,36 +3403,61 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     const fz = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0), fx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
     const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
     let wx = -sy * fz + cy * fx, wz = -cy * fz - sy * fx; if (!fx && !fz) { wx = -sy; wz = -cy; }
-    const l = Math.hypot(wx, wz); P.dashDir.set(wx / l, 0, wz / l); P.dashT = 0.2; P.dashCd = 0.9; P.iframes = 0.25; P.lastDash = G.time;
+    const l = Math.hypot(wx, wz); P.dashDir.set(wx / l, 0, wz / l); P.dashT = 0.2; P.dashCd = 0.9 * (1 - ST.dash); P.iframes = 0.25; P.lastDash = G.time;
     SYN.dash(); dust(P.pos, 8, 0.6);
+  }
+  // after anything moves the Templar: out of colliders, then onto the ground, refusing slopes too steep to climb (slide along them instead)
+  const _gp = new V3();
+  function groundPlayer(ox, oz) {
+    collide(P.pos, 0.5);
+    if (ZONE !== 'world') { P.pos.y = 0; return; }
+    const climb = (x, z) => { const g = GY(x, z), run = Math.hypot(x - ox, z - oz); return { g, ok: g - P.pos.y < 0.3 || (g - P.pos.y) / Math.max(run, 1e-3) < 1.4 }; };
+    let c = climb(P.pos.x, P.pos.z);
+    if (!c.ok) {
+      const nx = P.pos.x, nz = P.pos.z, a = climb(nx, oz), b = climb(ox, nz);
+      if (a.ok && Math.abs(nx - ox) > 1e-3) { P.pos.z = oz; c = a; } else if (b.ok && Math.abs(nz - oz) > 1e-3) { P.pos.x = ox; c = b; } else { P.pos.x = ox; P.pos.z = oz; c = { g: GY(ox, oz) }; }
+    }
+    P.pos.y = c.g;
   }
   function updatePlayer(dt) {
     P.dashCd = Math.max(0, P.dashCd - dt); P.iframes = Math.max(0, P.iframes - dt);
     if (!P.alive) { P.vel.multiplyScalar(0.9); return; }
     const fz = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0), fx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
     const sprint = (keys.has('ShiftLeft') || keys.has('ShiftRight')) && fz > 0 && !C.active;
-    const speed = C.active ? (C.mode === 'exec' ? 0 : 0.8) : (sprint ? 7.6 : 5.0);
+    const wet = inWater(P.pos.x, P.pos.z);
+    const speed = (C.active ? (C.mode === 'exec' ? 0 : 0.8) : (sprint ? 7.6 : 5.0)) * (wet ? 0.6 : 1);
     const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
     let wx = -sy * fz + cy * fx, wz = -cy * fz - sy * fx; const wl = Math.hypot(wx, wz); if (wl > 0) { wx /= wl; wz /= wl; }
     const acc = damp(10, dt);
     P.vel.x += (wx * speed - P.vel.x) * acc; P.vel.z += (wz * speed - P.vel.z) * acc;
     if (P.dashT > 0) { P.dashT -= dt; P.vel.copy(P.dashDir).multiplyScalar(16); if (Math.random() < 0.5) dust(P.pos, 1, 0.3); }
+    const ox = P.pos.x, oz = P.pos.z;
     P.pos.x += P.vel.x * dt + P.push.x * dt; P.pos.z += P.vel.z * dt + P.push.z * dt; P.push.multiplyScalar(1 - Math.min(1, 5 * dt));
-    collide(P.pos, 0.5);
+    groundPlayer(ox, oz);
     const hs = Math.hypot(P.vel.x, P.vel.z);
     P.bobAmt += (Math.min(1, hs / 5) - P.bobAmt) * damp(8, dt);
     P.bob += hs * dt * 1.5; P.walk += hs * dt * 1.7;
     const idx = Math.floor(P.bob / PI);
-    if (idx !== P.stepIdx && hs > 1) sfx('st_con' + Math.floor(Math.random() * 6), sprint ? 1.2 : 0.9, rand(0.62, 0.7), idx % 2 ? 0.1 : -0.1, 0, 0.1);
+    if (idx !== P.stepIdx && hs > 1) sfx('st_con' + Math.floor(Math.random() * 6), sprint ? 1.2 : 0.9, rand(0.62, 0.7) * (wet ? 0.8 : 1), idx % 2 ? 0.1 : -0.1, 0, 0.1);
     P.stepIdx = idx;
-    if (G.time - P.lastHurt > 4 && P.hp < 100) P.hp = Math.min(100, P.hp + 6 * dt);
+    // armour regeneration: after four seconds unhurt, faster once nothing is hunting you; and the unguent's slow heal
+    if (G.time - P.lastHurt > 4 && P.hp < P.maxHp) P.hp = Math.min(P.maxHp, P.hp + 6 * ST.regen * (G.hunted ? 1 : 3) * P.maxHp / 100 * dt);
+    if (P.healT > 0) { const k = Math.min(dt, P.healT); P.healT -= dt; P.hp = Math.min(P.maxHp, P.hp + P.healR * k); }
+  }
+  function useUnguent() {
+    if (!P.alive || P.healT > 0) return;
+    if (R.ung <= 0) { feed('No unguent left. The Quartermaster sells it.'); SYN.deny(); return; }
+    if (P.hp >= P.maxHp) { SYN.deny(); return; }
+    R.ung--; P.healT = 1.5; P.healR = P.maxHp * 0.45 / 1.5; moveToast('Sacred unguent');
+    if (live()) { const t = actx.currentTime; for (const [f, d] of [[523, 0], [784, 0.08], [1047, 0.16]]) tone(t + d, 0.7, 'sine', f, f, 0.12, 0.01, 0, 0.5); }
   }
   function die() {
-    P.alive = false; endCombo(); G.state = 'dead';
+    P.alive = false; endCombo(); G.state = 'dead'; R.deaths++;
+    const lost = Math.floor(R.gold * 0.1); R.gold -= lost;
+    const where = ZONE === 'dungeon' ? DUN.def.name : placeName(P.pos.x, P.pos.z);
     setTimeout(() => {
-      $('ovWave').innerHTML = G.wave + '<small>Wave</small>'; $('ovKills').innerHTML = G.kills + '<small>Kills</small>';
-      if (G.wave > G.bestWave) { G.bestWave = G.wave; try { localStorage.setItem('templar-arena-best', G.wave); } catch (_) {} }
-      $('overmsg').textContent = G.wave > 1 ? `You held the arena through ${G.wave - 1} wave${G.wave > 2 ? 's' : ''}.` : 'Your armour gave out in the first wave.';
+      if (G.state !== 'dead') return;
+      $('overmsg').textContent = `You fell at ${where}.` + (lost ? ` ${lost} thrones were lost.` : '') + ' The Chapter will raise you at the nearest shrine.';
       $('over').classList.remove('off'); document.exitPointerLock && document.exitPointerLock();
     }, 1600);
   }
@@ -3361,7 +3496,7 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
       const k = damp(28, dt); lPose.h.lerp(_a, k); lPose.aim.lerp(_b, k).normalize(); lPose.up.lerp(tmp3, k).normalize();
     } else if (C.mode === 'finisher') {
       T.shL.getWorldPosition(_c); J.root.worldToLocal(_c);
-      const tg = C.target && C.target.alive ? tmp.set(C.target.pos.x, C.target.pos.y + C.target.D.lockY, C.target.pos.z) : tmp.set(P.pos.x - Math.sin(P.yaw) * 6, 1.5, P.pos.z - Math.cos(P.yaw) * 6);
+      const tg = C.target && C.target.alive ? tmp.set(C.target.pos.x, C.target.pos.y + C.target.ly, C.target.pos.z) : tmp.set(P.pos.x - Math.sin(P.yaw) * 6, P.pos.y + 1.5, P.pos.z - Math.cos(P.yaw) * 6);
       J.root.worldToLocal(tg); _b.subVectors(tg, _c).normalize();
       const k = damp(30, dt); lPose.h.lerp(_a.copy(_c).addScaledVector(_b, 0.62), k); lPose.aim.lerp(_b, k).normalize(); lPose.up.lerp(tmp3.set(0, 1, 0), k).normalize();
     } else {
@@ -3404,14 +3539,14 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     const tp = C.cam > 0.45 || !P.alive;
     J.head.visible = tp; J.pack.visible = tp; J.paulL.g.visible = tp; J.paulR.g.visible = tp;
     // sword field: arcs and glow, brighter in the combo
-    const ai = J.arcInfo; const live = C.active ? 1 : 0.5;
-    J.auraM.opacity = 0.1 + live * 0.12; J.swordLight.intensity = lerp(0.15, 0.6 + live * 0.9 + (C.phase === 's' ? 1 : 0), C.cam);
+    const ai = J.arcInfo; const live_ = C.active ? 1 : 0.5;
+    J.auraM.opacity = 0.1 + live_ * 0.12; J.swordLight.intensity = lerp(0.15, 0.6 + live_ * 0.9 + (C.phase === 's' ? 1 : 0), C.cam);
     if (G.time > ai.next) {
       ai.next = G.time + 0.05 + Math.random() * 0.08;
       J.arcs.forEach((l, k) => {
         const sx = k % 2 ? 1 : -1, y0 = ai.b0 + 0.05 + Math.random() * (ai.L - 0.3), len = 0.12 + Math.random() * 0.22, a = l.geometry.attributes.position;
         for (let i = 0; i < 12; i++) { const y = y0 + len * i / 11, f = (y - ai.b0) / ai.L, x = sx * (ai.wB + (ai.wT - ai.wB) * f) * 1.4; a.setXYZ(i, x + sx * Math.random() * 0.03, y, (Math.random() - 0.5) * 0.03); }
-        a.needsUpdate = true; l.visible = Math.random() < (0.5 + live * 0.4);
+        a.needsUpdate = true; l.visible = Math.random() < (0.5 + live_ * 0.4);
       });
     }
     J.ammoLed.visible = GUN.ammo > 0;
@@ -3437,7 +3572,9 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   function execCam(side, t, out) {
     const X = C.ex, a = side * (PI / 2 - 0.35 + t * 0.18), fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), rx = Math.cos(P.yaw), rz = -Math.sin(P.yaw);
     const ex = X.e.pos.x, ez = X.e.pos.z, mx = (P.pos.x + ex) / 2, mz = (P.pos.z + ez) / 2, ca = Math.cos(a), sa = Math.sin(a);
-    return out.set(mx + (fx * ca + rx * sa) * 3.4 * X.big, 1.75 * X.big, mz + (fz * ca + rz * sa) * 3.4 * X.big);
+    out.set(mx + (fx * ca + rx * sa) * 3.4 * X.big, P.pos.y + 1.75 * X.big, mz + (fz * ca + rz * sa) * 3.4 * X.big);
+    out.y = Math.max(out.y, GY(out.x, out.z) + 0.8);
+    return out;
   }
   const qTP = new THREE.Quaternion(), tpPos = new V3(), look = new V3(), _mL = new THREE.Matrix4();
   function updateCamera(dt) {
@@ -3448,13 +3585,14 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     const back = P.alive ? 3.3 : 4.5;
     tpPos.set(P.pos.x - fx * back + rx * 1.25, P.pos.y + 2.75 + (P.alive ? 0 : 1), P.pos.z - fz * back + rz * 1.25);
     clampBounds(tpPos, 0.8);
-    // don't let a pillar sit between the camera and the Templar
-    if (C.mode === 'exec' && C.ex) tmp.set((P.pos.x + C.ex.e.pos.x) / 2, 1.6, (P.pos.z + C.ex.e.pos.z) / 2); else tmp.set(P.pos.x, 2.0, P.pos.z);
+    tpPos.y = Math.max(tpPos.y, GY(tpPos.x, tpPos.z) + 0.7);
+    // don't let a pillar (or a hillside) sit between the camera and the Templar
+    if (C.mode === 'exec' && C.ex) tmp.set((P.pos.x + C.ex.e.pos.x) / 2, P.pos.y + 1.6, (P.pos.z + C.ex.e.pos.z) / 2); else tmp.set(P.pos.x, P.pos.y + 2.0, P.pos.z);
     tmp2.subVectors(tpPos, tmp); const L = tmp2.length(); tmp2.divideScalar(L);
     const hit = rayWorld(tmp, tmp2, L); if (hit < L) tpPos.copy(tmp).addScaledVector(tmp2, Math.max(0.6, hit - 0.3));
     look.set(P.pos.x + fx * 4 + rx * 0.7, P.pos.y + 1.2, P.pos.z + fz * 4 + rz * 0.7);
-    if (C.target && C.target.alive) look.lerp(tmp.set(C.target.pos.x, 1.1, C.target.pos.z), 0.35);
-    if (C.mode === 'exec' && C.ex) { execCam(C.ex.side, C.t, tpPos); look.set((P.pos.x + C.ex.e.pos.x) / 2, 1.3 * C.ex.big, (P.pos.z + C.ex.e.pos.z) / 2); }
+    if (C.target && C.target.alive) look.lerp(tmp.set(C.target.pos.x, C.target.pos.y + 1.1, C.target.pos.z), 0.35);
+    if (C.mode === 'exec' && C.ex) { execCam(C.ex.side, C.t, tpPos); look.set((P.pos.x + C.ex.e.pos.x) / 2, P.pos.y + 1.3 * C.ex.big, (P.pos.z + C.ex.e.pos.z) / 2); }
     _mL.lookAt(tpPos, look, tmp.set(0, 1, 0)); qTP.setFromRotationMatrix(_mL);
     cam.position.lerpVectors(eyeW, tpPos, k);
     const arc = Math.sin(k * PI); cam.position.x += rx * arc * 0.45; cam.position.z += rz * arc * 0.45; cam.position.y += arc * 0.4;
@@ -3463,107 +3601,617 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     if (G.shake > 0) { const s = G.shake * 0.12 * (SET.shake ? 1 : 0); cam.position.x += rand(-s, s); cam.position.y += rand(-s, s); cam.position.z += rand(-s, s); G.shake = Math.max(0, G.shake - dt * 1.6); }
   }
 
-  // ================================================================ waves
-  function startWave(n) {
-    G.wave = n;
-    // gunners from wave 2, leapers from 3, brutes from 4; every fifth wave the Champion comes with a lighter escort
-    const boss = n % 5 === 0;
-    const count = { ghoul: Math.min(boss ? 2 + n : 4 + n * 2, 22), gunner: n < 2 ? 0 : Math.min(1 + Math.floor((n - 1) * 0.8), 7) >> (boss ? 1 : 0),
-      leaper: n < 3 ? 0 : Math.min(n - 2, 6) >> (boss ? 1 : 0), brute: n < 4 || boss ? 0 : Math.min(Math.floor((n - 2) / 2), 3) };
-    G.toSpawn = [];
-    for (const [type, c] of Object.entries(count)) for (let i = 0; i < c; i++) G.toSpawn.splice(type === 'ghoul' ? G.toSpawn.length : Math.floor(Math.random() * (G.toSpawn.length + 1)), 0, type);
-    if (boss) G.toSpawn.unshift('champion');
-    G.spawnT = boss ? 1.5 : 0.5; SYN.horn();
-    const NAMES = { ghoul: 'swarmers', gunner: 'gunners', leaper: 'leapers', brute: 'brutes' };
-    const parts = Object.entries(count).filter(([, c]) => c).map(([t, c]) => `${c} ${NAMES[t]}`);
-    banner(boss ? 'The Champion' : `Wave ${n}`, boss ? `Wave ${n}: he comes for you` : n === 1 ? 'Purge them' : parts.join(', '));
+  // ================================================================ wargear: four slots, four rarities. Power p = level x rarity; the main stat and affixes grow with it.
+  const SLOTS = ['blade', 'pistol', 'armour', 'relic'];
+  const SLOTN = { blade: 'Power sword', pistol: 'Bolt pistol', armour: 'Armour', relic: 'Relic' };
+  const RAR = ['Standard', 'Blessed', 'Master-crafted', 'Relic'], RHEX = [0xd8cfbc, 0x8fd0ff, 0xe0b24a, 0xff7a4a];
+  const AFX = { sword: ['Sword damage', p => 3 + p * 2, '%'], bolt: ['Bolt damage', p => 3 + p * 2, '%'], hp: ['Armour', p => 5 + p * 4, ''], crit: ['Critical chance', p => 1 + p * 0.45, '%'],
+    exec: ['Execution healing', p => 4 + p * 2, '%'], leech: ['Blade lifesteal', p => 1 + p * 0.25, '%'], mag: ['Magazine', p => 1 + Math.floor(p / 5), ' rounds'], reload: ['Reload speed', p => 4 + p * 1.2, '%'],
+    regen: ['Armour regeneration', p => 8 + p * 3, '%'], dr: ['Damage reduction', p => 1 + p * 0.5, '%'], dash: ['Dash recovery', p => 5 + p * 1.2, '%'], xp: ['Experience', p => 5 + p * 1.5, '%'], gold: ['Thrones found', p => 8 + p * 2.5, '%'] };
+  const AFFIXES = { blade: ['crit', 'exec', 'leech'], pistol: ['mag', 'reload', 'crit'], armour: ['regen', 'dr', 'dash'], relic: ['xp', 'gold', 'crit', 'sword', 'bolt', 'hp'] };
+  const BASES = { blade: ['power sword', 'crusader blade', 'penitent blade', 'Chapter blade'], pistol: ['heavy bolt pistol', 'Mars-pattern bolt pistol', 'Godwyn bolt pistol', 'Ryza bolt pistol'],
+    armour: ['Mark VII plate', 'Mark VI plate', 'crusader plate', 'Mark VIII plate'], relic: ['purity seal', 'reliquary skull', 'litany scroll', 'Chapter icon', 'bone rosary'] };
+  const ADJ = [[''], ['Blessed', 'Hallowed', 'Sanctified'], ['Master-crafted', 'Artificer', 'Ancient']];
+  const UNIQ = { blade: ['Oathkeeper', 'Penitence', 'The Crusader\u2019s Edge'], pistol: ['Ansgar’s Wrath', 'Litany of Fire', 'The Castellan’s Mercy'],
+    armour: ['Mantle of the Castellan', 'The Iron Vigil', 'Shroud of the Reach'], relic: ['Rosarius of the Reach', 'Skull of Brother Eadric', 'The Ninth Purity Seal'] };
+  const cap = s => s[0].toUpperCase() + s.slice(1);
+  let itemSeq = 1;
+  function makeItem(slot, lvl, rar, name) {
+    lvl = clamp(Math.round(lvl), 1, MAXLVL);
+    const p = lvl * (1 + rar * 0.35), st = {};
+    if (slot === 'blade') st.sword = Math.round(4 + 3 * p); else if (slot === 'pistol') st.bolt = Math.round(4 + 3 * p); else if (slot === 'armour') st.hp = Math.round(6 + 5 * p);
+    const pool = AFFIXES[slot].slice(), n = slot === 'relic' ? 1 + rar : rar;
+    for (let i = 0; i < n && pool.length; i++) { const k = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]; st[k] = (st[k] || 0) + Math.max(1, Math.round(AFX[k][1](p) * rand(0.8, 1.15))); }
+    if (!name) { const base = pick(BASES[slot]); name = rar === 3 ? pick(UNIQ[slot]) : rar ? pick(ADJ[rar]) + ' ' + base : cap(base); }
+    return { id: Date.now().toString(36) + (itemSeq++), slot, rar, lvl, name, st, val: Math.round(8 * p * (1 + rar)) };
   }
-  function updateWaves(dt) {
-    if (G.state !== 'play' || G.noWaves) return;
-    if (G.toSpawn.length) {
-      G.spawnT -= dt;
-      const alive = ENEMIES.filter(e => e.alive).length;
-      if (G.spawnT <= 0 && alive < 16) {
+  function rollRar(min = 0) { const r = Math.random(); return Math.max(min, r < 0.03 ? 3 : r < 0.16 ? 2 : r < 0.46 ? 1 : 0); }
+  const fmtStat = (k, x) => `+${x}${AFX[k][2]} ${AFX[k][0]}`;
+
+  // ================================================================ things on the ground: thrones, wargear (a beam in its rarity's colour), unguents
+  const DROPS = [];
+  const gemGeo = new THREE.OctahedronGeometry(0.22, 0), coinGeo = new THREE.CylinderGeometry(0.13, 0.13, 0.05, 10), vialGeo = new THREE.CylinderGeometry(0.09, 0.12, 0.34, 8);
+  const dbeamGeo = new THREE.CylinderGeometry(0.07, 0.07, 7, 6, 1, true); dbeamGeo.translate(0, 3.5, 0);
+  const gemM = RHEX.map(c => new THREE.MeshBasicMaterial({ color: c })), coinM = new THREE.MeshBasicMaterial({ color: 0xe0b24a }), vialM = new THREE.MeshBasicMaterial({ color: 0x9fe08a });
+  const dbeamM = RHEX.map(c => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  function drop(kind, at, o) {
+    const g = new THREE.Group(); g.position.copy(at); scene.add(g);
+    if (kind === 'item') { g.add(new THREE.Mesh(gemGeo, gemM[o.item.rar])); const b = new THREE.Mesh(dbeamGeo, dbeamM[o.item.rar]); b.position.y = -0.3; g.add(b); if (o.item.rar >= 2) { const L = new THREE.PointLight(RHEX[o.item.rar], 0.6, 4, 2); g.add(L); } }
+    else if (kind === 'gold') for (let i = 0; i < 3; i++) { const m = new THREE.Mesh(coinGeo, coinM); m.position.set(rand(-0.15, 0.15), i * 0.06, rand(-0.15, 0.15)); g.add(m); }
+    else g.add(new THREE.Mesh(vialGeo, vialM));
+    const d = Object.assign({ kind, g, vel: v(rand(-2.2, 2.2), rand(3, 5), rand(-2.2, 2.2)), rest: false, t: 0, zone: ZONE }, o);
+    DROPS.push(d); return d;
+  }
+  const dropItem = (at, item) => drop('item', at, { item });
+  function updateDrops(dt) {
+    for (const d of DROPS) {
+      d.t += dt; const p = d.g.position;
+      if (!d.rest) { d.vel.y -= 14 * dt; p.addScaledVector(d.vel, dt); const g = GY(p.x, p.z) + 0.35; if (p.y < g) { p.y = g; d.rest = true; d.y0 = g; } }
+      else { p.y = d.y0 + Math.sin(d.t * 2.5) * 0.08; d.g.rotation.y += dt * 1.6; }
+      const dx = p.x - P.pos.x, dz = p.z - P.pos.z, dd = Math.hypot(dx, dz);
+      if (P.alive && d.t > 0.5 && Math.abs(p.y - P.pos.y) < 2.5 && dd < (d.kind === 'item' ? 2.6 : 4)) {
+        if (d.kind === 'gold') { R.gold += d.amt; feed(`+${d.amt} thrones`); sfx('bring', 0.25, 2.2); d.gone = true; }
+        else if (d.kind === 'ung') { if (R.ung < 6) { R.ung++; feed('Sacred unguent', 'rar1'); d.gone = true; } }
+        else if (R.bag.length < 24) { R.bag.push(d.item); feed(d.item.name, 'rar' + d.item.rar); sfx('bdraw', 0.5, 1.3); d.gone = true; }
+        else if (!d.warned) { d.warned = true; feed('Your pack is full (I to make room)'); }
+      }
+      if (d.t > 300) d.gone = true;
+    }
+    for (const d of DROPS) if (d.gone) scene.remove(d.g);
+    for (let i = DROPS.length - 1; i >= 0; i--) if (DROPS[i].gone) DROPS.splice(i, 1);
+  }
+  function clearDrops() { for (const d of DROPS) scene.remove(d.g); DROPS.length = 0; }
+  function lootBurst(at, lvl, items, minRar, gold) {
+    for (let i = 0; i < items; i++) dropItem(at, makeItem(pick(SLOTS), lvl, rollRar(i === 0 ? minRar : Math.max(0, minRar - 1))));
+    if (gold) drop('gold', at, { amt: Math.round(gold * ST.gold) });
+  }
+  const areaLvl = (x, z) => { if (ZONE === 'dungeon') return DUN.def.lvl; const [s, f, h] = W.zones(x, z); return Math.round(1.5 * s + 4 * f + 6.5 * h); };
+  // kills: experience, a chance of loot, and the encounter's tally
+  function onKill(e, at) {
+    R.kills++;
+    gainXP(e.xp, at);
+    const L = e.lvl;
+    if (Math.random() < (e.boss ? 1 : e.D.mass > 1 ? 0.8 : 0.45)) drop('gold', at, { amt: Math.round(rand(2, 5) * L * (e.boss ? 6 : e.D.mass > 1 ? 3 : 1) * ST.gold) });
+    const ic = e.boss ? 1 : { ghoul: 0.06, leaper: 0.08, gunner: 0.12, brute: 0.4, champion: 1 }[e.type];
+    if (Math.random() < ic) dropItem(at, makeItem(pick(SLOTS), L, rollRar(e.boss ? 2 : 0)));
+    if (e.boss) dropItem(at, makeItem(pick(SLOTS), L, rollRar(1)));
+    if (Math.random() < 0.08) drop('ung', at, {});
+    const E = e.pack;
+    if (E && E.left) { const i = E.left.indexOf(e.slot); if (i >= 0) E.left.splice(i, 1); if (!E.left.length && E.state === 'active') clearEnc(E); }
+  }
+  function gainXP(n, at) {
+    if (R.lvl >= MAXLVL) return;
+    n = Math.round(n * ST.xp); R.xp += n;
+    if (at) num(at.clone().setY(at.y + 0.6), `+${n} xp`, 'xp');
+    while (R.lvl < MAXLVL && R.xp >= xpNext(R.lvl)) {
+      R.xp -= xpNext(R.lvl); R.lvl++; R.pts++;
+      calcStats(); P.hp = P.maxHp;
+      banner(`Level ${R.lvl}`, 'An oath to swear: press I'); SYN.horn(); feed(`Level ${R.lvl}: +1 oath point`, 'xp');
+      genStock(); saveGame();
+    }
+  }
+
+  // ================================================================ reliquaries: the region's chests, war chests at cleared camps, the dungeons' reward
+  const chestBeamGeo = new THREE.CylinderGeometry(0.35, 0.35, 14, 8, 1, true); chestBeamGeo.translate(0, 7, 0);
+  const chestBeamM = new THREE.MeshBasicMaterial({ color: 0xe0b24a, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  let CHESTS = [];          // the region's (from W) plus the ones that appear at cleared camps
+  function addChest(id, x, z, tier, parent, y) {
+    y = y === undefined ? GY(x, z) : y;
+    const m = new THREE.Mesh(W.kgeo('chest'), W.kitM); m.scale.setScalar(3.2); m.position.set(x, y, z); m.rotation.y = rand(0, 7); m.castShadow = true; parent.add(m);
+    const b = new THREE.Mesh(chestBeamGeo, chestBeamM); b.position.set(x, y, z); parent.add(b);
+    const c = { id, x, y, z, tier, mesh: m, beam: b, parent }; return c;
+  }
+  function openChest(c) {
+    if (R.opened[c.id]) return;
+    R.opened[c.id] = true; c.beam.visible = false; c.mesh.rotation.z = 0.04;
+    const lvl = Math.max(areaLvl(c.x, c.z), R.lvl), at = v(c.x, c.y + 1.2, c.z);
+    SYN.clang(); sfx('bdraw', 0.8, 0.8); flash(at, 0xe0b24a, 3, 0.4);
+    if (c.tier >= 3) lootBurst(at, lvl + 1, 2, 2, 60 * lvl);
+    else if (c.tier === 2) lootBurst(at, lvl, 2, 1, 35 * lvl);
+    else lootBurst(at, lvl, 1, 1, 20 * lvl);
+    if (Math.random() < 0.5) drop('ung', at, {});
+    if (c.unique) dropItem(at, c.unique);
+    gainXP(15 + 5 * lvl); feed('Reliquary opened', 'xp');
+    saveGame();
+  }
+
+  // ================================================================ the monastery's brothers: the Castellan gives the crusade its orders, the Quartermaster trades
+  const NPCS = [];
+  function makeNPC(id, name, title, x, z, faceX, faceZ, carry) {
+    const J = buildTemplar(), y = W.gH(x, z);
+    J.swordLight.parent.remove(J.swordLight); J.arcs.forEach(l => { l.visible = false; }); J.auraM.opacity = 0.06;
+    J.root.position.set(x, y, z); J.root.rotation.y = Math.atan2(faceX - x, faceZ - z); W.root.add(J.root); J.root.updateMatrixWorld(true);
+    const q = J.root.quaternion, w = (a, b, c) => J.root.localToWorld(v(a, b, c)), d = (a, b, c) => v(a, b, c).normalize().applyQuaternion(q);
+    // the Castellan rests both hands on a sword planted point-down; the Quartermaster carries his at ease
+    if (carry) solveArm(J, 'R', w(-0.45, 1.05, 0.32), d(-0.9, -0.6, -0.3), d(-0.1, 0.55, 0.8), null, false);
+    else solveArm(J, 'R', w(-0.08, 1.12, 0.36), d(-0.9, -0.6, -0.3), d(0, -1, 0.06), null, false);
+    solveArm(J, 'L', w(0.42, 0.98, 0.12), d(0.9, -0.7, -0.2), d(0, 0, 1), d(0.1, -1, 0.15), true);
+    mergeParts(J);
+    W.colC(x, z, 0.6, y, 2.3);
+    const n = { id, name, title, x, y, z, J }; NPCS.push(n); return n;
+  }
+
+  // ================================================================ the crusade: five quests, given by the Castellan, then by vox as each is done
+  const VOX = 'Brother-Castellan Aldric';
+  const QUESTS = [
+    { name: 'The Pilgrims’ Plea', text: 'Clear the dead from the pilgrim camp on the western fields.', xp: 120, gold: 60, done: () => R.cleared.pilgrim, target: () => encAt('pilgrim'),
+      talk: 'The pilgrims’ camp lies west of here, on the fields below the chapels. The dead from the chapel yards overran it in the night. Put them back in the ground.' },
+    { name: 'The Broken Line', text: 'Retake three of the Imperial camps behind the southern trenches.', xp: 400, gold: 150, prog: () => [ENC.filter(E => E.kind === 'imperial' && R.cleared[E.id]).length, campsNeeded()], done: () => ENC.filter(E => E.kind === 'imperial' && R.cleared[E.id]).length >= campsNeeded(),
+      target: () => nearestEnc(E => E.kind === 'imperial' && !R.cleared[E.id]),
+      talk: 'The heretics hold our camps along the southern trenches. Take back three of them and the Guard can hold the line again. Each one you free becomes a shrine you can return to.' },
+    { name: 'The Ash Pit', text: 'Enter the Ash Pit north of the trenches and kill the Pit-Master.', xp: 600, gold: 250, done: () => R.cleared['dun:pit'], target: () => W.GATES.pit,
+      talk: 'The raiders feed their prisoners to a fighting pit beyond the northern trenches. Its master keeps the war-bands in thrall. Go down into the Ash Pit and end him.' },
+    { name: 'The Burning Street', text: 'Enter the Burning Street in the dead hive and kill Hask the Burner.', xp: 900, gold: 350, done: () => R.cleared['dun:hive'], target: () => W.GATES.hive,
+      talk: 'Hask the Burner has fortified a street in the dead hive and sets the hab-blocks alight to hold it. Take the street from him.' },
+    { name: 'The Fallen Spire', text: 'Enter the Fallen Spire and slay Vorgath, Champion of Ruin.', xp: 1500, gold: 600, done: () => R.cleared['dun:nave'], target: () => W.GATES.nave,
+      talk: 'The war-bands answer to one master: Vorgath, a Champion of Ruin, who has made the nave of the Fallen Spire his throne room. Go into the Spire, brother, and bring me his head.' }
+  ];
+  const VOXLINES = ['The pilgrims are safe, brother. Now the front: the heretics hold our camps behind the southern trenches. Take back three.',
+    'The line holds again. The raiders below the northern trenches feed prisoners to the Ash Pit. Its master must die.',
+    'The Pit-Master is dead and the raiders scatter. Hask the Burner holds a street in the dead hive. Burn him out.',
+    'The hive street is ours. Only Vorgath remains, in the nave of the Fallen Spire. End this, brother.',
+    'Vorgath is dead. The Reach of Saint Ansgar is held. The Chapter will not forget this, brother.'];
+  const campsNeeded = () => Math.min(3, ENC.filter(E => E.kind === 'imperial').length);
+  const curQuest = () => R.quest >= 0 && R.quest < QUESTS.length ? QUESTS[R.quest] : null;
+  function questTarget() {
+    if (R.quest < 0) { const n = NPCS[0]; return n ? { x: n.x, z: n.z, name: n.name } : null; }
+    const q = curQuest(); if (!q) return null;
+    if (ZONE === 'dungeon') return null;
+    const t = q.target(); return t ? { x: t.x, z: t.z, name: q.name } : null;
+  }
+  function checkQuests() {
+    let q;
+    while ((q = curQuest()) && q.done()) {
+      gainXP(q.xp); R.gold += q.gold; feed(`${q.name}: complete  +${q.gold} thrones`, 'xp');
+      if (R.quest === 4) dropItem(v(P.pos.x, P.pos.y + 1.5, P.pos.z), makeItem('relic', Math.max(R.lvl, 8), 3, 'Rosarius of the Reach'));
+      vox(VOX, VOXLINES[R.quest]); R.quest++;
+      saveGame();
+    }
+  }
+
+  // ================================================================ encounters: camps, graveyards, trench posts, hive packs, ambushes and a warband, woken as the Templar comes near
+  const ENC = [];
+  const encAt = id => ENC.find(E => E.id === id);
+  function nearestEnc(f) { let b = null, bd = Infinity; for (const E of ENC) if (f(E)) { const d = Math.hypot(E.x - P.pos.x, E.z - P.pos.z); if (d < bd) { bd = d; b = E; } } return b; }
+  const comp = (...a) => a.flatMap(([t, n]) => Array.from({ length: n }, () => t));
+  function buildEncounters() {
+    let k = 0; const NAMES = ['Camp Varro', 'Camp Tessaly', 'Camp Orsk', 'Camp Hadrin'];
+    for (const c of W.CAMPS) {
+      if (c.kind === 'pilgrim') ENC.push({ id: 'pilgrim', kind: 'pilgrim', name: 'The pilgrim camp', x: c.x, z: c.z, r: 13, lvl: 1, comp: comp(['ghoul', 5]), chest: 1, wp: true, bonus: 40 });
+      else if (c.kind === 'imperial') { const lvl = [2, 3, 3, 4][k] || 3; ENC.push({ id: 'imp' + k, kind: 'imperial', name: NAMES[k] || 'Imperial camp', x: c.x, z: c.z, r: 14, lvl, comp: comp(['ghoul', 3], ['gunner', 2], ['leaper', lvl >= 3 ? 1 : 0], ['brute', lvl >= 4 ? 1 : 0]), chest: 1, wp: true, bonus: 60 + 20 * lvl }); k++; }
+      else ENC.push({ id: 'raid' + ENC.filter(E => E.kind === 'raider').length, kind: 'raider', name: 'The raider camp', x: c.x, z: c.z, r: 14, lvl: 6, comp: comp(['ghoul', 3], ['gunner', 2], ['leaper', 2], ['brute', 1]), chest: 2, bonus: 200 });
+    }
+    W.GRAVES.forEach((g, i) => ENC.push({ id: 'grave' + i, kind: 'grave', name: 'The restless dead', x: g.x, z: g.z, r: 9, lvl: i === 0 ? 1 : 2, comp: comp(['ghoul', i === 0 ? 3 : 4]), respawn: true }));
+    for (const [li, i] of [[2, 8], [2, 34], [3, 18], [3, 46]]) { const L = W.TRENCH[li]; if (!L || !L[i]) continue; ENC.push({ id: `post${li}_${i}`, kind: 'post', name: 'A heretic trench post', x: L[i][0], z: L[i][1], r: 8, lvl: 4, comp: comp(['gunner', 2], ['ghoul', 2]), respawn: true }); }
+    for (const [i, a] of [[4, 0.5], [6, 0.5], [8, 0.5]]) { const [ax, az] = W.ROAD[i], [bx, bz] = W.ROAD[i + 1]; ENC.push({ id: 'amb' + i, kind: 'ambush', name: 'An ambush', x: lerp(ax, bx, a) + 14, z: lerp(az, bz, a), r: 9, lvl: 3, comp: comp(['ghoul', 3], ['leaper', 1]), respawn: true }); }
+    [[-120, -380], [130, -450], [-60, -560], [220, -320], [40, -660]].forEach(([tx, tz], i) => {
+      const s = W.site(tx, tz, 8, (x, z) => W.zones(x, z)[2] > 0.5 && W.cityF(x, z) < 0.7 && W.H(x, z) > W.WATER_Y + 1) || { x: tx, z: tz };
+      ENC.push({ id: 'hive' + i, kind: 'hive', name: 'A hive pack', x: s.x, z: s.z, r: 10, lvl: 6 + (i % 2), comp: comp(['leaper', 2], ['ghoul', 3], ['gunner', 1]), respawn: true }); });
+    { const s = W.site(420, -10, 12, (x, z) => W.zones(x, z)[1] > 0.6 && W.H(x, z) > W.WATER_Y + 1) || { x: 420, z: -10 };
+      ENC.push({ id: 'skarn', kind: 'warband', name: 'Skarn’s warband', x: s.x, z: s.z, r: 10, lvl: 5, comp: [{ type: 'brute', boss: true, name: 'Skarn the Flayer' }, 'ghoul', 'ghoul', 'gunner'], bonus: 250 }); }
+    for (const E of ENC) Object.assign(E, { state: R.cleared[E.id] ? 'cleared' : 'dormant', left: null, t: -1e9 });
+  }
+  const SPQ = [];         // spawns waiting their turn (building a body takes a moment: two a frame)
+  function activate(E) {
+    if (!E.left) E.left = E.comp.map(c => typeof c === 'string' ? { type: c } : Object.assign({}, c));
+    E.state = 'active';
+    E.left.forEach((c, i) => {
+      let x = E.x, z = E.z;
+      for (let k = 0; k < 8; k++) { const a = rand(0, PI * 2), r = c.boss ? 1 : rand(2.5, E.r); x = E.x + Math.cos(a) * r; z = E.z + Math.sin(a) * r; if (W.gH(x, z) > W.WATER_Y - 0.4) break; }
+      const p = v(x, W.gH(x, z), z); W.collide(p, 0.6);
+      SPQ.push({ E, c, x: p.x, z: p.z });
+    });
+  }
+  function deactivate(E) {
+    for (const e of ENEMIES) if (e.pack === E && e.alive) removeEnemy(e);
+    for (let i = SPQ.length - 1; i >= 0; i--) if (SPQ[i].E === E) SPQ.splice(i, 1);
+    E.state = E.left && E.left.length ? 'dormant' : E.state;
+  }
+  function clearEnc(E) {
+    E.state = 'cleared'; E.t = G.time;
+    if (!E.respawn) R.cleared[E.id] = true;
+    if (E.bonus) { gainXP(E.bonus); banner(E.name, E.kind === 'imperial' ? 'Retaken for the Emperor' : 'Cleared'); }
+    else feed(`${E.name}: cleared`);
+    if (E.chest) spawnWarChest(E);
+    if (E.wp) feed(`${E.name} is now a shrine you can travel to (M)`, 'xp');
+    checkQuests(); saveGame();
+  }
+  function spawnWarChest(E) {
+    const id = 'war:' + E.id; if (R.opened[id] || CHESTS.some(c => c.id === id)) return;
+    let x = E.x + 4, z = E.z + 4; const p = v(x, GY(x, z), z); W.collide(p, 1.2); x = p.x; z = p.z;
+    const c = addChest(id, x, z, E.chest, W.root); CHESTS.push(c);
+  }
+  function updateEncounters(dt) {
+    for (let n = 0; n < 2 && SPQ.length; n++) {
+      const s = SPQ.shift(), c = s.c;
+      const e = spawnEnemy(c.type, s.x, s.z, { lvl: s.E.lvl, pack: s.E, boss: c.boss, name: c.name });
+      e.slot = c;
+      if (s.E.left !== null && G.hunted && s.E.state === 'active' && ENEMIES.some(o => o.pack === s.E && o.aggro)) { e.aggro = true; e.state = 'chase'; }
+    }
+    G.encT = (G.encT || 0) - dt; if (G.encT > 0) return; G.encT = 0.5;
+    for (const E of ENC) {
+      const d = Math.hypot(E.x - P.pos.x, E.z - P.pos.z);
+      if (E.state === 'cleared') { if (E.respawn && G.time - E.t > 240 && d > 150) { E.state = 'dormant'; E.left = null; } continue; }
+      if (E.state === 'dormant' && d < 130) activate(E);
+      else if (E.state === 'active' && d > 240 && !ENEMIES.some(e => e.pack === E && e.aggro)) deactivate(E);
+    }
+  }
+
+  // ================================================================ waypoints: the monastery, freed camps and every dungeon gate found; travel from the map
+  function waypoints() {
+    const L = [{ id: 'hub', name: 'Monastery of the Sword', x: W.HUB.x, z: W.HUB.z - 40, on: true }];
+    for (const E of ENC) if (E.wp) L.push({ id: E.id, name: E.name, x: E.x, z: E.z + 13, on: !!R.cleared[E.id] });
+    for (const [id, g] of Object.entries(W.GATES)) L.push({ id: 'gate:' + id, name: DUNS[id].name, x: g.at.x, z: g.at.z, on: !!R.found['gate:' + id], gate: id });
+    return L;
+  }
+  function placeAtWp(w) { const p = v(w.x, 0, w.z); p.y = GY(p.x, p.z); W.collide(p, 0.8); P.pos.set(p.x, GY(p.x, p.z), p.z); P.vel.set(0, 0, 0); }
+  function travel(id) {
+    const w = waypoints().find(x => x.id === id); if (!w || !w.on) return;
+    if (G.hunted) { feed('You cannot travel while foes are hunting you'); SYN.deny(); return; }
+    closeUI(true);
+    fadeTo(() => { clearEnemies(); placeAtWp(w); P.yaw = w.id === 'hub' ? PI : P.yaw; settleWorld(); });
+  }
+  function settleWorld() {       // after a jump across the map: wake what's near, refresh the grass
+    G.encT = 0; for (const E of ENC) if (E.state === 'active') deactivate(E);
+    W.update(0, G.time, P.pos.x, P.pos.z); updateEncounters(0);
+  }
+  const placeName = (x, z) => { let b = null, bd = 130; for (const p of W.PLACES) { const d = Math.hypot(p.x - x, p.z - z); if (d < bd) { bd = d; b = p; } } return b ? b.name : W.placeAt(x, z); };
+
+  // ================================================================ dungeons: the arenas, entered through gates in the region, four waves and a named master
+  const DUNS = {
+    pit: { name: 'The Ash Pit', arena: 'pit', lvl: 3, waves: [comp(['ghoul', 6]), comp(['ghoul', 5], ['gunner', 2]), comp(['ghoul', 4], ['leaper', 2], ['gunner', 1]), [{ type: 'brute', boss: true, name: 'The Pit-Master' }, ...comp(['ghoul', 3])]] },
+    hive: { name: 'The Burning Street', arena: 'hive', lvl: 5, waves: [comp(['ghoul', 6], ['gunner', 1]), comp(['gunner', 3], ['leaper', 2]), comp(['brute', 1], ['ghoul', 4]), [{ type: 'gunner', boss: true, name: 'Hask the Burner' }, ...comp(['gunner', 2], ['ghoul', 2])]] },
+    nave: { name: 'The Fallen Spire', arena: 'nave', lvl: 7, waves: [comp(['ghoul', 8], ['leaper', 2]), comp(['gunner', 3], ['brute', 1], ['ghoul', 3]), comp(['brute', 2], ['leaper', 3]), [{ type: 'champion', boss: true, name: 'Vorgath, Champion of Ruin' }]] }
+  };
+  function clearEnemies() {
+    for (const e of ENEMIES) removeEnemy(e); ENEMIES = []; SPQ.length = 0;
+    for (const b of BOLTS) scene.remove(b.m); BOLTS.length = 0;
+    clearDrops(); endCombo(); C.cam = 0;
+  }
+  function fadeTo(fn) {
+    G.fading = true; $('fade').classList.add('on');
+    setTimeout(() => { try { fn(); } finally { setTimeout(() => { $('fade').classList.remove('on'); G.fading = false; }, 120); } }, 520);
+  }
+  function enterDungeon(id) {
+    const def = DUNS[id]; if (!def) return;
+    fadeTo(() => {
+      clearEnemies();
+      ZONE = 'dungeon'; W.root.visible = false; DG.visible = true; buildArena(def.arena);
+      cam.near = 0.05; cam.far = 900; cam.updateProjectionMatrix();
+      DUN = { id, def, wave: 0, toSpawn: [], spawnT: 0, breakT: 2.5, done: false, chest: null, first: !R.cleared['dun:' + id] };
+      P.pos.set(ARENA.start[0], 0, ARENA.start[1]); P.vel.set(0, 0, 0); P.yaw = 0; P.pitch = 0;
+      banner(def.name, `Level ${def.lvl}`); SYN.horn();
+    });
+  }
+  function exitDungeon(dead) {
+    const id = DUN.id;
+    fadeTo(() => {
+      clearEnemies();
+      ZONE = 'world'; DG.visible = false; W.root.visible = true; renderer.toneMappingExposure = 1.05;
+      cam.near = 0.1; cam.far = 4000; cam.updateProjectionMatrix();
+      const g = W.GATES[id]; placeAtWp({ x: g.at.x + Math.sin(g.ry) * 2, z: g.at.z + Math.cos(g.ry) * 2 }); P.yaw = g.ry + PI; P.pitch = 0;
+      DUN = null; settleWorld(); if (!dead) saveGame();
+    });
+  }
+  function startDunWave(n) {
+    DUN.wave = n; const list = DUN.def.waves[n - 1].map(c => typeof c === 'string' ? { type: c } : c);
+    DUN.toSpawn = list.filter(c => c.boss).concat(list.filter(c => !c.boss).sort(() => Math.random() - 0.5));
+    DUN.spawnT = 0.6; SYN.horn();
+    const boss = list.find(c => c.boss);
+    banner(boss ? boss.name : `Wave ${n} of ${DUN.def.waves.length}`, boss ? 'Kill him' : n === 1 ? 'Purge them' : 'They come');
+  }
+  function updateDungeon(dt) {
+    if (!DUN || DUN.done) return;
+    if (DUN.toSpawn.length) {
+      DUN.spawnT -= dt;
+      if (DUN.spawnT <= 0 && ENEMIES.filter(e => e.alive).length < 16) {
         // the gate furthest from where the Templar is looking, so they don't pop in right in front of him
         const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
         const order = SPAWNS.map((g, i) => ({ i, s: ((g.x - P.pos.x) * fx + (g.z - P.pos.z) * fz) / g.distanceTo(P.pos) + Math.random() * 0.9 })).sort((a, b) => a.s - b.s);
-        const g = SPAWNS[order[0].i], type = G.toSpawn.shift();
+        const g = SPAWNS[order[0].i], c = DUN.toSpawn.shift();
         const side = rand(-1.5, 1.5), a = Math.atan2(g.z, g.x);
-        spawnEnemy(type, g.x - Math.sin(a) * side, g.z + Math.cos(a) * side);
-        G.spawnT = type === 'champion' ? 3 : type === 'brute' ? 1.6 : type === 'gunner' || type === 'leaper' ? 1.0 : rand(0.35, 0.8);
+        const e = spawnEnemy(c.type, g.x - Math.sin(a) * side, g.z + Math.cos(a) * side, { lvl: DUN.def.lvl, boss: c.boss, name: c.name, state: 'enter', yaw: Math.atan2(-g.x, -g.z) });
+        e.aggro = true;
+        DUN.spawnT = c.type === 'champion' ? 3 : c.type === 'brute' ? 1.6 : c.type === 'gunner' || c.type === 'leaper' ? 1.0 : rand(0.35, 0.8);
       }
     } else if (!ENEMIES.some(e => e.alive)) {
-      if (G.breakT <= 0) { G.breakT = 4; banner('Wave cleared', 'The next comes'); }
-      G.breakT -= dt; if (G.breakT <= 0.001) { G.breakT = 0; startWave(G.wave + 1); }
+      if (DUN.breakT > 0) { DUN.breakT -= dt; if (DUN.breakT <= 0) { if (DUN.wave < DUN.def.waves.length) startDunWave(DUN.wave + 1); else finishDungeon(); } }
+      else { DUN.breakT = DUN.wave ? 3.5 : 0.01; if (DUN.wave && DUN.wave < DUN.def.waves.length) banner('Wave cleared', 'The next comes'); }
     }
+  }
+  function finishDungeon() {
+    DUN.done = true; R.cleared['dun:' + DUN.id] = true;
+    banner(DUN.def.name, 'Cleared. A reliquary waits'); SYN.horn();
+    const [sx, sz] = ARENA.start, k = Math.hypot(sx, sz) || 1;
+    const c = addChest('dun:' + DUN.id + ':' + G.time.toFixed(1), sx - sx / k * 7, sz - sz / k * 7, DUN.first ? 3 : 1, arenaRoot, 0);
+    if (DUN.first && DUN.id === 'nave') c.unique = makeItem('blade', 9, 3, 'The Black Sword of Saint Ansgar');
+    DUN.chest = c; gainXP(100 * DUN.def.lvl);
+    checkQuests(); saveGame();
+  }
+
+  // ================================================================ saving: one crusade, kept in this browser
+  const SAVE_KEY = 'templar-reach-save-v1';
+  function saveGame() {
+    if (G.state === 'menu' || !W) return;
+    const at = ZONE === 'dungeon' && DUN ? (() => { const g = W.GATES[DUN.id]; return [g.at.x, g.at.z, g.ry + PI]; })() : [P.pos.x, P.pos.z, P.yaw];
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, R, at, hp: P.alive ? P.hp : P.maxHp, ammo: GUN.ammo, when: Date.now() })); G.saveT = 0; } catch (_) {}
+  }
+  function readSave() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return s && s.v === 1 && s.R ? s : null; } catch (_) { return null; } }
+  function genStock() {
+    R.stock = []; R.stockLvl = R.lvl;
+    for (let i = 0; i < 6; i++) { const r = Math.random(), it = makeItem(SLOTS[i % 4 === 3 && Math.random() < 0.5 ? 3 : i % 4], R.lvl, r < 0.4 ? 0 : r < 0.82 ? 1 : 2); it.price = it.val * 3; R.stock.push(it); }
   }
 
   // ================================================================ HUD
-  let vigT = 0, bannerT = 0, hitmT = 0, moveT = 0;
-  function banner(a, b) { $('banner').innerHTML = `${a}<small>${b || ''}</small>`; $('banner').classList.add('on'); bannerT = 2.4; }
+  let vigT = 0, bannerT = 0, hitmT = 0, moveT = 0, voxT = 0, frameN = 0;
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  function banner(a, b) { $('banner').innerHTML = `${esc(a)}<small>${esc(b || '')}</small>`; $('banner').classList.add('on'); bannerT = 2.6; }
   function hitMarker(kill) { hitmT = kill ? 0.35 : 0.18; $('hitm').classList.toggle('kill', kill); }
+  function moveToast(t) { $('move').textContent = t; $('move').classList.add('on'); moveT = 1.0; }
+  function vox(name, text, dur = 9) { const el = $('vox'); el.querySelector('b').textContent = name; el.querySelector('p').textContent = text; el.classList.add('on'); voxT = dur; }
+  function feed(text, cls) {
+    const f = $('feed'), d = document.createElement('div'); d.textContent = text; if (cls) d.className = cls; f.prepend(d);
+    while (f.children.length > 6) f.lastElementChild.remove();
+    setTimeout(() => { d.classList.add('gone'); setTimeout(() => d.remove(), 650); }, 4500);
+  }
+  // floating numbers, enemy bars and name labels: small pools of elements placed over the 3D view each frame
+  const pool = (id, n, html) => Array.from({ length: n }, () => { const el = document.createElement(id === 'bars' ? 'i' : 'span'); el.innerHTML = html || ''; $(id).appendChild(el); return el; });
+  const NUMS = pool('nums', 24).map(el => ({ el, t: 0, p: v() })); let numI = 0;
+  const BARS = pool('bars', 16, '<span></span><b></b>'), LABELS = pool('labels', 6);
+  function num(at, text, cls) { if (G.state === 'menu') return; const n = NUMS[numI++ % NUMS.length]; n.p.copy(at); n.p.x += rand(-0.3, 0.3); n.p.z += rand(-0.3, 0.3); n.t = 0.9; n.el.textContent = text; n.el.className = cls || ''; }
+  const _pr = new V3();
+  function toScreen(p) { _pr.copy(p).project(cam); return _pr.z < 1 && Math.abs(_pr.x) < 1.15 && Math.abs(_pr.y) < 1.15 ? [(_pr.x + 1) / 2 * innerWidth, (1 - _pr.y) / 2 * innerHeight] : null; }
+  function updateOverlays(dt) {
+    for (const n of NUMS) {
+      if (n.t <= 0) { n.el.style.display = 'none'; continue; }
+      n.t -= dt; n.p.y += dt * 1.3; const s = toScreen(n.p);
+      if (!s || n.t <= 0) { n.el.style.display = 'none'; continue; }
+      n.el.style.display = 'block'; n.el.style.left = s[0] + 'px'; n.el.style.top = s[1] + 'px'; n.el.style.opacity = Math.min(1, n.t * 2.5);
+    }
+    const show = ENEMIES.filter(e => e.alive && !e.boss && (e.aggro || e.hp < e.maxHp) && e.state !== 'execd' && e.pos.distanceTo(P.pos) < 45).sort((a, b) => a.pos.distanceTo(P.pos) - b.pos.distanceTo(P.pos));
+    BARS.forEach((el, i) => {
+      const e = show[i], s = e && toScreen(tmp.set(e.pos.x, e.pos.y + e.ly + 0.95 * e.sc, e.pos.z));
+      if (!s) { el.style.display = 'none'; return; }
+      el.style.display = 'block'; el.style.left = s[0] + 'px'; el.style.top = s[1] + 'px';
+      el.firstChild.textContent = e.lvl; el.classList.toggle('hi', e.lvl > R.lvl + 2); el.lastChild.style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
+    });
+    const named = ZONE === 'world' ? NPCS.filter(n => Math.hypot(n.x - P.pos.x, n.z - P.pos.z) < 24) : [];
+    LABELS.forEach((el, i) => {
+      const n = named[i], s = n && toScreen(tmp.set(n.x, n.y + 2.6, n.z));
+      if (!s) { el.style.display = 'none'; return; }
+      if (el.dataset.id !== n.id) { el.dataset.id = n.id; el.innerHTML = `${esc(n.name)}<small>${esc(n.title)}</small>`; }
+      el.style.display = 'block'; el.style.left = s[0] + 'px'; el.style.top = s[1] + 'px';
+    });
+  }
+  // the compass strip: the cardinal points, shrines and gates you know, the quest, and anything hunting you
+  const CARD = [['N', 0], ['NW', PI / 4], ['W', PI / 2], ['SW', PI * 0.75], ['S', PI], ['SE', -PI * 0.75], ['E', -PI / 2], ['NE', -PI / 4]];
+  let compassHTML = '';
+  function updateCompass() {
+    const marks = [];
+    const at = (yaw, html, cls) => { const d = angDiff(P.yaw, yaw); if (Math.abs(d) < 1.4) marks.push(`<div class="${cls || ''}" style="left:${(50 - d / 1.4 * 50).toFixed(1)}%">${html}</div>`); };
+    const toward = (x, z) => Math.atan2(-(x - P.pos.x), -(z - P.pos.z));
+    for (const [n, y] of CARD) at(y, n);
+    if (ZONE === 'world') {
+      for (const w of waypoints()) if (w.on && Math.hypot(w.x - P.pos.x, w.z - P.pos.z) < 450) at(toward(w.x, w.z), '†', 'poi');
+      const q = questTarget(); if (q) at(toward(q.x, q.z), '◆', 'q');
+    }
+    for (const e of ENEMIES) if (e.alive && e.aggro && e.pos.distanceTo(P.pos) < 60) at(toward(e.pos.x, e.pos.z), '•', 'foe');
+    const h = marks.join(''); if (h !== compassHTML) { compassHTML = h; $('compass').innerHTML = h; }
+  }
+  // the minimap: the painted map, turned so ahead is up, about 120 m to the rim
+  const mini = $('mini').getContext('2d');
+  function drawMini() {
+    const g = mini, S = 300, k = 1.25 * 2;
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, S, S);
+    g.save(); g.beginPath(); g.arc(S / 2, S / 2, S / 2 - 2, 0, 7); g.clip(); g.fillStyle = '#121012'; g.fillRect(0, 0, S, S);
+    g.translate(S / 2, S / 2); g.rotate(P.yaw); g.scale(k / 2, k / 2); g.translate(-P.pos.x, -P.pos.z);
+    g.drawImage(W.mapImg, -W.HALF, -W.HALF, W.SIZE, W.SIZE);
+    const dot = (x, z, r, c) => { g.fillStyle = c; g.beginPath(); g.arc(x, z, r, 0, 7); g.fill(); };
+    for (const c of CHESTS) if (!R.opened[c.id]) dot(c.x, c.z, 3, '#e0b24a');
+    for (const n of NPCS) dot(n.x, n.z, 3.2, '#8fd0ff');
+    for (const w of waypoints()) if (w.on) { g.fillStyle = '#e0b24a'; g.fillRect(w.x - 3, w.z - 3, 6, 6); }
+    for (const e of ENEMIES) if (e.alive) dot(e.pos.x, e.pos.z, e.boss ? 3.4 : 2.2, e.aggro ? '#ff5040' : 'rgba(200,60,50,.7)');
+    for (const d of DROPS) if (d.kind === 'item') dot(d.g.position.x, d.g.position.z, 2, '#' + RHEX[d.item.rar].toString(16).padStart(6, '0'));
+    g.restore();
+    const q = questTarget();
+    if (q) { const dx = q.x - P.pos.x, dz = q.z - P.pos.z, c = Math.cos(P.yaw), s = Math.sin(P.yaw); let x = (dx * c - dz * s) * k / 2, y = (dx * s + dz * c) * k / 2; const L = Math.hypot(x, y); if (L > 136) { x *= 136 / L; y *= 136 / L; }
+      g.save(); g.translate(S / 2 + x, S / 2 + y); g.rotate(PI / 4); g.fillStyle = '#e0b24a'; g.strokeStyle = '#000'; g.lineWidth = 2; g.strokeRect(-7, -7, 14, 14); g.fillRect(-7, -7, 14, 14); g.restore(); }
+    g.fillStyle = '#ece4d2'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.moveTo(S / 2, S / 2 - 12); g.lineTo(S / 2 + 8, S / 2 + 9); g.lineTo(S / 2, S / 2 + 4); g.lineTo(S / 2 - 8, S / 2 + 9); g.closePath(); g.stroke(); g.fill();
+    g.strokeStyle = 'rgba(236,228,210,.25)'; g.lineWidth = 2; g.beginPath(); g.arc(S / 2, S / 2, S / 2 - 2, 0, 7); g.stroke();
+  }
+  // what E would do here: talk, open, enter, leave
+  function nearestAct() {
+    let best = null, bd = 1e9; const px = P.pos.x, pz = P.pos.z;
+    const consider = (x, z, max, text, go) => { const d = Math.hypot(x - px, z - pz); if (d < max && d < bd) { bd = d; best = { text, go }; } };
+    if (ZONE === 'world') {
+      for (const n of NPCS) consider(n.x, n.z, 3.6, n.id === 'qm' ? `Trade with ${n.name}` : `Speak with ${n.name}`, () => openTalk(n));
+      for (const c of CHESTS) if (!R.opened[c.id] && Math.abs(c.y - P.pos.y) < 3) consider(c.x, c.z, 3, 'Open the reliquary', () => openChest(c));
+      for (const [id, g] of Object.entries(W.GATES)) consider(g.at.x, g.at.z, 4.5, `Enter ${DUNS[id].name}  ·  level ${DUNS[id].lvl}`, () => enterDungeon(id));
+    } else if (DUN && DUN.done) {
+      const c = DUN.chest; if (c && !R.opened[c.id]) consider(c.x, c.z, 3, 'Open the reliquary', () => openChest(c));
+      consider(ARENA.start[0], ARENA.start[1], 4.5, `Leave ${DUN.def.name}`, () => exitDungeon());
+    }
+    return best;
+  }
+  function interact() { const a = nearestAct(); if (a && P.alive && !C.active) a.go(); }
+  let actHTML = '', questHTML = '';
   const pips = [...document.querySelectorAll('#combo i')];
   const lockEl = $('lock'), emark = $('emark');
   function updateHUD(dt) {
-    $('hpfill').style.width = P.hp + '%'; $('hpnum').textContent = Math.ceil(P.hp);
+    frameN++;
+    $('hpfill').style.width = (P.hp / P.maxHp * 100) + '%'; $('hpnum').textContent = Math.ceil(P.hp);
+    $('lvl').textContent = R.lvl; $('xptxt').textContent = R.lvl >= MAXLVL ? 'max' : `${R.xp} / ${xpNext(R.lvl)}`; $('xpfill').style.width = (R.lvl >= MAXLVL ? 100 : R.xp / xpNext(R.lvl) * 100) + '%';
+    $('ung').textContent = R.ung; $('gold').textContent = R.gold;
     $('ammo').innerHTML = `${GUN.ammo} <small>/ ${GUN.mag}</small>`;
     $('reload').textContent = GUN.reloadT > 0 ? 'Reloading' : (GUN.ammo === 0 ? 'Press R' : '');
-    $('wave').textContent = `Wave ${G.wave}`;
-    const left = ENEMIES.filter(e => e.alive).length + G.toSpawn.length; $('left').textContent = left ? `${left} remaining` : '';
-    $('kills').textContent = G.kills;
+    $('wavebox').classList.toggle('on', ZONE === 'dungeon' && !!DUN);
+    if (ZONE === 'dungeon' && DUN) { $('wave').textContent = DUN.def.name; const left = ENEMIES.filter(e => e.alive).length + DUN.toSpawn.length; $('left').textContent = DUN.done ? 'Cleared' : DUN.wave ? `Wave ${DUN.wave} of ${DUN.def.waves.length}` + (left ? ` · ${left} remaining` : '') : 'Brace'; }
     pips.forEach((p, i) => p.classList.toggle('on', C.active && i < C.pips));
     $('cross').style.opacity = C.cam > 0.3 ? 0 : 1;
-    vigT = Math.max(0, vigT - dt); $('vig').style.opacity = Math.max(vigT * 1.6, P.hp < 35 ? (35 - P.hp) / 60 : 0);
+    vigT = Math.max(0, vigT - dt); $('vig').style.opacity = Math.max(vigT * 1.6, P.hp < P.maxHp * 0.35 ? (P.maxHp * 0.35 - P.hp) / (P.maxHp * 0.6) : 0);
     bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('on');
     hitmT = Math.max(0, hitmT - dt); $('hitm').style.opacity = hitmT > 0 ? 1 : 0;
-    $('dashbar').style.opacity = P.dashCd > 0 ? 1 : 0; $('dashbar').firstElementChild.style.width = (100 * (1 - P.dashCd / 0.9)) + '%';
-    if (C.active && C.target && C.target.alive) {
-      tmp.set(C.target.pos.x, C.target.D.lockY, C.target.pos.z).project(cam);
-      if (tmp.z < 1) { lockEl.style.left = ((tmp.x + 1) / 2 * innerWidth) + 'px'; lockEl.style.top = ((1 - tmp.y) / 2 * innerHeight) + 'px'; lockEl.classList.add('on'); }
+    const dcd = 0.9 * (1 - ST.dash); $('dashbar').style.opacity = P.dashCd > 0 ? 1 : 0; $('dashbar').firstElementChild.style.width = (100 * (1 - P.dashCd / dcd)) + '%';
+    if (C.active && C.target && C.target.alive && C.mode !== 'exec') {
+      const s = toScreen(tmp.set(C.target.pos.x, C.target.pos.y + C.target.ly, C.target.pos.z));
+      if (s) { lockEl.style.left = s[0] + 'px'; lockEl.style.top = s[1] + 'px'; lockEl.classList.add('on'); } else lockEl.classList.remove('on');
     } else lockEl.classList.remove('on');
-    if (C.mode === 'exec') lockEl.classList.remove('on');
     // executions: a red marker over the nearest broken enemy, and the prompt once it's in reach
     let mk = null, md = 22;
     for (const e of ENEMIES) { if (e.alive && e.state === 'broken') { const d = e.pos.distanceTo(P.pos); if (d < md) { md = d; mk = e; } } }
-    if (mk && C.mode !== 'exec') { tmp.set(mk.pos.x, mk.pos.y + mk.D.lockY + 0.9 * (mk.D.mass > 1 ? 1.4 : 1), mk.pos.z).project(cam);
-      if (tmp.z < 1 && Math.abs(tmp.x) < 1.1 && Math.abs(tmp.y) < 1.1) { emark.style.left = ((tmp.x + 1) / 2 * innerWidth) + 'px'; emark.style.top = ((1 - tmp.y) / 2 * innerHeight) + 'px'; emark.classList.add('on'); } else emark.classList.remove('on');
-    } else emark.classList.remove('on');
-    $('exec').classList.toggle('on', !!execTarget() && C.mode !== 'exec' && P.alive);
-    const boss = ENEMIES.find(e => e.type === 'champion' && e.alive);
+    const ms = mk && C.mode !== 'exec' && toScreen(tmp.set(mk.pos.x, mk.pos.y + mk.ly + 0.9 * (mk.D.mass > 1 ? 1.4 : 1) * mk.sc, mk.pos.z));
+    if (ms) { emark.style.left = ms[0] + 'px'; emark.style.top = ms[1] + 'px'; emark.classList.add('on'); } else emark.classList.remove('on');
+    const canExec = !!execTarget() && C.mode !== 'exec' && P.alive;
+    $('exec').classList.toggle('on', canExec);
+    if (frameN % 4 === 0) { const a = !canExec && P.alive && !C.active ? nearestAct() : null, h = a ? `<kbd>E</kbd>${esc(a.text)}` : ''; if (h !== actHTML) { actHTML = h; $('act').innerHTML = h; } $('act').classList.toggle('on', !!a); }
+    let boss = null; for (const e of ENEMIES) if (e.alive && e.boss && e.aggro && e.pos.distanceTo(P.pos) < 80) { boss = e; break; }
     $('bossbox').classList.toggle('on', !!boss);
-    if (boss) { const f = Math.max(0, boss.hp / boss.maxHp); $('bossfill').style.width = (f * 100) + '%'; $('bossfill').classList.toggle('low', f <= 0.12); }
+    if (boss) { const f = Math.max(0, boss.hp / boss.maxHp); $('bossname').textContent = `${boss.name}  ·  level ${boss.lvl}`; $('bossfill').style.width = (f * 100) + '%'; $('bossfill').classList.toggle('low', f <= 0.12); }
     moveT -= dt; if (moveT <= 0) $('move').classList.remove('on');
+    if (voxT > 0) { voxT -= dt; if (voxT <= 0) $('vox').classList.remove('on'); }
+    if (frameN % 10 === 0) {
+      let h = '';
+      if (R.quest < 0) h = `<h3>The Castellan’s summons</h3><p>Speak with Brother-Castellan Aldric in the monastery courtyard.</p>`;
+      else if (curQuest()) { const q = curQuest(), t = questTarget(), pr = q.prog ? q.prog() : null;
+        h = `<h3>${esc(q.name)}</h3><p>${esc(q.text)}</p><small>${pr ? `${pr[0]} of ${pr[1]}` : ''}${pr && t ? ' · ' : ''}${t ? Math.round(Math.hypot(t.x - P.pos.x, t.z - P.pos.z)) + ' m' : ''}</small>`; }
+      else h = `<h3>The Reach is held</h3><p>Hunt what remains: the camps, the graves, the hive.</p>`;
+      if (ZONE === 'dungeon') h = '';
+      if (h !== questHTML) { questHTML = h; $('quest').innerHTML = h; }
+      $('where').textContent = ZONE === 'dungeon' && DUN ? DUN.def.name : placeName(P.pos.x, P.pos.z);
+    }
+    updateOverlays(dt);
+    $('compass').classList.toggle('off', false);
+    if (frameN % 2 === 0) updateCompass();
+    const showMini = ZONE === 'world';
+    $('mini').classList.toggle('off', !showMini);
+    if (showMini && frameN % 2 === 1) drawMini();
   }
-  function moveToast(t) { $('move').textContent = t; $('move').classList.add('on'); moveT = 1.0; }
+  // first sight of a named place, or a dungeon gate
+  let discT = 0;
+  function discover(dt) {
+    discT -= dt; if (discT > 0) return; discT = 0.5;
+    for (const p of W.PLACES) if (!R.seen[p.id] && Math.hypot(p.x - P.pos.x, p.z - P.pos.z) < 70) { R.seen[p.id] = true; if (p.id !== 'hub') { banner(p.name, p.sub); gainXP(30); } }
+    for (const [id, g] of Object.entries(W.GATES)) if (!R.found['gate:' + id] && Math.hypot(g.x - P.pos.x, g.z - P.pos.z) < 45) { R.found['gate:' + id] = true; feed(`Found ${DUNS[id].name}: a shrine to travel to`, 'xp'); saveGame(); }
+  }
 
-  // ================================================================ menu, start, reset
-  function resetGame() {
-    for (const e of ENEMIES) scene.remove(e.J.root); ENEMIES = [];
-    for (const b of BOLTS) scene.remove(b.m); BOLTS.length = 0;
-    Object.assign(P, { hp: 100, alive: true, lastHurt: -99, dashT: 0, dashCd: 0, yaw: 0, pitch: 0, iframes: 0 }); P.push.set(0, 0, 0); P.pos.set(ARENA.start[0], 0, ARENA.start[1]); P.vel.set(0, 0, 0);
-    Object.assign(GUN, { ammo: GUN.mag, cd: 0, reloadT: 0, kick: 0 });
-    endCombo(); C.cam = 0;
-    Object.assign(G, { wave: 0, kills: 0, toSpawn: [], spawnT: 0, breakT: 0, shake: 0, hitStop: 0, slowT: 0 });
+  // ================================================================ screens: character and wargear, the Quartermaster's counter, the map, conversation
+  function openUI(name) {
+    if (G.ui) closeUI(true);
+    G.ui = name; keys.clear(); mouseDown = false;
+    if (document.pointerLockElement) document.exitPointerLock();
+    $('hud').style.visibility = name === 'talk' ? '' : 'hidden';
+    if (name === 'inv' || name === 'shop') { SEL = null; if (name === 'shop' && R.stockLvl !== R.lvl) genStock(); renderSheet(); $('inv').classList.remove('off'); }
+    if (name === 'map') { drawMap(); $('mapscr').classList.remove('off'); }
+    if (name === 'talk') $('talk').classList.remove('off');
   }
-  function begin() {
-    initAudio(); resetGame(); G.state = 'play'; G.paused = false; $('pause').classList.add('off'); $('hud').style.visibility = '';
-    $('menu').classList.add('off'); $('over').classList.add('off'); $('hud').classList.remove('off');
-    lockMouse();
-    startWave(1);
+  function closeUI(silent) {
+    if (!G.ui) return;
+    for (const id of ['inv', 'mapscr', 'talk']) $(id).classList.add('off');
+    G.ui = null; $('hud').style.visibility = ''; saveGame();
+    if (silent) return;
+    // the mouse goes back under the game's control; if the browser won't relock without another click, the pause screen asks for it
+    if (noLock()) return;
+    lockMouse(); setTimeout(() => { if (G.state === 'play' && !G.ui && !locked && !lockFailed) setPaused(true); }, 400);
   }
-  $('start').addEventListener('click', begin);
-  { // arena picker: rebuilds the scene behind the menu so you can see where you're going
-    const box = $('arenas');
-    const mark = () => { for (const b of box.children) b.setAttribute('aria-pressed', b.dataset.id === arenaId ? 'true' : 'false'); };
-    for (const [id, a] of Object.entries(ARENAS)) {
-      const b = document.createElement('button'); b.type = 'button'; b.dataset.id = id; b.innerHTML = `${a.name}<small>${a.blurb}</small>`;
-      b.addEventListener('click', () => { if (id === arenaId) return; buildArena(id); P.pos.set(ARENA.start[0], 0, ARENA.start[1]); updateRig(0); mark(); try { localStorage.setItem('templar-arena-map', id); } catch (_) {} });
+  // ---- the sheet
+  let SEL = null;
+  const ICON = { blade: '<path d="M11 2h2l1 13h-4z M6 15h12v2H6z M11 17h2v5h-2z"/>', pistol: '<path d="M2 6h19v5H12l-2 9H5l2-9H2z"/>',
+    armour: '<path d="M5 4l4-1q3 3 6 0l4 1 2 5-3 1-1 11H7L6 10 3 9z"/>', relic: '<path d="M9 2h6l-1 7 7-1v6l-7-1 1 9H9l1-9-7 1V8l7 1z"/>' };
+  const icon = (slot, st) => `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"${st ? ` style="${st}"` : ''}>${ICON[slot]}</svg>`;
+  const pct = x => { const n = Math.round((x - 1) * 100); return (n >= 0 ? '+' : '') + n + '%'; };
+  const OATHS = [['blade', 'Oath of the Blade', '+8% sword damage, +3% healing from executions'], ['bolt', 'Oath of the Bolt', '+8% bolt damage, faster reloads, a round every second rank'], ['bastion', 'Oath of the Bastion', '+15 armour, +10% regeneration, +2% damage reduction']];
+  function selItem() { if (!SEL) return null; return SEL.src === 'bag' ? R.bag[SEL.i] : SEL.src === 'eq' ? R.eq[SEL.slot] : R.stock[SEL.i]; }
+  function tipHTML() {
+    const it = selItem(), shop = G.ui === 'shop';
+    if (!it) return `<div class="tip"><p class="hint">Select wargear to inspect it. Double-click a piece in your pack to equip it.${shop ? ' Sell what you don’t need here for its full worth.' : ' Salvage gives back part of its worth; the Quartermaster pays in full.'}</p></div>`;
+    const cur = SEL.src !== 'eq' ? R.eq[it.slot] : null, keysU = [...new Set([...Object.keys(it.st), ...(cur ? Object.keys(cur.st) : [])])];
+    const rows = keysU.map(k => { const a = it.st[k] || 0, b = cur ? cur.st[k] || 0 : 0, d = a - b;
+      if (!a) return `<li class="dn">−${b}${AFX[k][2]} ${AFX[k][0]}</li>`;
+      return `<li>${fmtStat(k, a)}${cur && d ? ` <span class="${d > 0 ? 'up' : 'dn'}">(${d > 0 ? '+' : ''}${d})</span>` : ''}</li>`; }).join('');
+    let btns = '';
+    if (SEL.src === 'bag') btns = `<button class="opt" data-act="equip" type="button">Equip</button>` + (shop ? `<button class="opt" data-act="sell" type="button">Sell <b>+${it.val}</b></button>` : `<button class="opt" data-act="sell" type="button">Salvage <b>+${Math.round(it.val * 0.4)}</b></button>`);
+    else if (SEL.src === 'eq') btns = `<button class="opt" data-act="unequip" type="button"${R.bag.length >= 24 ? ' disabled' : ''}>Unequip</button>`;
+    else btns = `<button class="opt" data-act="buy" type="button"${R.gold < it.price || R.bag.length >= 24 ? ' disabled' : ''}>Buy for <b>${it.price}</b></button>`;
+    return `<div class="tip"><h4 class="rar${it.rar}">${esc(it.name)}</h4><div class="k">${RAR[it.rar]} ${SLOTN[it.slot].toLowerCase()} · item level ${it.lvl}</div><ul>${rows}</ul>`
+      + (cur ? `<p class="hint">Compared with your ${esc(cur.name)}.</p>` : '') + `<div class="btnrow" style="margin-top:10px">${btns}</div></div>`;
+  }
+  function renderSheet() {
+    const shop = G.ui === 'shop', sel = (src, k) => SEL && SEL.src === src && (SEL.i === k || SEL.slot === k) ? ' sel' : '';
+    const stats = [['Armour', `${Math.ceil(P.hp)} / ${P.maxHp}`], ['Sword damage', pct(ST.sword)], ['Bolt damage', pct(ST.bolt)], ['Critical chance', Math.round(ST.crit * 100) + '%'],
+      ['Magazine', ST.mag + ' rounds'], ['Reload', GUN.reloadDur.toFixed(2) + ' s'], ['Damage reduction', Math.round(ST.dr * 100) + '%'], ['Regeneration', pct(ST.regen)],
+      ['Execution healing', pct(ST.execHeal)], ['Blade lifesteal', Math.round(ST.leech * 100) + '%'], ['Experience', pct(ST.xp)], ['Thrones found', pct(ST.gold)]];
+    const col1 = `<section><h2>Oaths <small>${R.pts} to swear</small></h2><div class="statl">${stats.map(([a, b]) => `<span>${a}</span><b>${b}</b>`).join('')}</div>
+      <div class="oath">${OATHS.map(([k, n, d]) => `<div><b>${n}</b><em>${R.oath[k]} / ${OATHMAX}</em><button data-act="oath" data-k="${k}" type="button" aria-label="Swear the ${n}"${R.pts && R.oath[k] < OATHMAX ? '' : ' disabled'}>+</button><p>${d}</p></div>`).join('')}</div></section>`;
+    const col2 = `<section><h2>Wargear</h2><div class="slots">${SLOTS.map(s => { const it = R.eq[s]; return it ? `<button class="slot rar${it.rar}${sel('eq', s)}" data-act="sel-eq" data-slot="${s}" type="button"><small>${SLOTN[s]}</small><b>${esc(it.name)}</b></button>` : `<div class="slot empty"><small>${SLOTN[s]}</small><b>Empty</b></div>`; }).join('')}</div>
+      <h2 style="margin-top:14px">Pack <small>${R.bag.length} / 24</small></h2><div class="grid">${Array.from({ length: 24 }, (_, i) => { const it = R.bag[i]; return it ? `<button class="slot rar${it.rar}${sel('bag', i)}" data-act="sel-bag" data-i="${i}" type="button" title="${esc(it.name)}" aria-label="${esc(it.name)}">${icon(it.slot)}</button>` : '<div class="slot empty"></div>'; }).join('')}</div></section>`;
+    const log = R.quest < 0 ? '<div><b>The Castellan’s summons</b><p>Speak with Brother-Castellan Aldric in the monastery courtyard.</p></div>' : QUESTS.map((q, i) => i > R.quest ? '' : `<div class="${i < R.quest ? 'done' : ''}"><b>${esc(q.name)}</b><p>${esc(q.text)}</p></div>`).join('');
+    const col3 = `<section>${tipHTML()}` + (shop
+      ? `<h2 style="margin-top:14px">The Quartermaster’s stock</h2><div class="stock">${R.stock.map((it, i) => `<button class="slot rar${it.rar}${sel('stock', i)}" data-act="sel-stock" data-i="${i}" type="button"><span>${icon(it.slot, 'width:18px;height:18px;vertical-align:-4px;margin-right:6px')}${esc(it.name)}</span><i>${it.price}</i></button>`).join('')}
+         <button class="slot" data-act="buyung" type="button"${R.gold < 30 || R.ung >= 6 ? ' disabled' : ''}><span>Sacred unguent (you carry ${R.ung} of 6)</span><i>30</i></button></div>`
+      : `<h2 style="margin-top:14px">The crusade</h2><div class="qlog">${log}</div>`) + '</section>';
+    $('sheet').innerHTML = `<div class="shead"><h1>${shop ? 'The Quartermaster' : 'Brother Templar'}</h1><span class="goldl">Level ${R.lvl} · ${R.lvl >= MAXLVL ? 'max' : `${R.xp} / ${xpNext(R.lvl)} xp`} · ${R.gold} thrones · ${R.ung} unguents</span><button class="opt" data-act="close" type="button">Close (Esc)</button></div>${col1}${col2}${col3}`;
+  }
+  function equipBag(i) { const it = R.bag[i]; if (!it) return; R.bag.splice(i, 1); const old = R.eq[it.slot]; R.eq[it.slot] = it; if (old) R.bag.splice(i, 0, old); calcStats(); SEL = { src: 'eq', slot: it.slot }; sfx('bdraw', 0.6, 1.1); }
+  $('sheet').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-act]'); if (!b || b.disabled) return;
+    const a = b.dataset.act, it = selItem();
+    if (a === 'close') { closeUI(); return; }
+    if (a === 'sel-bag') SEL = { src: 'bag', i: +b.dataset.i };
+    else if (a === 'sel-eq') SEL = { src: 'eq', slot: b.dataset.slot };
+    else if (a === 'sel-stock') SEL = { src: 'stock', i: +b.dataset.i };
+    else if (a === 'equip' && SEL && SEL.src === 'bag') equipBag(SEL.i);
+    else if (a === 'unequip' && it && R.bag.length < 24) { R.bag.push(it); R.eq[it.slot] = null; calcStats(); SEL = null; }
+    else if (a === 'sell' && SEL && SEL.src === 'bag') { const g = G.ui === 'shop' ? it.val : Math.round(it.val * 0.4); R.gold += g; R.bag.splice(SEL.i, 1); SEL = null; feed(`+${g} thrones`); }
+    else if (a === 'buy' && it && R.gold >= it.price && R.bag.length < 24) { R.gold -= it.price; R.stock.splice(SEL.i, 1); delete it.price; R.bag.push(it); SEL = { src: 'bag', i: R.bag.length - 1 }; SYN.clang(); }
+    else if (a === 'buyung' && R.gold >= 30 && R.ung < 6) { R.gold -= 30; R.ung++; }
+    else if (a === 'oath' && R.pts > 0 && R.oath[b.dataset.k] < OATHMAX) { R.oath[b.dataset.k]++; R.pts--; calcStats(); SYN.horn(); }
+    renderSheet();
+  });
+  $('sheet').addEventListener('dblclick', ev => { const b = ev.target.closest('[data-act="sel-bag"]'); if (b) { equipBag(+b.dataset.i); renderSheet(); } });
+  $('inv').addEventListener('click', ev => { if (ev.target === $('inv')) closeUI(); });
+  // ---- the map
+  function drawMap() {
+    const cv = $('bigmap'), g = cv.getContext('2d'), S = cv.width, k = S / W.SIZE, X = x => (x + W.HALF) * k;
+    g.imageSmoothingEnabled = true; g.drawImage(W.mapImg, 0, 0, S, S);
+    g.fillStyle = 'rgba(10,9,10,.18)'; g.fillRect(0, 0, S, S);
+    g.font = '14px "IM Fell English SC", Georgia, serif'; g.textAlign = 'center';
+    for (const E of ENC) if (!E.respawn && !R.cleared[E.id] && (E.kind === 'imperial' || E.kind === 'raider' || E.kind === 'warband' || E.kind === 'pilgrim')) { g.strokeStyle = '#ff6a5a'; g.lineWidth = 2; g.beginPath(); g.arc(X(E.x), X(E.z), 8, 0, 7); g.stroke(); g.beginPath(); g.moveTo(X(E.x) - 5, X(E.z) - 5); g.lineTo(X(E.x) + 5, X(E.z) + 5); g.moveTo(X(E.x) + 5, X(E.z) - 5); g.lineTo(X(E.x) - 5, X(E.z) + 5); g.stroke(); }
+    for (const c of CHESTS) if (!R.opened[c.id] && c.id.startsWith('war:')) { g.fillStyle = '#e0b24a'; g.fillRect(X(c.x) - 3, X(c.z) - 3, 6, 6); }
+    const q = questTarget();
+    if (q) { g.strokeStyle = '#e0b24a'; g.lineWidth = 3; g.beginPath(); g.arc(X(q.x), X(q.z), 16, 0, 7); g.stroke(); }
+    // the Templar, pointing the way he faces
+    g.save(); g.translate(X(P.pos.x), X(P.pos.z)); g.rotate(-P.yaw); g.fillStyle = '#ece4d2'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -11); g.lineTo(8, 9); g.lineTo(0, 4); g.lineTo(-8, 9); g.closePath(); g.stroke(); g.fill(); g.restore();
+    const box = $('wps'); box.innerHTML = '';
+    for (const w of waypoints()) {
+      if (!w.on && w.gate) continue;
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'wp' + (w.on ? '' : ' lock'); b.textContent = w.name;
+      b.style.left = ((w.x + W.HALF) / W.SIZE * 100) + '%'; b.style.top = ((w.z + W.HALF) / W.SIZE * 100) + '%';
+      if (w.on && ZONE === 'world') b.addEventListener('click', () => travel(w.id)); else { b.disabled = true; b.title = w.on ? 'Leave the dungeon first' : 'Free it to travel here'; }
       box.appendChild(b);
     }
-    mark();
+    $('maphint').textContent = ZONE === 'dungeon' ? 'You are inside a dungeon: leave it to travel.' : G.hunted ? 'Foes are hunting you: you cannot travel until you lose them.' : 'Gold markers are shrines: click one to travel there. Red marks are camps held by the enemy.';
   }
-  $('again').addEventListener('click', begin);
-  // pause screen, which doubles as the settings page from the main menu
+  $('mapclose').addEventListener('click', () => closeUI());
+  // ---- conversation
+  function openTalk(n) {
+    if (n.id === 'qm') { openUI('shop'); return; }
+    const btn = (label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'opt'; b.textContent = label; b.addEventListener('click', fn); return b; };
+    $('tname').innerHTML = `${esc(n.name)}<small>${esc(n.title)}</small>`; const box = $('tbtns'); box.innerHTML = '';
+    if (R.quest < 0) {
+      $('ttext').textContent = 'Brother. Thank the Throne you came. The Reach of Saint Ansgar is falling: heretic war-bands hold our camps along the front, the dead walk in the chapel yards, and something has made its lair in the Fallen Spire. Begin with the pilgrims. Their camp on the western fields was overrun in the night. Brother Tobin keeps our stores by the cloister: trade your spoils with him.';
+      box.appendChild(btn('I will see it done', () => { R.quest = 0; feed(`New quest: ${QUESTS[0].name}`, 'xp'); checkQuests(); saveGame(); closeUI(); }));
+    } else if (curQuest()) {
+      const q = curQuest(), pr = q.prog ? q.prog() : null;
+      $('ttext').textContent = q.talk + (pr ? ` (${pr[0]} of ${pr[1]} so far.)` : '');
+      box.appendChild(btn('By your word', () => closeUI()));
+    } else {
+      $('ttext').textContent = 'The Reach is held, brother. Vorgath is dead and his war-bands scattered. Walk the Reach as you will: the graves still stir, and the hive is never empty.';
+      box.appendChild(btn('Farewell', () => closeUI()));
+    }
+    openUI('talk');
+  }
+
+  // ================================================================ pause, settings, menu, starting and continuing a crusade
   function setPaused(on) {
     if (G.state !== 'play') on = false;
     G.paused = on; keys.clear(); mouseDown = false;
@@ -3575,7 +4223,7 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     $('pauseTitle').textContent = 'Settings'; $('resume').textContent = 'Back'; $('quit').style.display = 'none';
     $('menu').classList.add('off'); $('pause').classList.remove('off');
   }
-  { const sens = $('sSens'), fov = $('sFov'), vol = $('sVol'), show = () => { $('oSens').textContent = SET.sens.toFixed(2) + '\u00d7'; $('oFov').textContent = SET.fov + '\u00b0'; $('oVol').textContent = Math.round(SET.vol * 100) + '%'; };
+  { const sens = $('sSens'), fov = $('sFov'), vol = $('sVol'), show = () => { $('oSens').textContent = SET.sens.toFixed(2) + '×'; $('oFov').textContent = SET.fov + '°'; $('oVol').textContent = Math.round(SET.vol * 100) + '%'; };
     sens.value = SET.sens; fov.value = SET.fov; vol.value = SET.vol; $('sInv').checked = SET.invert; $('sShake').checked = SET.shake; $('sSword').value = swordAudio; show();
     sens.addEventListener('input', () => { SET.sens = +sens.value; show(); saveSet(); });
     fov.addEventListener('input', () => { SET.fov = +fov.value; show(); saveSet(); });
@@ -3587,14 +4235,70 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
   $('openSet').addEventListener('click', () => { initAudio(); openSettings(); });
   $('resume').addEventListener('click', () => {
     if (G.state !== 'play') { $('pause').classList.add('off'); $('menu').classList.remove('off'); return; }
-    if (lockFailed || window.__taNoLock) setPaused(false); else lockMouse();      // the lock coming back closes the screen
+    if (noLock()) setPaused(false); else lockMouse();      // the lock coming back closes the screen
   });
-  $('quit').addEventListener('click', () => {
-    setPaused(false); resetGame(); G.state = 'menu';
-    $('hud').classList.add('off'); $('over').classList.add('off'); $('menu').classList.remove('off');
-    if (G.bestWave) $('best').textContent = `Furthest so far: wave ${G.bestWave}`;
+  function toWorld() {
+    ZONE = 'world'; DG.visible = false; W.root.visible = true; renderer.toneMappingExposure = 1.05; DUN = null;
+    cam.near = 0.1; cam.far = 4000; cam.updateProjectionMatrix();
+  }
+  function toMenu() {
+    clearEnemies(); toWorld();
+    G.state = 'menu'; G.ui = null; G.paused = false;
+    for (const id of ['hud', 'over', 'pause', 'inv', 'mapscr', 'talk']) $(id).classList.add('off');
+    $('hud').style.visibility = ''; $('menu').classList.remove('off'); refreshMenu();
+    P.pos.set(W.HUB.x, W.gH(W.HUB.x, W.HUB.z - 40), W.HUB.z - 40); updateRig(0);
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+  $('quit').addEventListener('click', () => { setPaused(false); saveGame(); toMenu(); });
+  let newConfirm = false;
+  function refreshMenu() {
+    const s = readSave(); newConfirm = false; $('newg').textContent = 'New crusade';
+    $('cont').style.display = s ? '' : 'none';
+    const q = s && (s.R.quest < 0 ? 'The Castellan’s summons' : s.R.quest < QUESTS.length ? QUESTS[s.R.quest].name : 'The Reach is held');
+    $('savenote').textContent = s ? `Saved crusade: level ${s.R.lvl}, ${q}.` : '';
+  }
+  $('cont').addEventListener('click', () => { const s = readSave(); if (s) startGame(s); });
+  $('newg').addEventListener('click', () => {
+    if (readSave() && !newConfirm) { newConfirm = true; $('newg').textContent = 'Replace the saved crusade?'; return; }
+    startGame(null);
   });
-  if (G.bestWave) $('best').textContent = `Furthest so far: wave ${G.bestWave}`;
+  function startGame(s) {
+    initAudio(); clearEnemies(); toWorld();
+    R = Object.assign(freshR(), s ? s.R : {});
+    for (const k of ['oath', 'eq']) R[k] = Object.assign(freshR()[k], R[k]);
+    P.maxHp = 100; Object.assign(P, { alive: true, lastHurt: -99, dashT: 0, dashCd: 0, iframes: 0, healT: 0, pitch: 0 }); P.push.set(0, 0, 0); P.vel.set(0, 0, 0);
+    calcStats(); P.hp = s ? clamp(s.hp || P.maxHp, 1, P.maxHp) : P.maxHp;
+    Object.assign(GUN, { ammo: GUN.mag, cd: 0, reloadT: 0, kick: 0 });
+    if (!R.stock.length) genStock();
+    for (const E of ENC) Object.assign(E, { state: R.cleared[E.id] ? 'cleared' : 'dormant', left: null, t: -1e9 });
+    for (const c of CHESTS.filter(c => c.id.startsWith('war:'))) { c.parent.remove(c.mesh); c.parent.remove(c.beam); }
+    CHESTS = CHESTS.filter(c => !c.id.startsWith('war:'));
+    for (const c of CHESTS) { c.beam.visible = !R.opened[c.id]; c.mesh.rotation.z = 0; }
+    for (const E of ENC) if (E.chest && R.cleared[E.id]) spawnWarChest(E);
+    if (s && s.at) { placeAtWp({ x: s.at[0], z: s.at[1] }); P.yaw = s.at[2]; }
+    else { placeAtWp({ x: W.HUB.x, z: W.HUB.z - 40 }); P.yaw = PI; }
+    G.state = 'play'; G.paused = false; G.ui = null; G.time = Math.max(G.time, 1); G.saveT = 0; G.encT = 0;
+    for (const id of ['menu', 'over', 'pause', 'inv', 'mapscr', 'talk']) $(id).classList.add('off');
+    $('hud').classList.remove('off'); $('hud').style.visibility = '';
+    $('feed').innerHTML = ''; questHTML = actHTML = compassHTML = '';
+    settleWorld(); updateRig(0);
+    lockMouse();
+    if (!s) { vox(VOX, 'Brother! To me, in the courtyard. The Reach needs its Templar.'); saveGame(); }
+    else feed('Crusade resumed');
+  }
+  $('again').addEventListener('click', () => {
+    $('over').classList.add('off');
+    Object.assign(P, { alive: true, hp: P.maxHp, iframes: 2, healT: 0, dashT: 0 }); P.push.set(0, 0, 0); P.vel.set(0, 0, 0);
+    Object.assign(GUN, { ammo: GUN.mag, reloadT: 0 });
+    G.state = 'play'; endCombo(); C.cam = 0;
+    if (ZONE === 'dungeon') exitDungeon(true);
+    else fadeTo(() => {
+      clearEnemies(); let b = null, bd = Infinity;
+      for (const w of waypoints()) if (w.on) { const d = Math.hypot(w.x - P.pos.x, w.z - P.pos.z); if (d < bd) { bd = d; b = w; } }
+      placeAtWp(b); settleWorld(); saveGame();
+    });
+    if (!noLock()) lockMouse();
+  });
 
   // ================================================================ main loop
   function resize() {
@@ -3607,16 +4311,21 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     // hit-stop: the world almost freezes for a few frames when the blade bites
     if (G.hitStop > 0) { G.hitStop -= dt; dt *= 0.05; }
     else if (G.slowT > 0) { G.slowT -= dt; dt *= 0.35; }     // slow motion for the execution's big moments
-    const paused = G.state === 'play' && (G.paused || (!locked && !lockFailed && !window.__taNoLock));
-    if (G.state === 'menu' || paused) dt = 0;
+    const paused = G.state === 'play' && (G.paused || G.ui || (!locked && !lockFailed && !window.__taNoLock));
+    if (G.state === 'menu' || paused || G.fading) dt = 0;
     G.time += dt;
     if (dt > 0) {
-      updatePlayer(dt); updateCombo(dt); updateGun(dt);
-      updateEnemies(dt); updateBolts(dt); updateWaves(dt);
+      G.hunted = ENEMIES.some(e => e.alive && e.aggro);
+      updatePlayer(dt);
+      const ox = P.pos.x, oz = P.pos.z; updateCombo(dt); if (P.pos.x !== ox || P.pos.z !== oz) groundPlayer(ox, oz);
+      updateGun(dt); updateEnemies(dt); updateBolts(dt); updateDrops(dt);
+      if (ZONE === 'world') { updateEncounters(dt); discover(dt); } else updateDungeon(dt);
+      G.saveT += dt; if (G.saveT > 30 && ZONE === 'world' && !G.hunted && P.alive && G.state === 'play') saveGame();
     }
     updateRig(dt);
     if (dt > 0) bladeHits();
     updateCamera(dt); updateTrail(dt);
+    if (ZONE === 'world') W.update(dt, G.state === 'menu' ? performance.now() / 1000 : G.time, G.state === 'menu' ? W.HUB.x : P.pos.x, G.state === 'menu' ? W.HUB.z - 60 : P.pos.z);
     glowFX.update(dt); dustFX.update(dt); fireFX(dt || 0);
     for (const f of FLASH) { if (f.t > 0) { f.t -= dt; f.L.intensity = f.p * Math.max(0, f.t / f.max); } else f.L.intensity = 0; }
     for (const t of TRACERS) { if (t.t > 0) { t.t -= dt; t.m.material.opacity = Math.max(0, t.t / 0.07); if (t.t <= 0) t.m.visible = false; } }
@@ -3624,64 +4333,68 @@ const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and so
     if (ringT > 0) { ringT -= dt; const f = 1 - ringT / 0.5; ring.scale.setScalar(0.3 + f * 3.6); ringM.opacity = (1 - f) * 0.8; if (ringT <= 0) ring.visible = false; }
     if (G.state !== 'menu') updateHUD(dt);
   }
-  // an idle view for the menu: slow orbit around the Templar
+  // behind the menu: a slow orbit round the monastery on its hill
   function menuCam(t) {
-    const a = t * 0.12, [x, z] = ARENA.start; cam.position.set(x + Math.sin(a) * 5.2, 2.1, z + Math.cos(a) * 5.2); cam.lookAt(x, 1.3, z); cam.fov = 50; cam.updateProjectionMatrix();
+    const a = t * 0.05, H = W.HUB; cam.position.set(H.x + Math.sin(a) * 120, W.gH(H.x, H.z) + 55, H.z + Math.cos(a) * 120); cam.lookAt(H.x, W.gH(H.x, H.z) + 10, H.z); cam.fov = 55; cam.updateProjectionMatrix();
   }
   function frame(now) {
     requestAnimationFrame(frame);
-    const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    if (frozen) return;
+    const dt = clamp((now - last) / 1000, 0, 0.05); last = now;
+    if (frozen || !W) return;
     step(dt);
-    if (G.state === 'menu') { menuCam(now / 1000); T.head.visible = T.pack.visible = T.paulL.g.visible = T.paulR.g.visible = true; }
+    if (G.state === 'menu') menuCam(now / 1000);
     if (!noRender) renderer.render(scene, cam);
   }
-  P.yaw = 0; P.pos.set(ARENA.start[0], 0, ARENA.start[1]); updateRig(0);
+
+  // ================================================================ start: raise the Reach behind the loading card, then the menu
+  try {
+    W = await buildRegion(msg => { $('loadmsg').textContent = msg; });
+  } catch (err) {
+    console.error(err); $('loadmsg').textContent = 'The Reach failed to load: ' + err.message; return;
+  }
+  for (const s of W.SMOKES) WFIRES.push({ x: s[0], y: s[2], z: s[1], s: 1.3, t: rnd() * 10 });
+  for (const g of Object.values(W.GATES)) for (const f of g.fires) WFIRES.push({ x: f.x, y: f.y, z: f.z, s: 0.45, t: rnd() * 10 });
+  for (const c of W.CAMPS) WFIRES.push({ x: c.x, y: W.gH(c.x, c.z) + 0.3, z: c.z, s: 0.7, t: rnd() * 10 });
+  CHESTS = W.CHESTS.map(c => Object.assign(c, { parent: W.root }));
+  { const H = W.HUB;
+    makeNPC('castellan', 'Brother-Castellan Aldric', 'Castellan of the Reach', H.x + 2, H.z - 24, H.x + 2, H.z - 40);
+    const q = makeNPC('qm', 'Brother Tobin', 'Quartermaster', H.x - 10, H.z - 31, H.x - 2, H.z - 40, true);
+    // his stall: a canopy, a bench and the Chapter's stores
+    const put = (n, x, z, s, ry) => { const m = new THREE.Mesh(W.kgeo(n), W.kitM); m.scale.setScalar(s); m.position.set(x, W.gH(x, z), z); m.rotation.y = ry || 0; m.castShadow = m.receiveShadow = true; W.root.add(m); return m; };
+    put('canopy', q.x - 0.5, q.z + 1.2, 8, 0.4); put('workbench', q.x - 2.6, q.z + 0.4, 4, 0.4 + PI / 2); W.colB(q.x - 2.6, q.z + 0.4, 2.4, 1.2, 0.4 + PI / 2, q.y, 1.2);
+    for (const [dx, dz, n] of [[1.6, 2.4, 'crate'], [0.2, 3.2, 'barrel'], [-1.6, 2.8, 'crate_l'], [2.4, 1.0, 'chest']]) { put(n, q.x + dx, q.z + dz, 3.2, rnd() * 3); W.colC(q.x + dx, q.z + dz, 0.6, q.y, 1.2); }
+  }
+  buildEncounters();
+  P.pos.set(W.HUB.x, W.gH(W.HUB.x, W.HUB.z - 40), W.HUB.z - 40); P.yaw = PI; updateRig(0);
+  renderer.toneMappingExposure = 1.05;
+  $('load').hidden = true; $('menu').classList.remove('off'); refreshMenu();
   requestAnimationFrame(frame);
 
-  // ================================================================ test hooks (used by test/run.js)
-  window.__ta = {
-    begin() { window.__taNoLock = true; begin(); },
-    sim(s, fps = 60) { const n = Math.round(s * fps); for (let i = 0; i < n; i++) step(1 / fps); },
-    set(o) { if (o.pos) P.pos.set(...o.pos); if (o.yaw !== undefined) P.yaw = o.yaw; if (o.pitch !== undefined) P.pitch = o.pitch; if (o.hp !== undefined) P.hp = o.hp; },
-    spawn(type, x, z, state) { const e = spawnEnemy(type, x, z); if (state) e.state = state; return ENEMIES.length; },
-    clear() { for (const e of ENEMIES) scene.remove(e.J.root); ENEMIES = []; G.toSpawn = []; },
-    fire() { GUN.cd = 0; fire(); },
-    sword() { swordInput(); },
-    execute() { return tryExecute(); },
-    breakE(i) { breakEnemy(ENEMIES[i], 5); },
-    wave(n) { for (const e of ENEMIES) scene.remove(e.J.root); ENEMIES = []; startWave(n); },
+  // ================================================================ test hooks (used by the headless checks)
+  window.__rpg = {
+    begin(fresh = true) { window.__taNoLock = true; if (fresh) { try { localStorage.removeItem(SAVE_KEY); } catch (_) {} startGame(null); } else startGame(readSave()); },
+    sim(s, fps = 30) { const n = Math.round(s * fps); for (let i = 0; i < n; i++) step(1 / fps); },
+    set(o) { if (o.pos) P.pos.set(...o.pos); if (o.yaw !== undefined) P.yaw = o.yaw; if (o.pitch !== undefined) P.pitch = o.pitch; if (o.hp !== undefined) P.hp = o.hp; if (o.gold !== undefined) R.gold = o.gold; if (o.quest !== undefined) R.quest = o.quest; },
+    tp(x, z, yaw) { placeAtWp({ x, z }); if (yaw !== undefined) P.yaw = yaw; settleWorld(); return P.pos.toArray(); },
+    spawn(type, x, z, o = {}) { const e = spawnEnemy(type, x, z, o); if (o.aggro) alertPack(e); return ENEMIES.length; },
+    clear() { for (const e of ENEMIES) removeEnemy(e); ENEMIES = []; SPQ.length = 0; },
+    noEnc(on) { for (const E of ENC) E.state = on ? 'cleared' : (R.cleared[E.id] ? 'cleared' : 'dormant'); },
+    fire() { GUN.cd = 0; fire(); }, sword() { swordInput(); }, execute() { return tryExecute(); }, dash() { dash(); },
     key(code, on) { if (on) keys.add(code); else keys.delete(code); },
-    dash() { dash(); },
-    norender(on) { noRender = on; },
-    setPaused(on) { setPaused(on); return G.paused; },
-    setArena(id) { buildArena(id); return { arena: arenaId, pillars: PILLARS.length, boxes: BOXES.length, fires: FIRES.length, spawns: SPAWNS.length }; },
-    // freeze the loop and show the Templar mid-strike from a chosen viewpoint (for checking the poses)
-    posePreview(k, u, cp, lk) {
-      frozen = true; C.active = true; C.step = k; C.phase = 's'; C.cam = 1;
-      if (u < 0) lerpPose(pose, READY, STRIKES[k].k[0], 1); else swingPose(pose, STRIKES[k].k, u);
-      updateRig(0); cam.position.set(...cp); cam.lookAt(...lk); cam.fov = 45; cam.updateProjectionMatrix(); renderer.render(scene, cam);
-    },
-    unfreeze() { frozen = false; },
-    render() { renderer.render(scene, cam); },
+    act() { const a = nearestAct(); if (a) { a.go(); return a.text; } return null; },
+    enter(id) { enterDungeon(id); }, exit() { exitDungeon(); }, wave(n) { if (DUN) { for (const e of ENEMIES) removeEnemy(e); ENEMIES = []; DUN.toSpawn = []; startDunWave(n); } },
+    killAll() { for (const e of ENEMIES) if (e.alive) damageEnemy(e, 1e6, v(0, 0, 1), 0, 'exec'); },
+    xp(n) { gainXP(n); }, give(slot, rar, lvl) { const it = makeItem(slot, lvl || R.lvl, rar || 0); R.bag.push(it); return it; },
+    ui(name) { if (name) openUI(name); else closeUI(true); return G.ui; }, talk(id) { openTalk(NPCS.find(n => n.id === id)); }, travel(id) { travel(id); },
+    save() { saveGame(); return readSave(); }, quest() { checkQuests(); return R.quest; }, norender(on) { noRender = on; }, render() { renderer.render(scene, cam); },
     state() {
-      return { state: G.state, wave: G.wave, kills: G.kills, toSpawn: G.toSpawn.length, hp: P.hp, alive: P.alive, pos: P.pos.toArray(), yaw: P.yaw, ammo: GUN.ammo, reload: GUN.reloadT,
-        combo: { active: C.active, step: C.step, phase: C.phase, cam: C.cam, target: C.target ? ENEMIES.indexOf(C.target) : -1, pips: C.pips },
-        mode: C.mode, enemies: ENEMIES.map(e => ({ type: e.type, hp: Math.round(e.hp), alive: e.alive, state: e.state, guard: Math.round(e.guard), pos: e.pos.toArray().map(x => +x.toFixed(2)) })), bolts: BOLTS.length,
-        cam: cam.position.toArray().map(x => +x.toFixed(2)) };
+      return { state: G.state, zone: ZONE, ui: G.ui, dun: DUN && { id: DUN.id, wave: DUN.wave, done: DUN.done, toSpawn: DUN.toSpawn.length }, hp: Math.round(P.hp), maxHp: P.maxHp, alive: P.alive, pos: P.pos.toArray().map(x => +x.toFixed(2)), yaw: +P.yaw.toFixed(3),
+        lvl: R.lvl, xp: R.xp, pts: R.pts, gold: R.gold, ung: R.ung, quest: R.quest, bag: R.bag.length, eq: Object.fromEntries(SLOTS.map(s => [s, R.eq[s] && R.eq[s].name])), hunted: G.hunted, ammo: GUN.ammo, mag: GUN.mag,
+        combo: { active: C.active, step: C.step, phase: C.phase, mode: C.mode }, drops: DROPS.length, act: (nearestAct() || {}).text || null,
+        enemies: ENEMIES.map(e => ({ type: e.type, lvl: e.lvl, hp: Math.round(e.hp), alive: e.alive, state: e.state, aggro: e.aggro, boss: e.boss, name: e.name, pos: e.pos.toArray().map(x => +x.toFixed(1)) })),
+        enc: ENC.filter(E => E.state !== 'dormant').map(E => `${E.id}:${E.state}`), cam: cam.position.toArray().map(x => +x.toFixed(1)) };
     },
-    async renderSound(code, dur) {
-      const save = { actx, master, verb, noiseBuf }, sr = 44100;
-      actx = new OfflineAudioContext(2, Math.round(sr * dur), sr); master = actx.createGain(); master.gain.value = 0.8; master.connect(actx.destination); verb = null;
-      noiseBuf = actx.createBuffer(1, sr, sr); { const d = noiseBuf.getChannelData(0); for (let i = 0; i < sr; i++) d[i] = Math.random() * 2 - 1; }
-      offline = true; try { new Function('SYN', 'STRIKES', 'v', code)(SYN, STRIKES, v); } finally { offline = false; }
-      const buf = await actx.startRendering(); ({ actx, master, verb, noiseBuf } = save);
-      return [Array.from(buf.getChannelData(0)), Array.from(buf.getChannelData(1))];
-    },
-    T, P, C, G, GUN, los: i => losTo(ENEMIES[i]), en: i => ENEMIES[i]
+    W: () => W, R: () => R, P, G, C, ST, ENC, NPCS, DUNS, en: i => ENEMIES[i]
   };
-})();
-</script>
-</body>
 })();
 </script>

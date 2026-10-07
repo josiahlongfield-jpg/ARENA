@@ -62,13 +62,28 @@ Note: the page's own animation frames keep running between test steps, so screen
   'mix' | 'rec' | 'synth', a menu toggle so they can be compared); everything else is synthesised (`SYN`, `humSet`).
   No openly licensed 40k bolter/bolt pistol recording exists (see assets/cc0/CREDITS.md); the bolt is generic CC0 material.
 
-## Open world preview (rpg/)
-The first step toward a Templar RPG: a walkable 1.6 km region (shrine highlands, siege front, dead hive). No combat yet.
-- `rpg/world_src.html` is THE source; `python3 rpg/build.py` inlines the CC0 textures (`rpg/assets/tex`, Poly Haven + ambientCG, 512px colour + normal)
-  and the baked Kenney props (`rpg/assets/kenney.json`) into `rpg/world.html`, which is published to https://claude.ai/artifact/HfAK8LV57xTesDm78gw3C8.
-- `rpg/tools/kenney_convert.py <cc0-world/models> rpg/assets/kenney.json` bakes the Kenney GLBs to vertex colours in the region's palette, with a
-  per-surface class (stone, wood, metal, cloth) that picks the scanned texture laid over it. The full download lives in the project files under
-  `templar-arena/assets/cc0-world/` (CREDITS.md there; everything is CC0).
-- `triMat()` lays scanned textures on by world position (triplanar), so props need no UVs. Give each new variant a distinct key: r128 caches programs
+## Templar: The Reach (rpg/)
+An open world RPG vertical slice: one 1.6 km region (shrine highlands, siege front, dead hive) with the arena's combat, roaming camps,
+the arenas as dungeons, levels, loot, quests and saving. Published to https://claude.ai/artifact/HfAK8LV57xTesDm78gw3C8 (no doc skeleton).
+- `rpg/game_src.html` is THE source; `python3 rpg/build.py` inlines the CC0 textures (`rpg/assets/tex`), the baked Kenney props
+  (`rpg/assets/kenney.json`) and the arena's sounds (`data/sounds.json`) into `rpg/game.html`. It also still builds the old
+  walk-only preview `rpg/world_src.html` -> `rpg/world.html`. Both must print "syntax: ok".
+- `buildRegion()` builds the world once into `W` (terrain `W.gH`, `W.collide`, `W.ray`, `W.clampB`, CAMPS, GATES, CHESTS, places).
+  `ZONE` is 'world' or 'dungeon'; `GY(x, z)` is the ground under any point (0 in a dungeon), and `collide`/`rayWorld`/`clampBounds`
+  hand off to `W` in the world. Dungeons rebuild an arena (`buildArena`) into `DG` and run `DUNS[id].waves`, with a named boss on the last.
+- Progress lives in `R` (`freshR()`: lvl, xp, oath points, gold, unguents, equipped `eq`, `bag`, quest, cleared, opened, found, shop stock)
+  and is saved to localStorage (`SAVE_KEY`, autosave every 30 s outside a fight). `calcStats()` folds level, oaths and gear into `ST`;
+  player hits go through `strike()` (crits, multipliers) into `damageEnemy()`.
+- Enemies carry `lvl`, `sc` (scale), `dm` (damage multiplier), `pack` (the encounter that owns them) and `home`. In the world they idle and
+  wander, aggro by sight, alert their pack, and leash home (`return` heals them). `buildEncounters()` lists every pack; they spawn within
+  130 m (`SPQ`, two per frame) and despawn past 240 m. Cleared camps with a waypoint become fast travel points.
+- Loot: `makeItem(slot, lvl, rarity)` with affixes from `AFX`, uniques in `UNIQ`; `drop()` puts gems with rarity beams on the ground.
+  Chests (`addChest`, tiers 1-3), the Quartermaster's shop (`genStock`), five main quests (`QUESTS`, `checkQuests`).
+- Screens: character/inventory (I or Tab, `renderSheet`, clicks via data-act), map with waypoints (M, `drawMap`), talk (`openTalk`).
+- `rpg/tools/kenney_convert.py <cc0-world/models> rpg/assets/kenney.json` bakes the Kenney GLBs to vertex colours with a per-surface class
+  (stone, wood, metal, cloth) that picks the scanned texture. The full download is in the project files under `templar-arena/assets/cc0-world/`.
+- `triMat()` lays scanned textures on by world position (triplanar). Give each new variant a distinct key: r128 caches programs
   by `customProgramCacheKey`. Grass cards zero their specular, or they glow white toward the low sun.
-- Test hook: `window.__world` (goTo(id), at(x, z, yaw, pitch), mode, fly, info, sites).
+- Test hook `window.__rpg`: begin(fresh), sim(s, fps), set({pos,yaw,pitch,hp,gold,quest}), tp(x,z,yaw), spawn, clear, noEnc, fire, sword,
+  execute, dash, key, act, enter(id), exit, wave(n), killAll, xp, give(slot,rar,lvl), ui(name), talk(id), travel(id), save, quest,
+  norender, render, state(). The page takes about 17 s to load headless (SwiftShader). `window.__world` is the old preview's hook.

@@ -1,6 +1,8 @@
-"""Build the open world preview: inline the CC0 textures and the baked Kenney props into world_src.html.
+"""Build the Reach: inline the CC0 textures, the baked Kenney props and the game's sounds.
 
-Writes world.html (published as the artifact; no doc skeleton) and syntax-checks the script with node.
+game_src.html  -> game.html   the RPG (published as the artifact; no doc skeleton)
+world_src.html -> world.html  the walkable preview it grew from
+Both scripts are syntax-checked with node.
 usage: python3 rpg/build.py   (from the repo root or from rpg/)
 """
 import base64, json, os, re, subprocess, tempfile
@@ -22,14 +24,18 @@ for f in sorted(os.listdir(TEX)):
         mean[name] = [round(float(v), 4) for v in (px ** 2.2).reshape(-1, 3).mean(0)]
 
 assets = {'tex': tex, 'mean': mean, 'kenney': json.load(open(os.path.join(HERE, 'assets', 'kenney.json')))}
-src = open(os.path.join(HERE, 'world_src.html')).read()
-assert src.count('/*__ASSETS__*/null') == 1
-out = src.replace('/*__ASSETS__*/null', json.dumps(assets, separators=(',', ':')))
-open(os.path.join(HERE, 'world.html'), 'w').write(out)
-print(f'world.html: {len(out) / 1e6:.1f} MB, {len(tex)} textures, {len(assets["kenney"])} props')
+game_assets = dict(assets, snd=json.load(open(os.path.join(HERE, '..', 'data', 'sounds.json'))))
 
-# syntax check: the inline game script, without the inlined data
-script = re.search(r'<script>\n(.*?)</script>', src, re.S).group(1)
-with tempfile.NamedTemporaryFile('w', suffix='.js', delete=False) as fh: fh.write(script)
-r = subprocess.run(['node', '--check', fh.name], capture_output=True, text=True)
-print('syntax: ok' if r.returncode == 0 else r.stderr)
+def build(src_name, out_name, data):
+    src = open(os.path.join(HERE, src_name)).read()
+    assert src.count('/*__ASSETS__*/null') == 1
+    out = src.replace('/*__ASSETS__*/null', json.dumps(data, separators=(',', ':')))
+    open(os.path.join(HERE, out_name), 'w').write(out)
+    # syntax check: the inline game script, without the inlined data
+    script = re.search(r'<script>\n(.*?)</script>', src, re.S).group(1)
+    with tempfile.NamedTemporaryFile('w', suffix='.js', delete=False) as fh: fh.write(script)
+    r = subprocess.run(['node', '--check', fh.name], capture_output=True, text=True)
+    print(f'{out_name}: {len(out) / 1e6:.1f} MB, syntax:', 'ok' if r.returncode == 0 else r.stderr)
+
+build('game_src.html', 'game.html', game_assets)
+build('world_src.html', 'world.html', assets)

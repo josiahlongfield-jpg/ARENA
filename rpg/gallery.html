@@ -6412,6 +6412,11 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     g.fillStyle = 'rgba(10,9,10,.18)'; g.fillRect(0, 0, S, S);
     g.font = '14px "IM Fell English SC", Georgia, serif'; g.textAlign = 'center';
     for (const E of ENC) if (!E.respawn && !R.cleared[E.id] && (E.kind === 'imperial' || E.kind === 'raider' || E.kind === 'warband' || E.kind === 'pilgrim')) { g.strokeStyle = '#ff6a5a'; g.lineWidth = 2; g.beginPath(); g.arc(X(E.x), X(E.z), 8, 0, 7); g.stroke(); g.beginPath(); g.moveTo(X(E.x) - 5, X(E.z) - 5); g.lineTo(X(E.x) + 5, X(E.z) + 5); g.moveTo(X(E.x) + 5, X(E.z) - 5); g.lineTo(X(E.x) - 5, X(E.z) + 5); g.stroke(); }
+    // the Feyr rifts: a red tear with its name over it, so they can be found (they come back, so they stay marked)
+    for (const E of ENC) if (E.kind === 'rift') { const x = X(E.x), y = X(E.z);
+      g.save(); g.shadowColor = '#ff2a12'; g.shadowBlur = 12; g.fillStyle = '#ff3a22'; g.strokeStyle = '#1a0606'; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(x, y - 10); g.lineTo(x + 6, y); g.lineTo(x, y + 10); g.lineTo(x - 6, y); g.closePath(); g.fill(); g.shadowBlur = 0; g.stroke();
+      g.font = '15px "IM Fell English SC", Georgia, serif'; g.fillStyle = '#ffb4a4'; g.strokeStyle = 'rgba(0,0,0,.85)'; g.lineWidth = 3; g.strokeText('Feyr rift', x, y - 16); g.fillText('Feyr rift', x, y - 16); g.restore(); }
     for (const c of CHESTS) if (!R.opened[c.id] && c.id.startsWith('war:')) { g.fillStyle = '#e0b24a'; g.fillRect(X(c.x) - 3, X(c.z) - 3, 6, 6); }
     const q = questTarget();
     if (q) { g.strokeStyle = '#e0b24a'; g.lineWidth = 3; g.beginPath(); g.arc(X(q.x), X(q.z), 16, 0, 7); g.stroke(); }
@@ -6425,7 +6430,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
       if (w.on && ZONE === 'world') b.addEventListener('click', () => travel(w.id)); else { b.disabled = true; b.title = w.on ? 'Leave the dungeon first' : 'Free it to travel here'; }
       box.appendChild(b);
     }
-    $('maphint').textContent = ZONE === 'dungeon' ? 'You are inside a dungeon: leave it to travel.' : G.hunted ? 'Foes are hunting you: you cannot travel until you lose them.' : 'Gold markers are shrines: click one to travel there. Red marks are camps held by the enemy.';
+    $('maphint').textContent = ZONE === 'dungeon' ? 'You are inside a dungeon: leave it to travel.' : G.hunted ? 'Foes are hunting you: you cannot travel until you lose them.' : 'Gold markers are shrines: click one to travel there. Red marks are camps held by the enemy; red diamonds are Feyr rifts.';
   }
   $('mapclose').addEventListener('click', () => closeUI());
   // ---- conversation

@@ -35,7 +35,7 @@ button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
 <div id="cross"></div>
 <section id="panel" aria-label="Room controls">
   <div class="top"><h1>Character room</h1><button id="hide" type="button" aria-label="Hide the panel">Hide</button></div>
-  <p>The Vigil and the Feyr, with the meshes, maps and lights they have in The Reach. The Vigil is 1.95 m to the top of her helm, the Feyr 2.4 m.</p>
+  <p>The Vigil and the Feyr, with the meshes, maps and lights they have in The Reach. The Vigil is 1.95 m to the top of her helm. The Feyr is 2.4 m and floats.</p>
   <dl id="keys" class="desk"><dt>W A S D</dt><dd>Walk (Shift to go faster)</dd><dt>Mouse</dt><dd>Look; click the room to lock it, Esc to free it</dd>
     <dt>Space / C</dt><dd>Raise or lower your eye</dd><dt>Wheel</dt><dd>Zoom</dd><dt>L / P / R</dt><dd>Light, pause the idle, back to the door</dd></dl>
   <p class="touch">Drag on the left half to walk and on the right half to look.</p>
@@ -175,24 +175,38 @@ const ASSETS = {"vigil":{"geo":{"n":35016,"pos":"8oirvrIaoD/4TSe98oirvrIaoD/4TSe
   }
 
   // ================================================================ the Feyr: Tripo's rig and its own idle clip, built as FEYR.build builds it
+  // A Feyr floats: its legs end in one joined point, so Tripo's stepping legs would tear the mesh between them. The legs keep their
+  // sculpted pose in every clip, the hips only bob a little, and the body hovers (FEYR_HOVER, with a slow drift in the loop).
+  // Its kneel (hurt) would tip the joined legs out in front, so there the hips keep still too and only the body above them slumps.
+  const FEYR_HOVER = 0.22, LEG = /Thigh|Calf|Foot|ToeBase/, HANG = /^(Root|Hip|Pelvis)$/;      // broken, it slumps over legs left hanging
+  function feyrClip(A, name) {
+    const c = A.clips[name], hipZ = A.tree.find(n => n.n === 'Hip').t[2];
+    const tracks = c.tr.filter(([bone, k]) => !LEG.test(bone) && !(name === 'hurt' && k === 'q' && HANG.test(bone))).map(([bone, k, n, b]) => {
+      const times = Float32Array.from({ length: n }, (_, i) => i / c.fps), raw = bytes(b).buffer;
+      if (k === 't') {      // the hips' height (z in the rig) sinks at most 10 cm of rig, so the point never meets the floor
+        const v = new Float32Array(raw); for (let i = 2; i < v.length; i += 3) v[i] = hipZ - Math.min(0.1, (hipZ - v[i]) * (name === 'hurt' ? 0.23 : 0.5));
+        return new THREE.VectorKeyframeTrack(bone + '.position', times, v);
+      }
+      const q = new Int16Array(raw), f = new Float32Array(q.length); for (let i = 0; i < q.length; i++) f[i] = q[i] / 32767;
+      return new THREE.QuaternionKeyframeTrack(bone + '.quaternion', times, f);
+    });
+    return new THREE.AnimationClip(name, c.d, tracks);
+  }
   function buildFeyr() {
     const A = ASSETS.feyr, g = A.geo;
     const ibm = []; for (let i = 0; i < g.joints.length; i++) ibm.push(new THREE.Matrix4().fromArray(g.ibm, i * 16));
     const bones = A.tree.map(n => { const b = new THREE.Bone(); b.name = n.n; b.position.fromArray(n.t); b.quaternion.fromArray(n.r); b.scale.fromArray(n.s); return b; });
     A.tree.forEach((n, i) => { if (n.p >= 0) bones[n.p].add(bones[i]); });
     const arm = bones[0], root = new THREE.Group(), holder = new THREE.Group();
-    holder.rotation.y = -PI / 2; holder.scale.setScalar(2.4 / g.height); holder.add(arm); root.add(holder);
+    holder.rotation.y = -PI / 2; holder.scale.setScalar(2.4 / g.height); holder.position.y = FEYR_HOVER; holder.add(arm); root.add(holder);
     const mesh = new THREE.SkinnedMesh(geometry(g), material(A, 4)); mesh.castShadow = true; mesh.frustumCulled = false; arm.add(mesh);
     arm.updateMatrix(); mesh.bind(new THREE.Skeleton(g.joints.map(i => bones[i]), ibm), arm.matrix.clone());      // the rig's own space, never the scaled world
-    const c = A.clips.idle, tracks = c.tr.map(([bone, k, n, b]) => {
-      const times = Float32Array.from({ length: n }, (_, i) => i / c.fps), raw = bytes(b).buffer;
-      if (k === 't') return new THREE.VectorKeyframeTrack(bone + '.position', times, new Float32Array(raw));
-      const q = new Int16Array(raw), f = new Float32Array(q.length); for (let i = 0; i < q.length; i++) f[i] = q[i] / 32767;
-      return new THREE.QuaternionKeyframeTrack(bone + '.quaternion', times, f);
-    });
-    const mix = new THREE.AnimationMixer(arm); mix.clipAction(new THREE.AnimationClip('idle', c.d, tracks)).play();
-    return { root, mix };
+    const mix = new THREE.AnimationMixer(arm), act = {};
+    for (const n in A.clips) act[n] = mix.clipAction(feyrClip(A, n));
+    act.idle.play();
+    return { root, holder, mix, act, cur: 'idle' };
   }
+  function feyrDrift(F, t) { F.holder.position.y = FEYR_HOVER + 0.04 * Math.sin(t * 1.3); }
 
   // they stand mid-hall facing the door, with the sun behind you as you come in
   const VG = buildVigil(), FY = buildFeyr();
@@ -267,7 +281,7 @@ const ASSETS = {"vigil":{"geo":{"n":35016,"pos":"8oirvrIaoD/4TSe98oirvrIaoD/4TSe
   let t = 0, last = performance.now(), frozen = false;
   function step(dt) {
     move(dt);
-    if (!paused) { t += dt; FY.mix.update(dt); idleVigil(VG, t); }
+    if (!paused) { t += dt; FY.mix.update(dt); feyrDrift(FY, t); idleVigil(VG, t); }
     cam.position.set(ME.pos.x, ME.eye, ME.pos.z); cam.rotation.set(ME.pitch, ME.yaw, 0);
     if (Math.abs(cam.fov - ME.fov) > 0.01) { cam.fov += (ME.fov - cam.fov) * damp(12, dt); cam.updateProjectionMatrix(); }
     if (hintT > 0 && (hintT -= dt) <= 0 && locked) $('hint').classList.add('off');
@@ -283,6 +297,7 @@ const ASSETS = {"vigil":{"geo":{"n":35016,"pos":"8oirvrIaoD/4TSe98oirvrIaoD/4TSe
   // for headless checks: place the eye, pick a light, run the idle, render one still
   window.__room = { set(o) { if (o.pos) ME.pos.set(o.pos[0], 0, o.pos[1]); for (const k of ['yaw', 'pitch', 'eye', 'fov']) if (o[k] !== undefined) ME[k] = o[k]; },
     light: i => setLight(i), sim(s) { for (let i = 0; i < Math.round(s * 30); i++) step(1 / 30); }, still() { frozen = true; cam.fov = ME.fov; cam.updateProjectionMatrix(); step(0); renderer.render(scene, cam); },
-    run() { frozen = false; }, me: ME };
+    run() { frozen = false; }, me: ME,
+    clip(name, at) { const a = FY.act[name]; FY.act[FY.cur].stop(); a.reset().play(); FY.cur = name; FY.mix.update(at || 0); } };
 })();
 </script>

@@ -57,7 +57,9 @@ build('world_src.html', 'world.html', assets)
 # vigil/tools/grip_solve.py found for her hands, and drawn by Vigil's renderer (vigil/src/js/render.js) or the plain one
 VIGIL = os.path.join(HERE, '..', 'vigil')
 rifle_js = open(os.path.join(VIGIL, 'assets', 'rifle.js')).read()
-build('room_src.html', 'room.html', dict(vigil=json.load(open(os.path.join(VIGIL, 'assets', 'vigil_body.json'))), feyr=game_assets['feyr'],
+# the Feyr only idles here, and the page is near the artifact's 16 MB limit, so its other clips stay out
+room_feyr = dict(game_assets['feyr'], clips={'idle': game_assets['feyr']['clips']['idle']})
+build('room_src.html', 'room.html', dict(vigil=json.load(open(os.path.join(VIGIL, 'assets', 'vigil_body.json'))), feyr=room_feyr,
       skeleton=json.load(open(os.path.join(HERE, 'assets', 'skeleton_rig.json'))),      # the user's skeletal design (tools/vigil_pack.py)
       rifle=json.loads(rifle_js[rifle_js.index('{'):rifle_js.rindex('}') + 1]), grips=json.load(open(os.path.join(VIGIL, 'assets', 'grips_body.json'))),
       tex={k: tex[k] for k in ('monastery_stone_floor|d', 'monastery_stone_floor|n', 'castle_wall_slates|d', 'castle_wall_slates|n')}),

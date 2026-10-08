@@ -144,8 +144,9 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
   and packed by `vigil_pack.py` (GLOW=red) into `rpg/assets/skeleton_rig.json`, so it could be worn with `wearBody` like the Vigil. Both Vigils use
   `vigil/assets/vigil_body.json` (her rig plus finger joints). The armed one (`AV`, `stanceBody`, `STANCE`) is posed by hand each frame: legs by two-bone IK
   (`legTo`), the rifle placed from her right eye (sight line) and her shoulder pocket (butt), then the arms by IK (`armTo`) onto the grips from
-  `vigil/assets/grips_body.json`, fingers included. R (or the panel button) switches between Vigil's renderer (`vigil/src/js/render.js`, injected at
-  `/*__RENDER__*/`) and the plain one; B goes back to the door; `?old` starts plain. The page is about 15.5 MB, near the 16 MB artifact limit.
+  `vigil/assets/grips_body.json`, fingers included; the at-ease one's fingers fall into a loose curl (`relaxHands`). R (or the panel button) switches between Vigil's renderer (`vigil/src/js/render.js`, injected at
+  `/*__RENDER__*/`) and the plain one; B goes back to the door; `?old` starts plain. The page is about 15.95 MB, at the 16 MB artifact limit (the Feyr keeps only its idle clip here);
+  anything more needs the multi-file route vigil/build.py uses (assets as scripts beside the page).
   Published to https://claude.ai/artifact/LWHmSFayM8rJzQn44RZJCZ. Hook `window.__room` (set, light, sim, still, run, mode(on), armed, rifle, stance, pose).
 - Test hook `window.__rpg`: begin(fresh), sim(s, fps), set({pos,yaw,pitch,hp,gold,quest}), tp(x,z,yaw), spawn, clear, noEnc, fire, sword,
   execute, dash, key, act, enter(id), exit, wave(n), killAll, xp, give(slot,rar,pw,exo), equip(id), power(), ab(k), fill(), node, subUse,
@@ -165,11 +166,19 @@ The player is the Vigil with an assault rifle as the primary weapon; enemies wil
   the fingers, palm normal, and each finger's joints in mm in the hand's (side, along, palm) frame). Tripo's Mixamo-spec rig has no fingers, so don't use it.
   `tools/body_fingers.py` adds them to her whole body (`rpg/assets/vigil_rig.json` -> `assets/vigil_body.json`); `tools/fp_arms.py` builds the
   150k first-person arms with them. Joint names `thumb1L` ... `little3R` (base to end), after the body's own 17.
+- Gauntlets: Tripo fused the sculpt's fingers, so `tools/gauntlet.py pack.json [out.json]` replaces its hands with modelled ones (run it on
+  `assets/vigil_body.json` and `assets/fp_arms.json` as body_fingers.py / fp_arms.py made them): a capsule and an armour plate per finger bone, a lofted
+  palm and back plate, knuckle studs, a collar into the sculpt's wrist band. Every part is rigid on one joint and each bone ends in a ball nested in the
+  next, so bent joints never open. It moves the wrist joint to the band's middle and the finger joints and flex axes onto the new hands, and adds
+  `hands` (16-bit positions, one joint per vertex, groups 0 glove / 1 plate) beside the sculpt's mesh, skinned to the same skeleton. Dark greys from her
+  armour, no glow (the user's call). Reference photos of the grips: project files `templar-arena/concepts/step3/hand_refs/` (grip only, not the look).
 - Rifle: `tools/rifle_pack.py` packs the user's assault rifle (Tripo bake, project files `templar-arena/concepts/step3/rifle/ar_150k.glb`) into
   `assets/rifle.js` (`window.VG_RIFLE`): body and a removable magazine, quantised to 16 bits in chunks of under 65536 vertices, 2K maps, and the
   points the hands, sights and effects need (`pts`: sight, front, muzzle, gripTop/Bot, trigger, guard, butt, ejector, magTop/magDir, peep).
   Frame: metres, muzzle -Z, top +Y, its right side +X, origin at the rear sight on the sight line. The peep hole is cut by a shader discard.
+  `tools/foregrip.py assets/rifle.js` adds the vertical foregrip the user asked for (parts `fore` and `clamp`, untextured, on the rail's rear end;
+  `pts.foreTop/foreBot`); rerun it after rifle_pack.py.
 - Grips: `tools/grip_solve.py hands.json rifle.js out.json [preview.png]` places each hand on its grip (right: pistol grip, index pad to the trigger;
-  left: under the handguard, fingers up its right side) and tries every finger pose on a grid, skinned as the game skins it, keeping the best grasp
+  left: a fist round the vertical foregrip) and tries every finger pose on a coarse grid and then finer round the best, skinned as the game skins it, keeping the best grasp
   that stays SKIN (0.8 mm) clear of the rifle (voxelised at 1 mm). Out: per hand `T` (her rest space -> rifle frame) and `q` (each finger joint's turn
   in rest space). The hand's target = rifle matrix x T x the hand joint's rest matrix; each finger joint's quaternion = its rest quaternion x q.

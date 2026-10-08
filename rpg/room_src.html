@@ -170,6 +170,23 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
     geo.setIndex(new THREE.BufferAttribute(g.i32 ? new Uint32Array(bytes(g.idx).buffer) : new Uint16Array(bytes(g.idx).buffer), 1));
     return geo;
   }
+  // her gauntlet hands (vigil/tools/gauntlet.py): 16-bit positions over their box, every vertex rigid on one joint, triangles by material
+  function handsGeo(h) {
+    const geo = new THREE.BufferGeometry(), u = new Uint16Array(bytes(h.pos).buffer), p = new Float32Array(u.length);
+    for (let i = 0; i < u.length; i++) p[i] = h.lo[i % 3] + u[i] * h.sc[i % 3];
+    const j = bytes(h.j), ji = new Uint8Array(h.n * 4), jw = new Uint8Array(h.n * 4);
+    for (let i = 0; i < h.n; i++) { ji[i * 4] = j[i]; jw[i * 4] = 255; }
+    geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(new Int8Array(bytes(h.nrm).buffer), 3, true));
+    geo.setAttribute('skinIndex', new THREE.BufferAttribute(ji, 4)); geo.setAttribute('skinWeight', new THREE.BufferAttribute(jw, 4, true));
+    geo.setIndex(new THREE.BufferAttribute(h.i32 ? new Uint32Array(bytes(h.idx).buffer) : new Uint16Array(bytes(h.idx).buffer), 1));
+    for (const [start, count, m] of h.groups) geo.addGroup(start, count, m);
+    return geo;
+  }
+  // the glove and its plates, matched to her own: the glove to the sculpt's glove, the plates to her forearm plates (colour, roughness and metal sampled from her maps)
+  const handMats = () => [
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(0x0e0e0f).convertSRGBToLinear(), roughness: 0.84, metalness: 0.2, skinning: true }),
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(0x2d2d2f).convertSRGBToLinear(), roughness: 0.74, metalness: 0.48, skinning: true })];
   // the game's material for both: Tripo's maps, the glow as emission (2.4, as in The Reach)
   function material(A, anis) {
     const tl = new THREE.TextureLoader(), tex = (k, srgb) => { const t = tl.load(A.tex[k]); t.flipY = false; if (srgb) t.encoding = THREE.sRGBEncoding; t.anisotropy = anis; return t; };
@@ -205,7 +222,12 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
     const bones = A.joints.map(k => J[k]), mesh = new THREE.SkinnedMesh(geometry(A.geo), material(A, 8));
     mesh.castShadow = true; mesh.frustumCulled = false; root.add(mesh);
     mesh.bind(new THREE.Skeleton(bones, bones.map(b => b.matrixWorld.clone().invert())), new THREE.Matrix4());
+    if (A.hands) {      // the gauntlets in place of the sculpt's fused hands, on the same skeleton
+      const hm = new THREE.SkinnedMesh(handsGeo(A.hands), handMats()); hm.castShadow = true; hm.frustumCulled = false; root.add(hm);
+      hm.bind(mesh.skeleton, new THREE.Matrix4()); J.hands = hm;
+    }
     J.rest = {}; J.restW = {}; for (const k of A.joints) { J.rest[k] = J[k].quaternion.clone(); J.restW[k] = J[k].matrixWorld.clone(); }
+    J.axis = {}; if (A.fingers) A.fingers.names.forEach((k, i) => { J.axis[k] = new V3(...A.fingers.axis[i]); });
     J.A = A;
     return J;
   }
@@ -218,6 +240,15 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
     J.pelvis.rotation.z = 0.014 * sway; J.hipL.rotation.z = J.hipR.rotation.z = -0.014 * sway;
     for (const s of 'LR') { const sx = s === 'L' ? 1 : -1; _qa.setFromAxisAngle(_Z, sx * (-0.03 - 0.012 * br)); J['sh' + s].quaternion.copy(_qa).multiply(J.rest['sh' + s]);
       _qa.setFromAxisAngle(_x.set(1, 0, 0), 0.05 + 0.02 * br); J['el' + s].quaternion.copy(J.rest['el' + s]).premultiply(_qa); }
+    relaxHands(J, 1 + 0.06 * br);
+  }
+  // a hanging hand's fingers fall into a loose curl, more toward the little finger; each joint turns about its own flex axis
+  const RELAX = { thumb: [8, 10, 8], index: [12, 18, 10], middle: [16, 22, 12], ring: [20, 26, 14], little: [24, 30, 16] };
+  function relaxHands(J, k) {
+    if (!J.A.fingers) return;
+    for (const s of 'LR') for (const f in RELAX) for (let i = 0; i < 3; i++) {
+      const n = f + (i + 1) + s; J[n].quaternion.copy(J.rest[n]).multiply(_qa.setFromAxisAngle(J.axis[n], RELAX[f][i] * k * PI / 180));
+    }
   }
 
   // ================================================================ the Feyr: Tripo's rig and its own idle clip, built as FEYR.build builds it
@@ -266,7 +297,7 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
       sh.fragmentShader = 'varying vec3 vRP;\n' + sh.fragmentShader.replace('void main() {', `void main() {\n  if (dot(vRP.xy, vRP.xy) < ${(pr * pr).toExponential(4)} && abs(vRP.z) < ${ph.toFixed(5)}) discard;`);
     };
     mat.customProgramCacheKey = () => 'vgRifle';
-    const part = q => {
+    const part = (q, m = mat) => {
       const g = new THREE.Group();
       for (const c of q.chunks) {
         const geo = new THREE.BufferGeometry(), u = new Uint16Array(bytes(c.pos).buffer), p = new Float32Array(u.length);
@@ -275,11 +306,15 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
         geo.setAttribute('normal', new THREE.BufferAttribute(new Int8Array(bytes(c.nrm).buffer), 3, true));
         geo.setAttribute('uv', new THREE.BufferAttribute(new Uint16Array(bytes(c.uv).buffer), 2, true));
         geo.setIndex(new THREE.BufferAttribute(new Uint16Array(bytes(c.idx).buffer), 1));
-        const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; g.add(m);
+        const ms = new THREE.Mesh(geo, m); ms.castShadow = ms.receiveShadow = true; g.add(ms);
       }
       return g;
     };
-    const o = new THREE.Group(); o.add(part(R.body), part(R.mag)); o.matrixAutoUpdate = false; return o;
+    const o = new THREE.Group(); o.add(part(R.body), part(R.mag)); o.matrixAutoUpdate = false;
+    // the vertical foregrip (vigil/tools/foregrip.py) is modelled, not baked, so it takes plain materials in the rifle's own greys
+    if (R.fore) o.add(part(R.fore, new THREE.MeshStandardMaterial({ color: new THREE.Color(0x2e2e2d).convertSRGBToLinear(), roughness: 0.78, metalness: 0.3 })),
+      part(R.clamp, new THREE.MeshStandardMaterial({ color: new THREE.Color(0x29292a).convertSRGBToLinear(), roughness: 0.55, metalness: 0.7 })));
+    return o;
   }
 
   // ================================================================ the Vigil armed, in a combat stance
@@ -287,7 +322,7 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
   // goes where her eye and shoulder put it: the sight line through her right eye and the butt in her right shoulder's pocket, kept
   // upright. Then each arm reaches for its grip (vigil/tools/grip_solve.py: where the hand sits on the rifle, and every finger joint's
   // turn, found so the fingers wrap the grip and the handguard without passing into them), so the hands go with the rifle as she breathes.
-  const STANCE = { px: -0.048, py: -0.377, drop: 0.046, wx: 0.288, wy: -0.037, wz: 0.126, hx: 0.266, hy: 0.414, hz: 0.337,
+  const STANCE = { px: -0.033, py: -0.442, drop: 0.046, wx: 0.286, wy: -0.227, wz: 0.101, hx: 0.35, hy: 0.392, hz: 0.1,      // the left elbow bent about 40 degrees
     eye: new V3(-0.032, 1.80, 0.055), pocket: new V3(-0.112, 1.589, 0.040),      // her right eye, and the butt's place on her armour, at rest
     feet: { L: [0.20, 0.13, -0.25], R: [-0.20, -0.22, -0.75] },                  // x, z and the way each foot points (left forward, right turned out)
     elbow: { L: new V3(0.25, -1, 0.05), R: new V3(-1, -0.45, -0.25) } };         // which way each elbow goes
@@ -451,7 +486,7 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
     mode(on) { toggleRenderer(on); return NEW; }, rnd, newK: NEWK, look: () => lookNew(),
     armed: AV, rifle: RIFLE, stance: STANCE, pose(tt) { stanceBody(AV, RIFLE, tt || 0); return { relief: RIFLE.relief }; },
     run() { frozen = false; }, me: ME,
-    clip(name, at) { const a = FY.act[name]; FY.act[FY.cur].stop(); a.reset().play(); FY.cur = name; FY.mix.update(at || 0); } };
+    clip(name, at) { const a = FY.act[name]; if (!a) return false; FY.act[FY.cur].stop(); a.reset().play(); FY.cur = name; FY.mix.update(at || 0); return true; } };
   window.__ready = true;
 })();
 </script>

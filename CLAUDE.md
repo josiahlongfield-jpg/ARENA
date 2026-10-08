@@ -84,6 +84,21 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
   (stone, wood, metal, cloth) that picks the scanned texture. The full download is in the project files under `templar-arena/assets/cc0-world/`.
 - `triMat()` lays scanned textures on by world position (triplanar). Give each new variant a distinct key: r128 caches programs
   by `customProgramCacheKey`. Grass cards zero their specular, or they glow white toward the low sun.
+- The keep (`W.KEEP` from the region builder): north gate and a west postern (`WALL_GAPS`), forge, apothecarion, chaplain's dais, training
+  yard with pells, firing range, refectory fire, well, lectern, and the landing field outside the postern (`PAD` flattens the terrain).
+- Brothers: `buildBrother(kind, o)` builds every rank from shared pieces (serf, servitor, neophyte, initiate, sword, castellan, chaplain, tech,
+  apoth), vertex-coloured and merged per joint (`npcBake`, about a dozen draw calls each). `raiseKeep()` places about 38 `KEEPERS` with jobs
+  (`animKeeper`: smith, preach, kneel, spar, drill, shoot, walk routes, eat...); named ones are in `NPCS` and talk through `STATION_TALK`
+  (reforge at the forge, healing, the Litany buff `G.buffT`, the Trial of the Bolt on the range, the pilot). Pells and boards are `TARGETS`.
+- Thunderhawk: `buildThunderhawk()` (faces +Z, about 23 m), flown via `FLY` (`updateFly`, `hawkCam`, bolters, cannon, `hawkLand`, `parkHawk`).
+  While flying P.pos follows the ship, damage and sight aggro are off.
+- Wargear kinds: each item has `kind` (`KINDS`: blade power/chain/hammer, pistol bolt/plasma, armour mk7/mk6/crusader/mk10, pack jump/power);
+  `kindOf` infers it for old saves. `buildGear(T)` adds the models, `applyLook(over)` shows them, `BK()` is the blade's speed/damage/knock.
+  The jump pack (`JP`, C; sword in the air = ground pound) is issued once per save (`R.gotJump`). B opens the armoury (`renderArmoury`, `armouryCam`).
+- No sword hum: it was removed at the user's request (2026-10-08); the swing keeps its whoosh and field crackle.
+- Gallery: `openGallery()` from the menu, and `rpg/gallery.html` (build.py, `GALLERY_ONLY`, no textures or sounds) is the same gallery alone,
+  published to https://claude.ai/artifact/2dyF1DF8Zz8JJPPMpeA7pJ. Hook `window.__gal` (show, look, hawk, view, step) in that build.
 - Test hook `window.__rpg`: begin(fresh), sim(s, fps), set({pos,yaw,pitch,hp,gold,quest}), tp(x,z,yaw), spawn, clear, noEnc, fire, sword,
   execute, dash, key, act, enter(id), exit, wave(n), killAll, xp, give(slot,rar,lvl), ui(name), talk(id), travel(id), save, quest,
-  norender, render, state(). The page takes about 17 s to load headless (SwiftShader). `window.__world` is the old preview's hook.
+  norender, render, view(cam, target, fov)/unview, board, land, fly, jump, trial, look, cannon, keep(), hawk(), jp(), state().
+  The page takes about 17 s to load headless (SwiftShader). `window.__world` is the old preview's hook.

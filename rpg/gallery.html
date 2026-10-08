@@ -1,4 +1,4 @@
-<title>Templar: The Reach</title>
+<title>Templar Wargear Gallery</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Alegreya+Sans:wght@400;500;700&display=swap">
 <style>
@@ -349,8 +349,8 @@ details.credits a { color: var(--gold); }
 <div class="screen off" id="talk"><div class="box"><h2 id="tname"></h2><p id="ttext"></p><div class="btnrow" id="tbtns"></div></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-const ASSETS = /*__ASSETS__*/null;      // scanned textures, Kenney props and sounds, inlined by build.py
-const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.html: the wargear gallery on its own
+const ASSETS = {"tex": {}, "mean": {}, "kenney": {}, "snd": {}};      // scanned textures, Kenney props and sounds, inlined by build.py
+const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear gallery on its own
 (async function () {
   'use strict';
   const $ = id => document.getElementById(id);

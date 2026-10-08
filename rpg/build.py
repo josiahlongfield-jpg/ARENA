@@ -1,6 +1,7 @@
 """Build the Reach: inline the CC0 textures, the baked Kenney props and the game's sounds.
 
 game_src.html  -> game.html   the RPG (published as the artifact; no doc skeleton)
+               -> gallery.html  the wargear gallery alone (published as its own artifact)
 world_src.html -> world.html  the walkable preview it grew from
 Both scripts are syntax-checked with node.
 usage: python3 rpg/build.py   (from the repo root or from rpg/)
@@ -38,4 +39,12 @@ def build(src_name, out_name, data):
     print(f'{out_name}: {len(out) / 1e6:.1f} MB, syntax:', 'ok' if r.returncode == 0 else r.stderr)
 
 build('game_src.html', 'game.html', game_assets)
+# the wargear gallery on its own: the same source with no region, so none of the textures, props or sounds
+def build_gallery():
+    src = open(os.path.join(HERE, 'game_src.html')).read()
+    for a, b_ in [('/*__GALLERY__*/false', 'true'), ('/*__ASSETS__*/null', json.dumps({'tex': {}, 'mean': {}, 'kenney': {}, 'snd': {}})), ('<title>Templar: The Reach</title>', '<title>Templar Wargear Gallery</title>')]:
+        assert src.count(a) == 1, a; src = src.replace(a, b_)
+    open(os.path.join(HERE, 'gallery.html'), 'w').write(src)
+    print(f'gallery.html: {len(src) / 1e6:.1f} MB')
+build_gallery()
 build('world_src.html', 'world.html', assets)

@@ -125,8 +125,9 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
   rigged by Tripo with idle, walk, slash and hurt clips. `rpg/tools/tripo_rig_pack.py rig.glb rpg/assets/feyr_rig.json idle=… walk=… slash=… hurt=…`
   packs it (joint tree, inverse binds, byte normals and skin, WebP maps with the red glow as emission, 30 fps int16 clips, root motion
   taken out); build.py inlines it as `ASSETS.feyr`. Each Feyr gets its own bones, material and AnimationMixer; bind in the rig's own
-  space (`arm.matrix`), never the scaled world, or it renders 2.4x too big. 2.4 m tall, stalks on a sped-up walk (Tripo's run folds the
-  body), a long overhead slam, kneels (`hurt`) when broken at 40% for an execution. Two 'rift' encounters (by the Breach, lvl 4; and in
+  space (`arm.matrix`), never the scaled world, or it renders 2.4x too big. 2.4 m tall. It floats (the user's design: the legs end in one joined point), so every clip
+  leaves the legs in their sculpted pose, the hip height barely moves and the holder hovers at `FEYR.HOVER` with a drift; broken, the hips keep
+  still too. It glides on the sped-up walk (Tripo's run folds the body), a long overhead slam, kneels (`hurt`) when broken at 40% for an execution. Two 'rift' encounters (by the Breach, lvl 4; and in
   no-man's-land, lvl 9). Source GLBs: project files `templar-arena/concepts/step3/rig/`. Test hook `hurtE(i, dmg)`.
 - The player's body is the Vigil (`VIGIL`, `wearBody`): the user's own design, sculpted by Tripo from their four views and rigged there.
   `rpg/tools/vigil_pack.py rig.glb rpg/assets/vigil_rig.json` folds Tripo's 41 joints into the Templar's 17 (plus a forearm twist joint each side)

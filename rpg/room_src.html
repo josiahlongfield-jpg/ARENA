@@ -35,7 +35,7 @@ button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
 <div id="cross"></div>
 <section id="panel" aria-label="Room controls">
   <div class="top"><h1>Character room</h1><button id="hide" type="button" aria-label="Hide the panel">Hide</button></div>
-  <p>The Vigil and the Feyr, with the meshes, maps and lights they have in The Reach. The Vigil is 1.95 m to the top of her helm. The Feyr is 2.4 m and floats.</p>
+  <p>The Vigil, the Skeleton and the Feyr, with the meshes, maps and lights The Reach uses. The Vigil and the Skeleton are 1.95 m. The Feyr is 2.4 m and floats.</p>
   <dl id="keys" class="desk"><dt>W A S D</dt><dd>Walk (Shift to go faster)</dd><dt>Mouse</dt><dd>Look; click the room to lock it, Esc to free it</dd>
     <dt>Space / C</dt><dd>Raise or lower your eye</dd><dt>Wheel</dt><dd>Zoom</dd><dt>L / P / R</dt><dd>Light, pause the idle, back to the door</dd></dl>
   <p class="touch">Drag on the left half to walk and on the right half to look.</p>
@@ -139,9 +139,10 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
       emissiveMap: tex('emis', true), emissive: 0xffffff, emissiveIntensity: 2.4, skinning: true });
   }
 
-  // ================================================================ the Vigil: the player's skeleton, bound as wearBody binds it in the game
-  function buildVigil() {
-    const A = ASSETS.vigil, at = k => new V3(...A.at[k]), root = new THREE.Group(), J = { root };
+  // ================================================================ the Vigil and the Skeleton: the player's skeleton, bound as wearBody binds it in
+  // the game (each packed by tools/vigil_pack.py from a Tripo rig, so the Skeleton is ready to wear as a body too)
+  function buildBody(A) {
+    const at = k => new V3(...A.at[k]), root = new THREE.Group(), J = { root };
     const g = (parent, p) => { const o = new THREE.Group(); o.position.copy(p); parent.add(o); return o; };
     J.pelvis = g(root, at('pelvis')); J.waist = g(J.pelvis, at('waist').sub(at('pelvis'))); J.head = g(J.waist, at('head').sub(at('waist')));
     for (const s of 'LR') {
@@ -163,9 +164,9 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
     J.rest = {}; for (const k of A.joints) J.rest[k] = J[k].quaternion.clone();
     return J;
   }
-  // her idle (the game drives her by hand, so this is too): a slow breath, a look round, weight easing between the feet, arms settled in from the A-pose
+  // the idle (the game drives her by hand, so this is too): a slow breath, a look round, weight easing between the feet, arms settled in from the A-pose
   const _qa = new THREE.Quaternion(), _Z = new V3(0, 0, 1);
-  function idleVigil(J, t) {
+  function idleBody(J, t) {
     const br = Math.sin(t * 1.55), sway = Math.sin(t * 0.35);
     J.waist.rotation.set(0.014 * br - 0.01, 0.05 * Math.sin(t * 0.23), 0);
     J.head.rotation.set(0.05 * Math.sin(t * 0.41) - 0.02, 0.32 * Math.sin(t * 0.19) + 0.07 * Math.sin(t * 0.67), 0);
@@ -209,11 +210,11 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
   function feyrDrift(F, t) { F.holder.position.y = FEYR_HOVER + 0.04 * Math.sin(t * 1.3); }
 
   // they stand mid-hall facing the door, with the sun behind you as you come in
-  const VG = buildVigil(), FY = buildFeyr();
-  VG.root.position.set(-1.5, 0, 0); FY.root.position.set(1.7, 0, 0); VG.root.rotation.y = FY.root.rotation.y = PI;
-  scene.add(VG.root, FY.root);
-  plaque('The Vigil', 'player · 1.95 m', -1.5, -1.0); plaque('The Feyr', 'enemy · 2.4 m', 1.7, -1.2);
-  const BODIES = [{ x: -1.5, z: 0, r: 0.42, h: 2.0 }, { x: 1.7, z: 0, r: 0.55, h: 2.45 }];
+  const VG = buildBody(ASSETS.vigil), SK = buildBody(ASSETS.skeleton), FY = buildFeyr();
+  VG.root.position.set(-3, 0, 0); SK.root.position.set(0, 0, 0); FY.root.position.set(3, 0, 0);
+  for (const o of [VG, SK, FY]) { o.root.rotation.y = PI; scene.add(o.root); }
+  plaque('The Vigil', 'player · 1.95 m', -3, -1.0); plaque('The Skeleton', 'sculpt · 1.95 m', 0, -1.0); plaque('The Feyr', 'enemy · 2.4 m', 3, -1.2);
+  const BODIES = [{ x: -3, z: 0, r: 0.42, h: 2.0 }, { x: 0, z: 0, r: 0.42, h: 2.0 }, { x: 3, z: 0, r: 0.55, h: 2.45 }];
 
   // ================================================================ you: walk, look, raise your eye, zoom
   const ME = { pos: new V3(0, 0, -5.5), yaw: PI, pitch: -0.05, eye: 1.7, fov: 70 }, HOME = { x: 0, z: -5.5, yaw: PI, pitch: -0.05, eye: 1.7 };
@@ -281,7 +282,7 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
   let t = 0, last = performance.now(), frozen = false;
   function step(dt) {
     move(dt);
-    if (!paused) { t += dt; FY.mix.update(dt); feyrDrift(FY, t); idleVigil(VG, t); }
+    if (!paused) { t += dt; FY.mix.update(dt); feyrDrift(FY, t); idleBody(VG, t); idleBody(SK, t + 2.7); }
     cam.position.set(ME.pos.x, ME.eye, ME.pos.z); cam.rotation.set(ME.pitch, ME.yaw, 0);
     if (Math.abs(cam.fov - ME.fov) > 0.01) { cam.fov += (ME.fov - cam.fov) * damp(12, dt); cam.updateProjectionMatrix(); }
     if (hintT > 0 && (hintT -= dt) <= 0 && locked) $('hint').classList.add('off');

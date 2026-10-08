@@ -2,7 +2,7 @@
 
 usage: python3 rpg/tools/vigil_pack.py rig.glb out.json
 env:   H height in metres (1.95), TEX colour map size (4096), NTEX normal map size (2048), DARK albedo power, METAL, ROUGH,
-       W0/W1 white glow thresholds, EMIT
+       W0/W1 white glow thresholds, EMIT; GLOW=red finds red light instead (G0/G1 thresholds, GLOW_RGB its tint)
 
 The game keeps the Templar's rig (IK arms, procedural legs, every pose) and only moves its joints to her proportions, so this
 keeps no clips and no Tripo skeleton: it turns the mesh to face +Z (right side -X, feet at y = 0), folds Tripo's 41 joints
@@ -91,9 +91,14 @@ MR = np.asarray(img(mt['pbrMetallicRoughness']['metallicRoughnessTexture']['inde
 NM = img(mt['normalTexture']['index'])
 ss = lambda e0, e1, x: np.clip((x - e0) / (e1 - e0), 0, 1) ** 2 * (3 - 2 * np.clip((x - e0) / (e1 - e0), 0, 1))
 mx_, mn_ = C.max(-1), C.min(-1)
-glow = ss(float(os.environ.get('W0', 0.62)), float(os.environ.get('W1', 0.85)), mx_) * (1 - ss(0.12, 0.3, (mx_ - mn_) / (mx_ + 1e-4)))
-E = glow[..., None] ** 1.5 * np.clip(C * np.array([0.9, 0.95, 1.05]), 0, 1) * float(os.environ.get('EMIT', 1.6))
-A = np.power(C, float(os.environ.get('DARK', 1.2))) * (1 - glow[..., None] * 0.6) + glow[..., None] * np.array([0.5, 0.52, 0.55]) * 0.6
+if os.environ.get('GLOW') == 'red':      # red lights (veins, ribs, eyes): red that outshines the rest, found as step3/tripo_pack.py finds it
+    glow = ss(float(os.environ.get('G0', 0.15)), float(os.environ.get('G1', 0.45)), C[..., 0] - np.maximum(C[..., 1], C[..., 2])) * ss(0.3, 0.7, C[..., 0])
+    tint, under = np.array([float(x) for x in os.environ.get('GLOW_RGB', '1.25,0.22,0.16').split(',')]), np.array([0.12, 0.015, 0.01])
+else:                                    # white lights (the Vigil's visor, ear discs and lamps)
+    glow = ss(float(os.environ.get('W0', 0.62)), float(os.environ.get('W1', 0.85)), mx_) * (1 - ss(0.12, 0.3, (mx_ - mn_) / (mx_ + 1e-4)))
+    tint, under = np.array([0.9, 0.95, 1.05]), np.array([0.5, 0.52, 0.55])
+E = glow[..., None] ** 1.5 * np.clip(C * tint, 0, 1) * float(os.environ.get('EMIT', 1.6))
+A = np.power(C, float(os.environ.get('DARK', 1.2))) * (1 - glow[..., None] * 0.6) + glow[..., None] * under * 0.6
 rough = np.clip(MR[..., 1] + float(os.environ.get('ROUGH', 0.1)), 0.2, 1); metal = np.clip(MR[..., 2] * float(os.environ.get('METAL', 0.5)) * (1 - glow), 0, 1)
 q = lambda a: Image.fromarray((np.clip(a, 0, 1) * 255 + 0.5).astype(np.uint8))
 def webp(im, qq, size):

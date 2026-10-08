@@ -144,12 +144,14 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
   (`buildCaster`, `vigil/assets/feyr_caster.json`, copied from the studies viewer's `fc_sculpt_data.js`) stands still, unskinned; its orbiting shards and the
   orb in its raised left hand are made in code as the studies make them, and the orb's light goes in `GLOWS` (turned down in the new pipeline). The Skeleton is the user's skeletal design, Tripo-rigged
   and packed by `vigil_pack.py` (GLOW=red) into `rpg/assets/skeleton_rig.json`, so it could be worn with `wearBody` like the Vigil. Both Vigils use
-  `vigil/assets/vigil_body.json` (her rig plus finger joints). The armed one (`AV`, `stanceBody`, `STANCE`) is posed by hand each frame: legs by two-bone IK
-  (`legTo`), the rifle placed from her right eye (sight line) and her shoulder pocket (butt), then the arms by IK (`armTo`) onto the grips from
-  `vigil/assets/grips_body.json`, fingers included; the at-ease one's fingers fall into a loose curl (`relaxHands`). R (or the panel button) switches between Vigil's renderer (`vigil/src/js/render.js`, injected at
+  `vigil/assets/vigil_body.json` (her rig plus finger joints). The armed one (`AV`, `stanceBody`, `STANCE`) is posed by hand each frame after the user's reference
+  (project files `templar-arena/concepts/step3/stance_refs/`): square to the front, feet wide and knees bent (two-bone IK, `legTo`), the rifle
+  across her upper chest aimed `aim.yaw` to her left with the butt at `pocket` (tucked into her right shoulder: the user wants the stock always
+  in the shoulder pocket, which keeps the rifle back and the left arm natural), the head solved so her right eye lands on the sight line
+  (`R.relief`, about 9 cm), then the arms by IK (`armTo`) onto the grips from `vigil/assets/grips_body.json`, fingers included; the at-ease one's fingers fall into a loose curl (`relaxHands`). R (or the panel button) switches between Vigil's renderer (`vigil/src/js/render.js`, injected at
   `/*__RENDER__*/`) and the plain one; B goes back to the door; `?old` starts plain. The hands are the game's own (`vigil/src/js/hands.js`, injected at
-  `/*__HANDS__*/`). `armTo` turns each elbow round so the forearm lines up with the hand (`straightPole`, from `J.handU`), so the wrists bend less; the left elbow instead
-  hangs from the shoulder-hand line and swings out by `STANCE.flare.L` (0.5 rad), so the upper arm stays off her chest (the user's call).
+  `/*__HANDS__*/`). `armTo` turns each elbow round so the forearm lines up with the hand (`straightPole`, from `J.handU`), so the wrists bend less; with a flare the
+  elbow instead hangs from the shoulder-hand line and swings out by it (`STANCE.flare`: left 0.35 rad, just off her chest as the user asked; right 1.0, raised to her side).
   room.html passed 16 MB, so build.py also writes `rpg/room_artifact/` (index.html and an `a_<asset>.js` per asset, filling `window.VGA`), and that is
   what gets published (with `files`) to https://claude.ai/artifact/LWHmSFayM8rJzQn44RZJCZ. Hook `window.__room` (set, light, sim, still, run, mode(on), armed, rifle, caster, stance, pose).
 - Test hook `window.__rpg`: begin(fresh), sim(s, fps), set({pos,yaw,pitch,hp,gold,quest}), tp(x,z,yaw), spawn, clear, noEnc, fire, sword,

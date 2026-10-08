@@ -348,15 +348,19 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
   }
 
   // ================================================================ the Vigil armed, in a combat stance
-  // Posed by hand each frame: feet bladed and planted (two-bone IK), the spine leant into the gun, the head down on the stock. The rifle
-  // goes where her eye and shoulder put it: the sight line through her right eye and the butt in her right shoulder's pocket, kept
-  // upright. Then each arm reaches for its grip (vigil/tools/grip_solve.py: where the hand sits on the rifle, and every finger joint's
-  // turn, found so the fingers wrap the grip and the handguard without passing into them), so the hands go with the rifle as she breathes.
-  const STANCE = { px: -0.033, py: -0.442, drop: 0.046, wx: 0.286, wy: -0.227, wz: 0.101, hx: 0.35, hy: 0.392, hz: 0.1,      // the left elbow bent about 40 degrees
-    eye: new V3(-0.032, 1.80, 0.055), pocket: new V3(-0.112, 1.589, 0.040),      // her right eye, and the butt's place on her armour, at rest
-    feet: { L: [0.20, 0.13, -0.25], R: [-0.20, -0.22, -0.75] },                  // x, z and the way each foot points (left forward, right turned out)
-    elbow: { L: new V3(0.25, -1, 0.05), R: new V3(-1, -0.45, -0.25) },          // which way each elbow goes
-    flare: { L: 0.5 } };      // the left elbow: radians out from hanging straight down, away from her body (about the shoulder-hand line, so the bend is kept)
+  // Posed by hand each frame, after the user's reference (project files templar-arena/concepts/step3/stance_refs/): square to the front, feet wide
+  // and knees bent (two-bone IK), the rifle across her upper chest aimed to her left with the butt tucked into her right shoulder's pocket, the
+  // head turned down onto the stock so her right eye is on the sight line. Then each arm reaches for its grip (vigil/tools/grip_solve.py: where
+  // the hand sits on the rifle, and every finger joint's turn, found so the fingers wrap the grip and the foregrip without passing into them),
+  // so the hands go with the rifle as she breathes.
+  const STANCE = { px: 0, py: 0, drop: 0.12, wx: 0.1, wy: 0.15, wz: 0,      // hips down 12 cm, chest leant a little forward and turned a little toward the aim
+    aim: { yaw: 1.25, pitch: 0 },      // the rifle: radians to her left of her chest's facing, and up from level
+    tilt: 0.1,      // the head's lean onto the stock (toward her right shoulder) before the eye is brought onto the sight line
+    eye: new V3(-0.032, 1.80, 0.055), pocket: new V3(-0.15, 1.62, 0.03),      // her right eye, and the butt's place in her shoulder's pocket, at rest
+      // (the butt's top level with the top of her shoulder, pressed against her collar and the inside of the pauldron; the eye then sits about 9 cm behind the rear sight)
+    feet: { L: [0.42, 0.03, 0.55, 0.6], R: [-0.42, -0.03, -0.2, -0.45] },       // x, z, the way each foot points and the way its knee points (a little out)
+    flare: { L: 0.35, R: 1.0 } };      // each elbow: radians out from hanging straight down (about the shoulder-hand line, so the bend is kept): the left a little
+                                       // away from her body under the foregrip, the right raised out to her side with the forearm across her chest to the grip
   const FING = ['thumb', 'index', 'middle', 'ring', 'little'], _Y = new V3(0, 1, 0), _X = new V3(1, 0, 0);
   const atv = (J, k) => new V3(...J.A.at[k]), _qw = new THREE.Quaternion(), _qp = new THREE.Quaternion(), _mb = new THREE.Matrix4();
   const _a = new V3(), _b = new V3(), _c = new V3(), _d = new V3();
@@ -378,7 +382,7 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
   function armTo(J, s, Mt, pole, flare) {
     const sh = J['sh' + s], el = J['el' + s], hd = J['hd' + s], tw = J['tw' + s];
     const S = sh.getWorldPosition(new V3()), W = new V3().setFromMatrixPosition(Mt);
-    if (J.handU) pole = straightPole(S, W, new V3().copy(J.handU[s]).applyMatrix4(new THREE.Matrix4().extractRotation(Mt)).normalize(), pole, new V3());
+    if (flare === undefined && J.handU) pole = straightPole(S, W, new V3().copy(J.handU[s]).applyMatrix4(new THREE.Matrix4().extractRotation(Mt)).normalize(), pole, new V3());
     if (flare !== undefined) {      // the elbow hangs straight down from the shoulder-hand line, then swings out by flare toward her side
       const n = new V3().subVectors(W, S).normalize(), dn = new V3(0, -1, 0).transformDirection(J.root.matrixWorld), o = new V3(s === 'L' ? 1 : -1, 0, 0).transformDirection(J.root.matrixWorld);
       dn.addScaledVector(n, -dn.dot(n)).normalize(); o.addScaledVector(n, -o.dot(n));
@@ -400,9 +404,9 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
     const m0 = new THREE.Matrix4().makeBasis(u0, h0, new V3().crossVectors(u0, h0)), m1 = new THREE.Matrix4().makeBasis(u1, h1, new V3().crossVectors(u1, h1));
     return _qw.setFromRotationMatrix(m1.multiply(m0.transpose()));
   }
-  function legTo(J, s, A, yaw) {
+  function legTo(J, s, A, yaw, ky = yaw) {      // ky: the way the knee points, if not over the foot
     const hip = J['hip' + s], knee = J['knee' + s], H = hip.getWorldPosition(new V3());
-    const K = midJoint(H, A, atv(J, 'knee' + s).distanceTo(atv(J, 'hip' + s)), atv(J, 'ankle' + s).distanceTo(atv(J, 'knee' + s)), new V3(Math.sin(yaw), 0, Math.cos(yaw)));
+    const K = midJoint(H, A, atv(J, 'knee' + s).distanceTo(atv(J, 'hip' + s)), atv(J, 'ankle' + s).distanceTo(atv(J, 'knee' + s)), new V3(Math.sin(ky), 0, Math.cos(ky)));
     const h = new V3().crossVectors(_c.subVectors(K, H), _d.subVectors(A, K)).normalize();
     setWorldQ(hip, aimBone(atv(J, 'hip' + s), atv(J, 'knee' + s), H, K, h));
     setWorldQ(knee, aimBone(atv(J, 'knee' + s), atv(J, 'ankle' + s), K, A, h));
@@ -414,32 +418,41 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
     const p0 = root.position.clone(), q0 = root.quaternion.clone(); root.position.set(0, 0, 0); root.quaternion.identity();
     J.pelvis.position.set(0, J.A.at.pelvis[1] - S.drop + 0.003 * br, 0); J.pelvis.rotation.set(S.px, S.py, 0);
     J.waist.rotation.set(S.wx + 0.01 * br, S.wy + 0.008 * Math.sin(t * 0.37), S.wz);
-    J.head.rotation.set(S.hx - 0.006 * br, S.hy, S.hz);
     root.updateMatrixWorld(true);
-    for (const s of 'LR') { const f = S.feet[s]; legTo(J, s, new V3(f[0], J.A.at['ankle' + s][1], f[1]), f[2]); }
-    // the rifle. In its frame the eye is on the sight line 'relief' behind the rear sight and the butt is at RB, so the eye sits drop
-    // above and back in front of the butt: that fixes the rifle's turn about its own side (X, kept level); the butt fixes where it is
-    const E = J.head.localToWorld(new V3().subVectors(S.eye, atv(J, 'head'))), B = J.waist.localToWorld(new V3().subVectors(S.pocket, atv(J, 'waist')));
-    const RB = new V3(...ASSETS.rifle.pts.butt), len = E.distanceTo(B), cy = -RB.y / len, sz = Math.sqrt(Math.max(0, 1 - cy * cy));
-    const v = new V3().subVectors(E, B).normalize(), X = new V3().crossVectors(v, _Y).normalize(), w = new V3().crossVectors(X, v);
-    const Yr = v.clone().multiplyScalar(cy).addScaledVector(w, sz), Zr = w.clone().multiplyScalar(cy).addScaledVector(v, -sz);
-    R.relief = RB.z - sz * len; R.matrix.makeBasis(X, Yr, Zr); R.matrix.setPosition(B.clone().sub(RB.applyMatrix4(R.matrix)));
+    for (const s of 'LR') { const f = S.feet[s]; legTo(J, s, new V3(f[0], J.A.at['ankle' + s][1], f[1]), f[2], f[3]); }
+    // the rifle: the butt (RB in its frame) at the pocket, the muzzle aim.yaw to her left of where her chest faces and aim.pitch up, kept upright
+    const B = J.waist.localToWorld(new V3().subVectors(S.pocket, atv(J, 'waist'))), RB = new V3(...ASSETS.rifle.pts.butt);
+    const ch = new V3(0, 0, 1).transformDirection(J.waist.matrixWorld).setY(0).normalize(), yw = Math.atan2(ch.x, ch.z) + S.aim.yaw;
+    const f = new V3(Math.sin(yw) * Math.cos(S.aim.pitch), Math.sin(S.aim.pitch), Math.cos(yw) * Math.cos(S.aim.pitch));
+    const Xr = new V3().crossVectors(f, _Y).normalize(), Zr = f.clone().negate(), Yr = new V3().crossVectors(Zr, Xr);
+    R.matrix.makeBasis(Xr, Yr, Zr); R.matrix.setPosition(B.clone().sub(RB.applyMatrix4(R.matrix)));
+    // the head: looking down the rifle and leant onto the stock, then turned about the neck the least that puts her right eye on the sight line,
+    // at the point of it in front of her neck that the eye can reach (its distance behind the rear sight is the eye relief)
+    J.head.quaternion.identity(); root.updateMatrixWorld(true);
+    const H = J.head.getWorldPosition(new V3()), e = new V3().subVectors(S.eye, atv(J, 'head')), r = e.length();
+    const OH = new V3().setFromMatrixPosition(R.matrix).sub(H), b = Zr.dot(OH), disc = b * b - (OH.lengthSq() - r * r);
+    R.relief = -b - Math.sqrt(Math.max(0, disc)); R.reach = disc;
+    const Xh = new V3().crossVectors(_Y, f).normalize(), q = basisQ(Xh, new V3().crossVectors(f, Xh), f).clone();
+    q.premultiply(new THREE.Quaternion().setFromAxisAngle(f, S.tilt));
+    const Et = new V3().setFromMatrixPosition(R.matrix).addScaledVector(Zr, R.relief).sub(H).normalize();
+    q.premultiply(new THREE.Quaternion().setFromUnitVectors(e.clone().applyQuaternion(q).normalize(), Et));
+    setWorldQ(J.head, q);
     root.updateMatrixWorld(true);
     for (const s of 'LR') {
-      armTo(J, s, new THREE.Matrix4().multiplyMatrices(R.matrix, GRIP[s].T).multiply(J.restW['hd' + s]), S.elbow[s], S.flare[s]);
+      armTo(J, s, new THREE.Matrix4().multiplyMatrices(R.matrix, GRIP[s].T).multiply(J.restW['hd' + s]), null, S.flare[s]);
       FING.forEach((f, fi) => { for (let k = 0; k < 3; k++) { const n = f + (k + 1) + s; J[n].quaternion.copy(J.rest[n]).multiply(GRIP[s].q[fi * 3 + k]); } });
     }
     root.position.copy(p0); root.quaternion.copy(q0); root.updateMatrixWorld(true);
   }
   const GRIP = {}; for (const s of 'LR') { const g = ASSETS.grips[s]; GRIP[s] = { T: new THREE.Matrix4().set(...g.T.flat()), q: g.q.map(q => new THREE.Quaternion(...q)) }; }
 
-  // they stand mid-hall facing the door, with the sun behind you as you come in; the armed Vigil aims off to her left, so you see her
-  // right side (the trigger hand, the stock in her shoulder, her head on it) as you come in
+  // they stand mid-hall facing the door, with the sun behind you as you come in; the armed Vigil faces you too, aiming across to her left
+  // as in the user's reference, so you see the rifle side on with its stock in her shoulder and her head on it
   const VG = buildBody(ASSETS.vigil), AV = buildBody(ASSETS.vigil), RIFLE = buildRifle(ASSETS.rifle), SK = buildBody(ASSETS.skeleton), FY = buildFeyr(), FC = buildCaster(ASSETS.caster);
   AV.root.add(RIFLE);
   VG.root.position.set(-6, 0, 0); AV.root.position.set(-3, 0, 0); SK.root.position.set(0, 0, 0); FY.root.position.set(3, 0, 0); FC.root.position.set(6, 0, 0);
   for (const o of [VG, AV, SK, FY, FC]) { o.root.rotation.y = PI; scene.add(o.root); }
-  AV.root.rotation.y = PI + 0.6; stanceBody(AV, RIFLE, 0);
+  AV.root.rotation.y = PI + 0.2; stanceBody(AV, RIFLE, 0);
   plaque('The Vigil', 'player · 1.95 m', -6, -1.0); plaque('The Vigil, armed', 'rifle · combat stance', -3, -1.1);
   plaque('The Skeleton', 'sculpt · 1.95 m', 0, -1.0); plaque('The Feyr', 'enemy · 2.4 m', 3, -1.2); plaque('The Feyr caster', 'enemy · 2.43 m', 6, -1.2);
   const BODIES = [{ x: -6, z: 0, r: 0.42, h: 2.0 }, { x: -3, z: 0, r: 0.55, h: 2.0 }, { x: 0, z: 0, r: 0.42, h: 2.0 }, { x: 3, z: 0, r: 0.55, h: 2.45 }, { x: 6, z: 0, r: 0.6, h: 2.5 }];

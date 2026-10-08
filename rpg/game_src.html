@@ -2946,7 +2946,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
   const capeOf = it => !it ? null : /Castellan/.test(it.name) ? 'R' : (it.kind === 'crusader' || /Shroud|Vigil/.test(it.name)) ? 'W' : null;
   function applyLook(over) {
     const eq = Object.assign({}, R.eq, over || {}), L = T.look;
-    L.blade = kindOf(eq.blade, 'blade'); L.pistol = kindOf(eq.pistol, 'pistol'); L.pack = kindOf(eq.pack, 'pack'); L.armour = kindOf(eq.armour, 'armour'); L.cape = capeOf(eq.armour);
+    L.blade = kindOf(eq.blade, 'blade'); L.pistol = kindOf(eq.pistol, 'pistol'); L.pack = kindOf(eq.pack, 'pack'); L.armour = kindOf(eq.armour, 'armour'); L.cape = capeOf(eq.armour) || cosCape();
     T.sword.visible = L.blade === 'power'; T.chain.visible = L.blade === 'chain'; T.hammer.visible = L.blade === 'hammer';
     T.bladeBase = L.blade === 'chain' ? T.chainBase : L.blade === 'hammer' ? T.hammerBase : T.swordBase;
     T.bladeTip = L.blade === 'chain' ? T.chainTip : L.blade === 'hammer' ? T.hammerTip : T.swordTip;
@@ -3200,27 +3200,34 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
   const COSS = [['shader', 'Shader', () => COS.SHADERS], ['emblem', 'Emblem', () => COS.EMBLEMS], ['skull', 'Servo-skull', () => COS.SKULLS], ['orn', 'Blade ornament', () => COS.ORNS], ['hawk', 'Thunderhawk', () => COS.HAWKS]];
   const COSG = { shader: '<path d="M12 3c4 5 7 8 7 12a7 7 0 0 1-14 0c0-4 3-7 7-12z"/>', emblem: '<path d="M3 5h18v10l-9 5-9-5z"/>', skull: '<path d="M12 3a7 7 0 0 0-7 7c0 3 2 4 2 6h10c0-2 2-3 2-6a7 7 0 0 0-7-7z M9 10h2v2H9z M13 10h2v2h-2z M9 18h6v2H9z"/>',
     orn: '<path d="M11 2h2l1 13h-4z M6 15h12v2H6z M11 17h2v5h-2z M4 6l3 1-1 2z M20 6l-3 1 1 2z"/>', hawk: '<path d="M12 3l3 7 7 3-7 1-3 7-3-7-7-1 7-3z"/>' };
+  // each choice's swatch on its tile, so the grid reads at a glance
+  const COSW = { templar: '#e8e2d2', battleworn: '#9a6a44', ceremonial: '#f4efe2', crusade: '#c0281e', penitent: '#a69e8a', champion: '#ffd165',
+    bone: '#d8cfbc', gilded: '#e9b949', cherub: '#e3b9a2', auspex: '#8fd17a', chapter: '#d8cfbc', ash: '#9a948a',
+    field: '#7fc4ff', gold: '#ffb64a', crimson: '#ff4a36', white: '#eef2ff', steel: '#a4aab2', bronze: '#c08442' };
+  const cosSw = (k, id) => k === 'hawk' && id === 'crusade' ? '#c0281e' : k === 'hawk' && id === 'ceremonial' ? '#f2c65a' : COSW[id] || 'currentColor';
   function cosList(k) { const L = COSS.find(c => c[0] === k)[2](); return k === 'orn' ? L.filter(o => !o.blade || o.blade === kindOf(R.eq.blade, 'blade')) : L; }
   const cosName = (k, id) => { const o = COSS.find(c => c[0] === k)[2]().find(x => x.id === id); return o ? o.name : '—'; };
-  const cosOwn = (k, id) => R.cos.un[k] && R.cos.un[k].includes(id);
-  function freshCos() {
+  const cosOwn = (k, id) => id === COS.DEF[k] || (k === 'orn' && id === COS.DEF.teeth) || !!(R.cos.un[k] && R.cos.un[k].includes(id));
+  const cosWorn = (k, o) => R.cos[k === 'orn' && o && o.blade === 'chain' ? 'teeth' : k];      // ornaments: a power field and chain teeth are kept apart
+  const cosKey = k => k === 'orn' && kindOf(R.eq.blade, 'blade') === 'chain' ? 'teeth' : k;
+  function freshCos() {       // the first two of each list (ornaments: two per blade) are the Chapter's issue
     const un = {};
-    for (const [k, , L] of COSS) { const l = L(); un[k] = l.slice(0, 2).map(o => o.id); if (k === 'orn') for (const o of l) if (!un.orn.some(id => l.find(x => x.id === id).blade === o.blade)) un.orn.push(o.id); }
-    return { shader: COS.SHADERS[0].id, emblem: COS.EMBLEMS[0].id, skull: COS.SKULLS[0].id, orn: COS.ORNS[0].id, hawk: COS.HAWKS[0].id, un };
+    for (const [k, , L] of COSS) { const l = L(); un[k] = k === 'orn' ? [...new Set(l.map(o => o.blade))].flatMap(b => l.filter(o => o.blade === b).slice(0, 2).map(o => o.id)) : l.slice(0, 2).map(o => o.id); }
+    return Object.assign({}, COS.DEF, { un });
   }
-  function applyCos() { if (!R.cos) R.cos = freshCos(); COS.applyShader(R.cos.shader); COS.applyHawk(R.cos.hawk); COS.applyOrn(R.cos.orn); COS.skull.setVariant(R.cos.skull); }
+  function applyCos() { if (!R.cos) R.cos = freshCos(); for (const k in COS.DEF) if (!R.cos[k]) R.cos[k] = COS.DEF[k]; COS.applyAll(R.cos); }
   // a cosmetic you don't own yet: bosses, warded foes and the better reliquaries sometimes give one
   function cosDrop(chance) {
     if (Math.random() > chance) return;
     const L = []; for (const [k, n] of COSS) for (const o of cosList(k)) if (!cosOwn(k, o.id)) L.push([k, n, o]);
     if (!L.length) return; const [k, n, o] = pick(L); R.cos.un[k].push(o.id); feed(`${n} found: ${o.name}`, 'rar3'); SYN.horn();
   }
-  const cosTile = (k, n) => `<button class="tile sm cs-ui cos" data-act="cs-cos" data-k="${k}" type="button" aria-label="${n}: ${esc(cosName(k, R.cos[k]))}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${COSG[k]}</svg></button>`;
+  const cosTile = (k, n) => `<button class="tile sm cs-ui cos" data-act="cs-cos" data-k="${k}" type="button" aria-label="${n}: ${esc(cosName(k, R.cos[cosKey(k)]))}"><svg viewBox="0 0 24 24" fill="${cosSw(k, R.cos[cosKey(k)])}" aria-hidden="true">${COSG[k]}</svg></button>`;
 
   function renderCS() {
     if (!R.cos) R.cos = freshCos();
     const S = SUBS[subCur()];
-    $('csBanner').innerHTML = `<div class="emb">${COS.emblemSVG(R.cos.emblem)}</div><div class="who"><b>Brother Templar</b><small style="color:${S.col}">${S.name}</small><small>Level ${R.lvl}${R.lvl < MAXLVL ? ` · ${R.xp} / ${xpNext(R.lvl)}` : ''}</small></div><div class="pwr"><span>${ST.power}</span><small>Power</small></div>`;
+    $('csBanner').innerHTML = `<div class="emb">${COS.emblemSVG(R.cos.emblem).replace('<svg', '<svg preserveAspectRatio="xMinYMid meet"')}</div><div class="who"><b>Brother Templar</b><small style="color:${S.col}">${S.name}</small><small>Level ${R.lvl}${R.lvl < MAXLVL ? ` · ${R.xp} / ${xpNext(R.lvl)}` : ''}</small></div><div class="pwr"><span>${ST.power}</span><small>Power</small></div>`;
     $('csTabs').innerHTML = [['gear', 'Wargear'], ['sub', 'Subclass'], ['cru', 'Crusade']].map(([k, n]) => `<button class="${CS.tab === k ? 'on' : ''}" data-act="cs-tab" data-k="${k}" type="button">${n}${k === 'sub' && subPts(subCur()) ? ` <i>${subPts(subCur())}</i>` : ''}</button>`).join('');
     $('csMats').innerHTML = `<span><b>${R.gold}</b> thrones</span><span><b>${R.mat.adam || 0}</b> adamantium</span><span><b>${R.mat.oil || 0}</b> blessed oil</span><span><b>${R.ung}</b> / ${ST.ungMax} unguents</span>`;
     for (const [id, k] of [['csGear', 'gear'], ['csSub', 'sub'], ['csCru', 'cru']]) $(id).hidden = CS.tab !== k;
@@ -3239,7 +3246,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
       let cells = '', title = '';
       if (CS.open.startsWith('cos:')) {
         const k = CS.open.slice(4), n = COSS.find(c => c[0] === k)[1]; title = n;
-        cells = cosList(k).map(o => { const own = cosOwn(k, o.id); return `<button class="tile sm cs-ui cos${R.cos[k] === o.id ? ' on' : ''}${own ? '' : ' lockd'}" data-act="cs-cosset" data-k="${k}" data-id="${o.id}" type="button"${own ? '' : ' disabled'} title="${esc(o.name)}${own ? '' : ' (not found yet)'}">${k === 'emblem' ? `<span class="embm">${COS.emblemSVG(o.id)}</span>` : `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${COSG[k]}</svg>`}<span class="nm">${esc(o.name)}</span></button>`; }).join('');
+        cells = cosList(k).map(o => { const own = cosOwn(k, o.id); return `<button class="tile sm cs-ui cos${cosWorn(k, o) === o.id ? ' on' : ''}${own ? '' : ' lockd'}" data-act="cs-cosset" data-k="${k}" data-id="${o.id}" type="button"${own ? '' : ' disabled'} title="${esc(o.name)}${own ? '' : ' (not found yet)'}">${k === 'emblem' ? `<span class="embm">${COS.emblemSVG(o.id)}</span>` : `<svg viewBox="0 0 24 24" fill="${cosSw(k, o.id)}" aria-hidden="true">${COSG[k]}</svg>`}<span class="nm">${esc(o.name)}</span></button>`; }).join('');
       } else {
         const L = owned(CS.open), pages = Math.max(1, Math.ceil(L.length / 9)); CS.page = Math.min(CS.page, pages - 1); title = `${SLOTN[CS.open]} · ${L.length} in your pack`;
         cells = L.slice(CS.page * 9, CS.page * 9 + 9).map(it => tileHTML(it, CS.open, (CS.pin === it ? ' on' : '') + (it.pw > (R.eq[CS.open] ? R.eq[CS.open].pw : 0) ? ' better' : '')).replace('data-act="cs-slot"', 'data-act="cs-pick"')).join('')
@@ -3321,7 +3328,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
     if (a === 'cs-pick') { pickPreview(findItem(b.dataset.it)); CS.hover = null; renderCS(); sfx('bdraw', 0.25, 1.7); return; }
     if (a === 'cs-page') { CS.page += +b.dataset.d; renderCS(); return; }
     if (a === 'cs-cos') { const k = 'cos:' + b.dataset.k; CS.open = CS.open === k ? null : k; pickPreview(null); renderCS(); return; }
-    if (a === 'cs-cosset') { const k = b.dataset.k; if (!cosOwn(k, b.dataset.id)) return; R.cos[k] = b.dataset.id; applyCos(); if (k === 'skull' || k === 'hawk') feed(`${cosName(k, b.dataset.id)}`); renderCS(); return; }
+    if (a === 'cs-cosset') { const k = b.dataset.k; if (!cosOwn(k, b.dataset.id)) return; R.cos[k === 'orn' && kindOf(R.eq.blade, 'blade') === 'chain' ? 'teeth' : k] = b.dataset.id; applyCos(); if (k === 'skull' || k === 'hawk') feed(`${cosName(k, b.dataset.id)}`); renderCS(); return; }
     if (a === 'cs-equip' && it) { if (equipItem(it)) { pickPreview(it); applyLook(); CS.open = null; } renderCS(); return; }
     if (a === 'cs-dis' && it) { if (CS.armed !== 'dis:' + it.id) { CS.armed = 'dis:' + it.id; renderCard(); return; } dismantle(it); pickPreview(null); renderCS(); return; }
     if (a === 'cs-infuse' && it) { const fuel = findItem(b.dataset.fuel), arm = 'inf:' + b.dataset.fuel + ':' + it.id; if (CS.armed !== arm) { CS.armed = arm; renderCard(); return; } if (infuse(it, fuel)) { pickPreview(it); applyLook(); } renderCS(); return; }
@@ -6408,16 +6415,18 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
     let body = '';
     if (ex.id === 'templar') {
       const L = GAL.look, row = (k, label) => `<div class="grow"><span>${label}</span><div>${GOPT[k].map(([v_, n]) => `<button class="chip${L[k] === v_ ? ' on' : ''}" data-k="${k}" data-v="${v_}" type="button">${n}</button>`).join('')}</div></div>`;
-      body = row('blade', 'Blade') + row('pistol', 'Pistol') + row('armour', 'Armour') + row('pack', 'Pack') + row('pose', 'Pose')
-        + `<p class="gdesc">${[GDESC[L.blade], GDESC[L.pistol], GDESC[L.armour], GDESC[L.pack === 'power' ? 'pack_power' : L.pack]].join(' ')}</p>`;
+      body = row('blade', 'Blade') + row('pistol', 'Pistol') + row('armour', 'Armour') + row('pack', 'Pack') + row('pose', 'Pose') + row('shader', 'Shader') + row('skull', 'Skull')
+        + `<p class="gdesc">${[GDESC[L.blade], GDESC[L.pistol], GDESC[L.armour], GDESC[L.pack === 'power' ? 'pack_power' : L.pack], L.shader !== 'templar' ? COS.desc(L.shader) : ''].join(' ')}</p>`;
     } else if (ex.id === 'hawk') {
       const H = GAL.hawk, tg = (k, a, b) => `<button class="chip${H[k] ? ' on' : ''}" data-h="${k}" type="button">${H[k] ? a : b}</button>`;
-      body = `<p class="gdesc">${esc(ex.desc)}</p><div class="grow"><span>Show</span><div>${tg('ramp', 'Ramp open', 'Ramp closed')}${tg('gear', 'Gear down', 'Gear up')}${tg('eng', 'Engines lit', 'Engines cold')}</div></div>`;
+      body = `<p class="gdesc">${esc(ex.desc)}</p><div class="grow"><span>Show</span><div>${tg('ramp', 'Ramp open', 'Ramp closed')}${tg('gear', 'Gear down', 'Gear up')}${tg('eng', 'Engines lit', 'Engines cold')}</div></div>`
+        + `<div class="grow"><span>Paint</span><div>${GOPT.paint.map(([v_, n]) => `<button class="chip${GAL.look.paint === v_ ? ' on' : ''}" data-k="paint" data-v="${v_}" type="button">${n}</button>`).join('')}</div></div>`;
     } else body = `<p class="gdesc">${esc(ex.desc)}</p>`;
     $('galCap').innerHTML = `<h3>${esc(ex.name)}<small>${esc(ex.sub)}</small></h3>${body}`;
   }
   function galLook() {
     const L = GAL.look, it = (slot, kind, name) => ({ slot, kind, name: name || '' });
+    COS.gallery(L);
     applyLook({ blade: it('blade', L.blade), pistol: it('pistol', L.pistol), pack: it('pack', L.pack),
       armour: L.armour === 'castellan' ? it('armour', 'mk7', 'Mantle of the Castellan') : it('armour', L.armour) });
   }
@@ -6425,7 +6434,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
     if (!GAL.built) buildGallery();
     GAL.on = true; GAL.saved = { pos: P.pos.clone(), yaw: P.yaw, pitch: P.pitch, cam: C.cam, vel: P.vel.clone() };
     P.pos.set(0, 0, 0); P.vel.set(0, 0, 0); P.yaw = PI; P.pitch = 0; C.cam = 1;
-    galLook(); galShow(GAL.i);
+    COS.galOpen(); galLook(); galShow(GAL.i);
     $('gal').classList.remove('off'); $('menu').classList.add('off');
   }
   function closeGallery() {
@@ -6433,7 +6442,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
     scene.add(T.root); T.root.visible = true;
     const s = GAL.saved; if (s) { P.pos.copy(s.pos); P.yaw = s.yaw; P.pitch = s.pitch; C.cam = s.cam; P.vel.copy(s.vel); }
     C.active = false; for (const m of T.jets) m.material.opacity = 0; T.jetLight.intensity = 0;
-    applyLook(); updateRig(0);
+    COS.restore(); applyLook(); updateRig(0);
     $('menu').classList.remove('off');
   }
   // the Templar's pose: ready, the three-strike combo on a loop, or hovering with the thrusters lit
@@ -6447,6 +6456,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
     } else { JP.air = L.pose === 'jets'; JP.phase = JP.air ? 'hover' : 'none'; updateRig(dt); JP.air = false; JP.phase = 'none'; }
     const j = L.pose === 'jets' && L.pack === 'jump' ? 1 : 0;
     T.jets.forEach((m, i) => { m.material.opacity = j * (i % 2 ? 0.9 : 0.55); m.scale.set(1, 0.6 + j * (0.9 + Math.random() * 0.3), 1); }); T.jetLight.intensity = j * 2.5;
+    COS.update(dt);
   }
   function galHawk(dt) {
     const ex = EXHIBITS[GAL.i], J = ex.J, H = GAL.hawk, k = damp(2.2, dt);
@@ -6489,9 +6499,471 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
   addEventListener('keydown', e => { if (!GAL.on) return; if (e.code === 'ArrowRight') galShow(GAL.i + 1); if (e.code === 'ArrowLeft') galShow(GAL.i - 1); if (e.code === 'Escape' && !GALLERY_ONLY) closeGallery(); });
   $('openGal').addEventListener('click', () => openGallery());
 
-  const COS = { SHADERS: [{ id: 'templar', name: 'Templar' }, { id: 'battleworn', name: 'Battle-worn' }], EMBLEMS: [{ id: 'cross', name: 'Templar cross' }, { id: 'skull', name: 'Skull' }], SKULLS: [{ id: 'bone', name: 'Bone' }, { id: 'gilded', name: 'Gilded' }],
-    HAWKS: [{ id: 'chapter', name: 'Chapter' }, { id: 'ash', name: 'Ash' }], ORNS: [{ id: 'field', name: 'Field', blade: 'power' }, { id: 'steel', name: 'Steel', blade: 'chain' }],
-    applyShader() {}, applyHawk() {}, applyOrn() {}, skull: { setVariant() {}, setVisible() {}, update() {} }, emblemSVG: () => '<svg viewBox="0 0 120 40"><rect width="120" height="40" fill="#2a0d0b"/></svg>' };      // STUB
+  // ================================================================ cosmetics: armour shaders, heraldry, the servo-skull, Thunderhawk paint, blade ornaments
+  // M.* paints also dress the arenas and the foes, so at load the Templar gets his own copies of every paint he wears; a shader repaints
+  // those copies and 'templar' puts back exactly what was there. The gunship is vertex-coloured: its paints rewrite the kept vertex colours
+  // and show a few overlay parts. Nothing here adds a light; the servo-skull's optic glows with an emissive lens and an additive halo.
+  let cosSeed = 11; const cosR = () => ((cosSeed = cosSeed * 16807 % 2147483647) - 1) / 2147483646;     // own seed, so the world's rnd() runs as before
+  const cosC = new THREE.Color();
+  // the Champion's white cloak: applyLook asks cosCape(), and runs once at load before COS exists, hence a declaration and a var
+  var cosCapeW = false; function cosCape() { return cosCapeW ? 'W' : null; }
+
+  // ---- painted maps for the shaders (made the first time a shader asks for them)
+  // Every box face and cylinder rim maps the whole texture, so wear painted near the texture's border lands on the plates' edges.
+  function cosArmourMap(o) {
+    cosSeed = o.seed; const r = cosR;
+    return canvasTex(512, 512, (g, w, h) => {
+      const nearEdge = (out, spread) => { const s = Math.floor(r() * 4), d = Math.pow(r(), 2.2) * spread, u = r();     // a point drawn towards one of the four borders
+        out[0] = s === 0 ? d : s === 1 ? w - d : u * w; out[1] = s === 2 ? d : s === 3 ? h - d : u * h; return out; };
+      const at = [0, 0];
+      g.fillStyle = o.base; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(${r() < 0.5 ? o.mA : o.mB},${o.mo * (0.6 + r())})`; g.beginPath(); g.arc(r() * w, r() * h, 4 + r() * 18, 0, 7); g.fill(); }
+      if (o.wash) for (const [x0, y0, x1, y1] of [[0, 0, o.washW, 0], [w, 0, w - o.washW, 0], [0, 0, 0, o.washW], [0, h, 0, h - o.washW]]) {     // grime settled into the edges
+        const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, `rgba(${o.wash},.55)`); gr.addColorStop(1, `rgba(${o.wash},0)`); g.fillStyle = gr; g.fillRect(0, 0, w, h); }
+      for (let i = 0; i < o.edgeRust; i++) { nearEdge(at, 34); g.fillStyle = `rgba(${r() < 0.7 ? '112,50,20' : '70,30,12'},${0.18 + r() * 0.3})`; g.beginPath(); g.ellipse(at[0], at[1], 3 + r() * 11, 2 + r() * 7, r() * 3, 0, 7); g.fill(); }
+      for (let i = 0; i < o.streaks; i++) { const x = r() * w, y = r() * 30, L = 30 + r() * 150, gr = g.createLinearGradient(0, y, 0, y + L); gr.addColorStop(0, `rgba(${o.sc},${0.3 + r() * 0.35})`); gr.addColorStop(1, `rgba(${o.sc},0)`); g.fillStyle = gr; g.fillRect(x, y, 1.5 + r() * 4, L); }
+      const chip = (x, y, s, rust) => { const a = r() * 3;
+        if (rust) { g.fillStyle = `rgba(118,54,22,${0.3 + r() * 0.3})`; g.beginPath(); g.ellipse(x, y, s * 2.4, s * 1.7, a, 0, 7); g.fill(); }
+        g.fillStyle = o.chip; g.beginPath(); g.ellipse(x, y, s * 1.5, s, a, 0, 7); g.fill(); g.fillStyle = o.chipD; g.beginPath(); g.ellipse(x + 0.6, y + 0.6, s, s * 0.6, a, 0, 7); g.fill(); };
+      for (let i = 0; i < o.edgeChips; i++) { nearEdge(at, 70); chip(at[0], at[1], o.cs * (0.6 + r() * 2), o.rust && r() < o.rust); }
+      for (let i = 0; i < o.chips; i++) chip(r() * w, r() * h, o.cs * (0.5 + r() * 1.2), false);
+      g.strokeStyle = o.scr; g.lineWidth = 0.8;
+      for (let i = 0; i < o.scratches; i++) { const x = r() * w, y = r() * h, a = r() * 6.3, l = 6 + r() * 26; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+      if (o.dust) for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(${o.dust},${r() * 0.16})`; g.fillRect(r() * w, r() * h, 1 + r() * 2, 1 + r() * 2); }
+      if (o.gilt) {             // the Champion's gilding: a bevelled gold band round every plate, a fine inner rule, scrollwork at the corners
+        const b = o.gilt, gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, '#f2cf72'); gr.addColorStop(0.5, '#b8862e'); gr.addColorStop(1, '#e6be5c');
+        g.strokeStyle = gr; g.lineWidth = b; g.strokeRect(b / 2, b / 2, w - b, h - b);
+        g.strokeStyle = 'rgba(255,236,170,.8)'; g.lineWidth = 2; g.strokeRect(b - 2, b - 2, w - 2 * b + 4, h - 2 * b + 4);
+        g.strokeStyle = 'rgba(70,46,12,.9)'; g.lineWidth = 2; g.strokeRect(1, 1, w - 2, h - 2);
+        g.strokeStyle = '#c9a24a'; g.lineWidth = 2; g.strokeRect(b + 9, b + 9, w - 2 * b - 18, h - 2 * b - 18);
+        g.lineWidth = 3; for (const [cx, cy, sx, sy] of [[b + 9, b + 9, 1, 1], [w - b - 9, b + 9, -1, 1], [b + 9, h - b - 9, 1, -1], [w - b - 9, h - b - 9, -1, -1]]) {
+          g.beginPath(); g.moveTo(cx, cy + sy * 40); g.bezierCurveTo(cx + sx * 10, cy + sy * 22, cx + sx * 34, cy + sy * 30, cx + sx * 26, cy + sy * 14); g.bezierCurveTo(cx + sx * 20, cy + sy * 6, cx + sx * 10, cy + sy * 12, cx + sx * 14, cy + sy * 18); g.stroke();
+          g.beginPath(); g.moveTo(cx + sx * 40, cy); g.bezierCurveTo(cx + sx * 22, cy + sy * 10, cx + sx * 30, cy + sy * 34, cx + sx * 14, cy + sy * 26); g.bezierCurveTo(cx + sx * 6, cy + sy * 20, cx + sx * 12, cy + sy * 10, cx + sx * 18, cy + sy * 14); g.stroke(); }
+      }
+    }, 1);
+  }
+  // tabards and the cloak: the same cut as tabardMap (edges, trim, the cross at the chest, the hem) in each shader's cloth
+  function cosTabardMap(o, withCross) {
+    cosSeed = o.seed + (withCross ? 1 : 0); const r = cosR;
+    return canvasTex(256, 512, (g, w, h) => {
+      g.fillStyle = o.cloth; g.fillRect(0, 0, w, h);
+      for (let y = 0; y < h; y += 2) { g.fillStyle = `rgba(${o.wD},${0.04 + r() * 0.05})`; g.fillRect(0, y, w, 1); }
+      for (let x = 0; x < w; x += 2) { g.fillStyle = `rgba(${o.wL},${0.03 + r() * 0.04})`; g.fillRect(x, 0, 1, h); }
+      for (let i = 0; i < 18; i++) { const x = r() * w, gr = g.createLinearGradient(x - 10, 0, x + 10, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(.5, `rgba(${o.fold},.12)`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - 10, 0, 20, h); }
+      const e = o.ew, b = o.eb;
+      if (o.edge) { g.fillStyle = o.edge; g.fillRect(0, 0, e, h); g.fillRect(w - e, 0, e, h); g.fillRect(0, h - b, w, b); }
+      if (o.lattice) {          // the Champion's border: a gold lattice of small diamonds
+        g.fillStyle = o.lattice;
+        for (let y = 6; y < h - b; y += 14) for (const x of [e / 2, w - e / 2]) { g.beginPath(); g.moveTo(x, y - 5); g.lineTo(x + 5, y); g.lineTo(x, y + 5); g.lineTo(x - 5, y); g.closePath(); g.fill(); }
+        for (let x = 16; x < w - 10; x += 26) { crossPath(g, x, h - b / 2, 18); g.fill(); }
+      }
+      if (o.trim) { g.fillStyle = o.trim; g.fillRect(e, 0, 3, h - b + 3); g.fillRect(w - e - 3, 0, 3, h - b + 3); g.fillRect(e, h - b - 3, w - 2 * e, 3); }
+      if (o.trim2) { g.fillStyle = o.trim2; g.fillRect(e + 6, 0, 2, h - b - 4); g.fillRect(w - e - 8, 0, 2, h - b - 4); g.fillRect(e + 6, h - b - 10, w - 2 * e - 12, 2); }
+      if (withCross) { crossPath(g, w / 2, 170, 150); g.fillStyle = o.cross; g.fill(); g.lineWidth = o.clw; g.strokeStyle = o.cline; g.stroke();
+        if (o.inner) { crossPath(g, w / 2, 170, 112); g.lineWidth = 2; g.strokeStyle = o.inner; g.stroke(); } }
+      if (o.mud) { const m = g.createLinearGradient(0, h, 0, h - 170); m.addColorStop(0, `rgba(${o.mudC},${0.85 * o.mud})`); m.addColorStop(0.45, `rgba(${o.mudC},${0.35 * o.mud})`); m.addColorStop(1, `rgba(${o.mudC},0)`);
+        g.fillStyle = m; g.fillRect(0, h - 170, w, 170);
+        for (let i = 0; i < 90 * o.mud; i++) { g.fillStyle = `rgba(${o.mudC},${0.2 + r() * 0.4})`; g.beginPath(); g.arc(r() * w, h - r() * r() * 160, 1 + r() * 3, 0, 7); g.fill(); } }
+      if (o.stains) for (let i = 0; i < o.stains; i++) { g.fillStyle = `rgba(70,22,14,${0.15 + r() * 0.25})`; g.beginPath(); g.ellipse(r() * w, 60 + r() * (h - 120), 3 + r() * 12, 2 + r() * 8, r() * 3, 0, 7); g.fill(); }
+      if (o.scorch) for (let i = 0; i < o.scorch; i++) { const x = r() * w, y = 80 + r() * 300, rr = 10 + r() * 22, gr = g.createRadialGradient(x, y, 0, x, y, rr); gr.addColorStop(0, 'rgba(20,14,8,.7)'); gr.addColorStop(1, 'rgba(20,14,8,0)'); g.fillStyle = gr; g.fillRect(x - rr, y - rr, rr * 2, rr * 2); }
+      if (o.torn) {             // a ragged hem and a few holes, cut out of the alpha (the material turns on alphaTest)
+        g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000';
+        for (let x = 0; x < w; x += 7 + r() * 13) { const d = 10 + r() * 46; g.beginPath(); g.moveTo(x, h + 1); g.lineTo(x + 3 + r() * 6, h - d); g.lineTo(x + 9 + r() * 9, h + 1); g.fill(); }
+        for (let i = 0; i < 3; i++) { g.beginPath(); g.ellipse(30 + r() * (w - 60), 280 + r() * 160, 3 + r() * 6, 5 + r() * 9, r() * 3, 0, 7); g.fill(); }
+        g.globalCompositeOperation = 'source-over';
+      }
+    });
+  }
+  const COS_TAB = {
+    worn: { seed: 31, cloth: '#c4b796', wD: '80,62,36', wL: '240,232,210', fold: '60,46,28', edge: '#5c1517', ew: 18, eb: 46, trim: '#86703f', cross: '#141416', clw: 3, cline: 'rgba(96,98,100,.5)', mud: 1.7, mudC: '56,40,24', stains: 26, scorch: 7, torn: true },
+    white: { seed: 41, cloth: '#f2efe8', wD: '120,110,90', wL: '255,255,255', fold: '90,84,70', edge: '#c9a24a', ew: 9, eb: 30, trim: '#f3e2a8', trim2: '#b38a36', cross: '#0f0f12', clw: 5, cline: '#d1a84c' },
+    crimson: { seed: 51, cloth: '#7c1418', wD: '30,0,0', wL: '255,190,180', fold: '20,0,0', edge: '#141416', ew: 16, eb: 44, trim: '#d9cfb3', cross: '#121214', clw: 5, cline: '#d9cfb3', mud: 0.55, mudC: '40,18,12' },
+    black: { seed: 61, cloth: '#1b1b1e', wD: '0,0,0', wL: '150,145,135', fold: '0,0,0', edge: '#b9b2a0', ew: 8, eb: 22, cross: '#c9c1ac', clw: 3, cline: 'rgba(40,38,34,.8)', mud: 1.1, mudC: '128,122,112' },
+    champ: { seed: 71, cloth: '#f4f1ea', wD: '120,110,90', wL: '255,255,255', fold: '90,84,70', edge: '#c9a24a', ew: 22, eb: 58, lattice: '#8a6a2a', trim: '#7d1418', trim2: '#d9b25a', cross: '#0f0f12', clw: 7, cline: '#d9b25a', inner: '#8a6a2a' }
+  };
+  const COS_MAPS = {}, cosMap = k => COS_MAPS[k] || (COS_MAPS[k] = k[0] === 't' ? cosTabardMap(COS_TAB[k.slice(4, -1)], k.endsWith('F')) : cosArmourMap(COS_ARM[k]));
+  const COS_ARM = {
+    worn: { seed: 21, base: '#1e1e21', mA: '46,46,50', mB: '8,8,9', mo: 0.08, edgeRust: 520, streaks: 46, sc: '100,46,18', edgeChips: 620, chips: 90, cs: 1.5, chip: '#8a8f95', chipD: '#0c0b0b', rust: 0.6, scratches: 200, scr: 'rgba(150,152,158,.42)', dust: '120,104,84' },
+    champ: { seed: 27, base: '#0c0d10', mA: '34,38,50', mB: '0,0,0', mo: 0.035, edgeRust: 0, streaks: 0, edgeChips: 0, chips: 0, cs: 0.8, chip: '#5c6470', chipD: '#060607', scratches: 0, scr: 'rgba(0,0,0,0)', gilt: 18 },
+    polish: { seed: 23, base: '#0d0e11', mA: '34,38,50', mB: '0,0,0', mo: 0.035, edgeRust: 0, streaks: 0, edgeChips: 30, chips: 6, cs: 0.8, chip: '#5c6470', chipD: '#060607', scratches: 10, scr: 'rgba(120,130,145,.18)' },
+    bone: { seed: 25, base: '#a69e8a', mA: '128,114,90', mB: '214,206,186', mo: 0.08, wash: '46,38,26', washW: 30, edgeRust: 0, streaks: 34, sc: '60,50,34', edgeChips: 260, chips: 14, cs: 1.0, chip: '#35363a', chipD: '#6a604e', scratches: 50, scr: 'rgba(66,56,42,.35)', dust: '84,74,58' }
+  };
+
+  // ---- the Templar's own paints: role -> material, and what each looked like when built
+  const COSM = {}, COSO = {};
+  { const roles = new Map([[M.armour, 'armour'], [M.armourSmooth, 'armourS'], [M.joint, 'joint'], [M.bone, 'bone'], [M.gold, 'gold'], [M.goldDark, 'goldDark'], [M.steel, 'steel'], [M.gunmetal, 'gunmetal'],
+      [M.wax, 'wax'], [M.tabardF, 'tabF'], [M.tabardB, 'tabB'], [M.banner, 'cape'], [M.field, 'field'], [EDGE, 'edge'], [EDGE_BONE, 'edgeBone']]);
+    const under = (o, ...gs) => { for (let p = o; p; p = p.parent) if (gs.includes(p)) return true; return false; };
+    T.root.traverse(o => {
+      const m = o.material; if (!m || Array.isArray(m)) return;
+      let role = roles.get(m) || (m.map === armourMap ? 'shell' : null);       // 'shell': the pauldrons' double-sided copies
+      if (!role) return;
+      if (role === 'field' && under(o, T.sword)) role = 'blade';            // the sword's field takes the ornament; the hammer's and the plasma coils keep theirs
+      if (role === 'steel' && under(o, T.chain)) role = 'teeth';
+      if (role === 'edge' && under(o, T.sword, T.pistol, T.chain, T.hammer, T.plasma)) role = 'edgeW';   // weapon edges stay as forged
+      if (!COSM[role]) { const c = COSM[role] = m.clone(); COSO[role] = { c: c.color.clone(), e: c.emissive ? c.emissive.clone() : null, ei: c.emissiveIntensity, r: c.roughness, mt: c.metalness, map: c.map, op: c.opacity, at: c.alphaTest }; }
+      o.material = COSM[role];
+    });
+  }
+  // set a role to p, or back to how it was built (p undefined). Mesh colours are picked in sRGB; line colours are raw hex, as EDGE's are.
+  function cosSet(role, p = {}) {
+    const m = COSM[role], o = COSO[role]; if (!m) return;
+    m.color.copy(o.c); if (p.c !== undefined) { m.color.setHex(p.c); if (!m.isLineBasicMaterial) m.color.convertSRGBToLinear(); }
+    m.opacity = p.op !== undefined ? p.op : o.op;
+    if (m.isLineBasicMaterial) return;
+    if (m.emissive) { m.emissive.copy(o.e); if (p.e !== undefined) m.emissive.setHex(p.e).convertSRGBToLinear(); m.emissiveIntensity = p.ei !== undefined ? p.ei : o.ei; }
+    m.roughness = p.r !== undefined ? p.r : o.r; m.metalness = p.m !== undefined ? p.m : o.mt;
+    const map = p.map ? cosMap(p.map) : o.map, at = p.at !== undefined ? p.at : o.at;
+    if (!m.map !== !map || m.alphaTest !== at) m.needsUpdate = true;      // a new program only when the map or the alpha cut comes or goes
+    m.map = map; m.alphaTest = at;
+  }
+  const cosAll = p => ({ armour: p, armourS: p, shell: p });
+  const COS_SH = {
+    templar: {},
+    battleworn: Object.assign(cosAll({ map: 'worn', r: 0.64, m: 0.22 }), { edge: { c: 0x84644a, op: 0.6 }, edgeBone: { c: 0x766a58, op: 0.6 }, gold: { c: 0x8c7246, r: 0.55, m: 0.7 }, goldDark: { c: 0x5a4628, r: 0.6, m: 0.7 },
+      bone: { c: 0xb0a488, r: 0.75 }, joint: { c: 0x1e1d1d, r: 0.95 }, steel: { c: 0x7c8187, r: 0.5 }, gunmetal: { r: 0.62 }, wax: { c: 0x581012, r: 0.5 },
+      tabF: { map: 'tab:wornF', at: 0.5 }, tabB: { map: 'tab:wornB', at: 0.5 }, cape: { map: 'tab:wornF', at: 0.5 } }),
+    ceremonial: Object.assign(cosAll({ map: 'polish', r: 0.2, m: 0.32 }), { edge: { c: 0xb8924a, op: 0.7 }, edgeBone: { c: 0xb8924a, op: 0.6 }, gold: { c: 0xf2c65a, r: 0.16, m: 1 }, goldDark: { c: 0xb3862e, r: 0.2, m: 1 },
+      bone: { c: 0xf3eee2, r: 0.35 }, joint: { c: 0x121214, r: 0.6 }, wax: { c: 0x8c0f14, r: 0.15 }, tabF: { map: 'tab:whiteF' }, tabB: { map: 'tab:whiteB' }, cape: { map: 'tab:whiteF' } }),
+    crusade: Object.assign(cosAll({ r: 0.38 }), { edge: { c: 0x9a4844, op: 0.8 }, edgeBone: { c: 0x9a6a5a, op: 0.7 }, gold: { c: 0x9e1c16, r: 0.3, m: 0.45 }, goldDark: { c: 0x641010, r: 0.35, m: 0.45 },
+      tabF: { map: 'tab:crimsonF' }, tabB: { map: 'tab:crimsonB' }, cape: { map: 'tab:crimsonF' } }),
+    penitent: Object.assign(cosAll({ map: 'bone', r: 0.72, m: 0.05 }), { edge: { c: 0x3e3830, op: 0.75 }, edgeBone: { c: 0x2a2622, op: 0.7 }, gold: { c: 0x37332e, r: 0.5, m: 0.8 }, goldDark: { c: 0x26231f, r: 0.55, m: 0.8 },
+      bone: { c: 0x18181a, r: 0.6 }, joint: { c: 0x2c2a27, r: 0.9 }, tabF: { map: 'tab:blackF' }, tabB: { map: 'tab:blackB' }, cape: { map: 'tab:blackF' } }),
+    champion: Object.assign(cosAll({ map: 'champ', r: 0.24, m: 0.4 }), { edge: { c: 0xe0b45a, op: 0.9 }, edgeBone: { c: 0xe0b45a, op: 0.8 }, gold: { c: 0xffd165, r: 0.14, m: 1 }, goldDark: { c: 0xc8952e, r: 0.18, m: 1 },
+      bone: { c: 0xe8bc58, r: 0.34, m: 0.55 }, joint: { c: 0x141416, r: 0.6 }, wax: { c: 0x8c0f14, r: 0.15 }, tabF: { map: 'tab:champF' }, tabB: { map: 'tab:champB' }, cape: { map: 'tab:champF' } })
+  };
+  const COS_ROLES = ['armour', 'armourS', 'shell', 'joint', 'bone', 'gold', 'goldDark', 'steel', 'gunmetal', 'wax', 'tabF', 'tabB', 'cape', 'edge', 'edgeBone'];
+
+  // ---- blade ornaments: the power field's colour (blade, aura, arcs, glow, trail, sparks) and the chainsword's teeth
+  const cosTrailU = { value: new THREE.Color(0.45, 0.75, 1.0) };
+  trailMesh.material.uniforms = { tcol: cosTrailU };            // the trail read a fixed blue; now it reads this colour (the same blue by default)
+  trailMesh.material.fragmentShader = 'uniform vec3 tcol; varying float vA; void main(){ gl_FragColor = vec4(tcol, vA * 0.6); }'; trailMesh.material.needsUpdate = true;
+  const COS_FIELD0 = { aura: T.auraM.color.clone(), arc: T.arcs[0].material.color.clone(), light: T.swordLight.color.clone(), trail: cosTrailU.value.clone(), spark: BLADES.power.col.slice(), flash: BLADES.power.flash };
+  const COS_ORN = {     // aura and arcs are raw hex like the built blue (additive, unconverted); trail and sparks are linear rgb
+    field: null,
+    gold: { c: 0xfff0c8, e: 0xffae3a, aura: 0xffa830, arc: 0xffd890, light: 0xffb84a, trail: [1.0, 0.68, 0.26], spark: [1, 0.8, 0.4, 1], flash: 0xffb84a },
+    crimson: { c: 0xffc4bc, e: 0xff2a1c, aura: 0xff3020, arc: 0xff9c88, light: 0xff4a30, trail: [1.0, 0.2, 0.12], spark: [1, 0.34, 0.24, 1], flash: 0xff4a30 },
+    white: { c: 0xffffff, e: 0xe4ecff, ei: 1.9, aura: 0xd8e2ff, arc: 0xffffff, light: 0xeef2ff, trail: [0.86, 0.9, 1.0], spark: [0.96, 0.96, 1, 1], flash: 0xeef2ff },
+    steel: null,
+    bronze: { r: 0.32, m: 0.95, c: 0xb47a3a }
+  };
+  function cosField(id) {
+    const o = COS_ORN[id], z = COS_FIELD0;
+    cosSet('blade', o ? { c: o.c, e: o.e, ei: o.ei } : undefined);
+    if (o) { T.auraM.color.setHex(o.aura); T.arcs[0].material.color.setHex(o.arc); T.swordLight.color.setHex(o.light); }
+    else { T.auraM.color.copy(z.aura); T.arcs[0].material.color.copy(z.arc); T.swordLight.color.copy(z.light); }
+    const s = o ? o.spark : z.spark; for (let i = 0; i < 4; i++) BLADES.power.col[i] = s[i];
+    BLADES.power.flash = o ? o.flash : z.flash; COS.fieldTrail = o ? new THREE.Color(...o.trail) : z.trail;
+  }
+
+  // ---- heraldry: banners like Destiny's emblems, 120 x 40, the device in the left square and the field open for a name on the right
+  const cosF = x => +x.toFixed(2);
+  const cosCrossD = (cx, cy, s) => { const a = s / 2, n = s * 0.09, f = s * 0.26, q = a * 0.88, F = cosF;
+    return `M${F(cx - n)} ${F(cy - n)}L${F(cx - f)} ${F(cy - a)}Q${F(cx)} ${F(cy - q)} ${F(cx + f)} ${F(cy - a)}L${F(cx + n)} ${F(cy - n)}L${F(cx + a)} ${F(cy - f)}Q${F(cx + q)} ${F(cy)} ${F(cx + a)} ${F(cy + f)}`
+      + `L${F(cx + n)} ${F(cy + n)}L${F(cx + f)} ${F(cy + a)}Q${F(cx)} ${F(cy + q)} ${F(cx - f)} ${F(cy + a)}L${F(cx - n)} ${F(cy + n)}L${F(cx - a)} ${F(cy + f)}Q${F(cx - q)} ${F(cy)} ${F(cx - a)} ${F(cy - f)}Z`; };
+  // a skull drawn round (0,0): cranium -14..3, the upper jaw and its teeth to 10
+  const cosSkullG = (bone, ink) => `<path d="M0-14C7.5-14 12-9 12-2.5C12 1 10.5 3.2 8.6 4.4V8C8.6 9.2 7.8 10 6.6 10H-6.6C-7.8 10-8.6 9.2-8.6 8V4.4C-10.5 3.2-12 1-12-2.5C-12-9-7.5-14 0-14Z" fill="${bone}"/>`
+    + `<ellipse cx="-4.7" cy="-1.8" rx="3.3" ry="3.6" transform="rotate(-12 -4.7 -1.8)" fill="${ink}"/><ellipse cx="4.7" cy="-1.8" rx="3.3" ry="3.6" transform="rotate(12 4.7 -1.8)" fill="${ink}"/>`
+    + `<path d="M0 1.6L-1.9 5.4Q0 4.6 1.9 5.4Z" fill="${ink}"/><path d="M-4.5 6.4V10M-1.5 6.6V10M1.5 6.6V10M4.5 6.4V10" stroke="${ink}" stroke-width="1"/><path d="M-11.2-4.5Q-9.5-3 -9.8 0M11.2-4.5Q9.5-3 9.8 0" stroke="${ink}" stroke-width=".6" fill="none" opacity=".6"/>`;
+  // a sword pointing up round (0,0): tip at -17, pommel at 18
+  const cosSwordG = (blade, gold, grip) => `<path d="M0-17L2-13.4V7H-2V-13.4Z" fill="${blade}"/><path d="M0-12.6V5.6" stroke="#000" stroke-opacity=".35" stroke-width=".7"/>`
+    + `<rect x="-7.5" y="6.6" width="15" height="2.2" rx="1.1" fill="${gold}"/><rect x="-1.15" y="8.8" width="2.3" height="6.4" fill="${grip}"/><circle cy="16.6" r="1.9" fill="${gold}"/>`;
+  const cosAquilaHalf = (c, ink) => `<path d="M21.6 15.6C25.5 14.4 30.5 12.2 37.6 9.2L36.2 12.6L38.4 13.4L34.6 15.9L36.4 17.4L32.3 19L33.4 20.8L29.4 21.6L30.2 23.4L26 23.2L22 21.6Z" fill="${c}"/>`
+    + `<path d="M25.4 16.4L32 13.6M26.8 18.6L34 16.3M26 20.6L31.6 19.8" stroke="${ink}" stroke-width=".7"/>`
+    + `<path d="M20.6 15.4C21 12.5 21.6 10.8 23.2 9.6C24.4 8.7 26 8.8 26.9 9.8L25.2 10.7L26.8 11.6C25.6 11.5 24.6 12 24 13L22.6 16.2Z" fill="${c}"/><circle cx="24.4" cy="10.3" r=".55" fill="${ink}"/>`
+    + `<path d="M18.6 26L15.4 32.2L19.4 29.4Z" fill="${c}"/>`;
+  const cosAquilaG = (c, ink) => cosAquilaHalf(c, ink) + `<g transform="matrix(-1 0 0 1 40 0)">${cosAquilaHalf(c, ink)}</g>`
+    + `<path d="M20 13.6L22.5 16.2V24.6L20 29.4L17.5 24.6V16.2Z" fill="${c}"/><path d="M17.6 25L20 33.8L22.4 25L20 28Z" fill="${c}"/><path d="M20 16.4V27" stroke="${ink}" stroke-width=".6"/>`;
+  function cosEmblem(id, f, dev, motif) {
+    const g = 'cosE' + id;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" width="240" height="80">`
+      + `<defs><linearGradient id="${g}f" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${f.a}"/><stop offset="1" stop-color="${f.b}"/></linearGradient>`
+      + `<linearGradient id="${g}s" x1="0" x2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></linearGradient>`
+      + `<radialGradient id="${g}p" cx=".5" cy=".42" r=".62"><stop offset="0" stop-color="${f.pl}"/><stop offset="1" stop-color="${f.pe}"/></radialGradient>`
+      + `<pattern id="${g}h" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width=".8" height="3" fill="#fff" fill-opacity=".035"/></pattern>`
+      + `<clipPath id="${g}c"><rect x="40" width="80" height="40"/></clipPath></defs>`
+      + `<rect width="120" height="40" fill="url(#${g}f)"/><g clip-path="url(#${g}c)">${motif}</g><rect width="120" height="40" fill="url(#${g}h)"/>`
+      + `<rect x="40" width="80" height="40" fill="url(#${g}s)"/>`
+      + `<path d="M44 3.2H116M44 36.8H116" stroke="${f.rule}" stroke-width=".5" opacity=".55"/>`
+      + `<rect width="40" height="40" fill="url(#${g}p)"/>${dev}`
+      + `<path d="M40.4 0V40" stroke="${f.rule}" stroke-width=".8"/><rect x=".4" y=".4" width="119.2" height="39.2" fill="none" stroke="${f.rule}" stroke-width=".8" stroke-opacity=".7"/></svg>`;
+  }
+  const COS_EMB = [
+    ['cross', 'Templar Cross', { a: '#1d1d22', b: '#060607', pl: '#ece5d1', pe: '#bdb39a', rule: '#c9a24a' },
+      `<path d="${cosCrossD(20, 20, 30)}" fill="#111114" stroke="#c9a24a" stroke-width=".7"/><path d="${cosCrossD(20, 20, 22)}" fill="none" stroke="#3a3a40" stroke-width=".5"/>`,
+      `<path d="${cosCrossD(98, 20, 64)}" fill="#fff" opacity=".045"/><path d="${cosCrossD(98, 20, 40)}" fill="none" stroke="#c9a24a" stroke-width=".5" opacity=".18"/>`],
+    ['skull', 'Memento Mori', { a: '#2b2722', b: '#0c0b0a', pl: '#1d1b19', pe: '#0b0a09', rule: '#9c8f72' },
+      `<g transform="translate(20 21) scale(1.05)">${cosSkullG('#e4dcc6', '#141210')}</g>`,
+      `<g transform="translate(110 25) scale(2.5)" opacity=".05">${cosSkullG('#fff', '#000')}</g>` + [0, 1, 2, 3, 4, 5].map(k => `<path d="${cosCrossD(50 + k * 8, 34, 3.4)}" fill="#d8cfb3" opacity=".12"/>`).join('')],
+    ['swords', 'Crossed Blades', { a: '#6a1214', b: '#1a0505', pl: '#1c1010', pe: '#0c0606', rule: '#c9a24a' },
+      [40, -40].map(a => `<g transform="translate(20 15.6) rotate(${a}) scale(.84) translate(0 5)">${cosSwordG('#dfe3e8', '#c9a24a', '#3a1a12')}</g>`).join(''),
+      `<path d="M58 44L86-4M66 44L94-4M74 44L102-4" stroke="#f0d8c8" stroke-width="1.6" opacity=".07"/><path d="M90 44L112 6" stroke="#c9a24a" stroke-width=".6" opacity=".25"/>`],
+    ['aquila', 'Aquila', { a: '#3d2c12', b: '#0e0a05', pl: '#1a140c', pe: '#0a0805', rule: '#d4ad55' },
+      `<g transform="translate(-.4 -1.4)">${cosAquilaG('#d6b05a', '#3a2a10')}</g>`,
+      `<g transform="translate(46 -28) scale(2.4)" opacity=".07">${cosAquilaG('#fff', '#000')}</g>`],
+    ['sunsword', 'Dawn Blade', { a: '#7a3a12', b: '#140904', pl: '#3a1c0a', pe: '#120804', rule: '#e0a94a' },
+      Array.from({ length: 24 }, (_, i) => { const a = i * PI / 12, d = 0.11, L = i % 2 ? 12.5 : 17.5, c = Math.cos, s = Math.sin;
+        return `<path d="M${cosF(20 + c(a - d) * 6)} ${cosF(20 + s(a - d) * 6)}L${cosF(20 + c(a) * L)} ${cosF(20 + s(a) * L)}L${cosF(20 + c(a + d) * 6)} ${cosF(20 + s(a + d) * 6)}Z" fill="${i % 2 ? '#b8862e' : '#f0c35a'}"/>`; }).join('')
+        + `<circle cx="20" cy="20" r="6.8" fill="#2a1408" stroke="#f0c35a" stroke-width="1"/><g transform="translate(20 19.6) scale(.95)">${cosSwordG('#fbf6ea', '#f0c35a', '#5a2a10')}</g>`,
+      Array.from({ length: 9 }, (_, i) => { const a = (i - 4) * 0.16; return `<path d="M20 20L${cosF(20 + Math.cos(a) * 110)} ${cosF(20 + Math.sin(a) * 110 - 2)}L${cosF(20 + Math.cos(a) * 110)} ${cosF(20 + Math.sin(a) * 110 + 2)}Z" fill="#ffd27a" opacity=".07"/>`; }).join('')],
+    ['crowned', 'Crowned Skull', { a: '#2c1832', b: '#09060b', pl: '#1a1020', pe: '#0a060c', rule: '#c9a24a' },
+      `<g transform="translate(20 23.6) scale(.8)">${cosSkullG('#e6dfca', '#16101a')}<path d="M-9.4-13.2L-11-20.5L-5.6-16.4L0-22L5.6-16.4L11-20.5L9.4-13.2Z" fill="#d6ad50"/><rect x="-10" y="-15.2" width="20" height="3" rx=".6" fill="#b88d34"/>`
+        + `<circle cy="-22.4" r="1.3" fill="#e8c46a"/><circle cx="-11" cy="-20.9" r="1.05" fill="#e8c46a"/><circle cx="11" cy="-20.9" r="1.05" fill="#e8c46a"/><rect x="-1.4" y="-15.2" width="2.8" height="3" fill="#9a1a24"/></g>`,
+      `<g transform="translate(98 26) scale(2.4)" opacity=".065"><path d="M-9.4-13.2L-11-20.5L-5.6-16.4L0-22L5.6-16.4L11-20.5L9.4-13.2Z" fill="#fff"/></g>`],
+    ['chalice', 'The Chalice', { a: '#12263c', b: '#04080e', pl: '#0e1a2a', pe: '#050a10', rule: '#d4ad55' },
+      `<circle cx="20" cy="5.2" r="2.6" fill="#efe6cc"/>` + Array.from({ length: 8 }, (_, i) => { const a = i * PI / 4; return `<path d="M${cosF(20 + Math.cos(a) * 3.4)} ${cosF(5.2 + Math.sin(a) * 3.4)}L${cosF(20 + Math.cos(a) * 4.8)} ${cosF(5.2 + Math.sin(a) * 4.8)}" stroke="#efe6cc" stroke-width=".6"/>`; }).join('')
+        + `<path d="M10.5 9.6H29.5C29.5 16.6 25.8 20.4 21.7 21.2V26C21.7 27.3 24.6 28.1 26.8 29.6V31.6H13.2V29.6C15.4 28.1 18.3 27.3 18.3 26V21.2C14.2 20.4 10.5 16.6 10.5 9.6Z" fill="#d6b05a"/>`
+        + `<ellipse cx="20" cy="9.6" rx="9.5" ry="1.5" fill="#8e1414"/><ellipse cx="20" cy="23.6" rx="2.9" ry="1.3" fill="#b88d34"/><path d="${cosCrossD(20, 14.6, 6.4)}" fill="#3a2a10"/><path d="M13.2 30.2H26.8" stroke="#8a6a2a" stroke-width=".6"/>`,
+      [10, 18, 26, 34].map(r => `<circle cx="100" cy="20" r="${r}" fill="none" stroke="#d4ad55" stroke-width=".5" opacity="${cosF(0.2 - r * 0.004)}"/>`).join('') + `<circle cx="100" cy="20" r="7" fill="#efe6cc" opacity=".06"/>`],
+    ['tower', 'The Bastion', { a: '#3e3e3c', b: '#111111', pl: '#262624', pe: '#121211', rule: '#b8ae94' },
+      `<path d="M10.6 14.6V8.6H13.6V11H15.9V8.6H18.9V11H21.1V8.6H24.1V11H26.4V8.6H29.4V14.6H27.6V33H12.4V14.6Z" fill="#d2c9b1"/><rect x="10.6" y="14.6" width="18.8" height="1.2" fill="#8a826e"/>`
+        + `<path d="M12.4 20.4H27.6M12.4 25.8H27.6" stroke="#8a826e" stroke-width=".5"/><path d="M17.2 33V27.6A2.8 2.8 0 0 1 22.8 27.6V33Z" fill="#141414"/><rect x="19.2" y="17.6" width="1.6" height="4.6" fill="#141414"/>`
+        + `<rect x="14.4" y="21.4" width="1.2" height="3" fill="#141414"/><rect x="24.4" y="21.4" width="1.2" height="3" fill="#141414"/><rect x="7" y="33" width="26" height="1.6" fill="#8a826e"/>`
+        + `<path d="M20 8.6V2.6" stroke="#8a826e" stroke-width=".7"/><path d="M20 2.8L25.4 4.2L20 5.8Z" fill="#9a1a14"/>`,
+      `<path d="M40 40V30H46V27H50V30H56V27H60V30H66V27H70V30H76V27H80V30H86V27H90V30H96V27H100V30H106V27H110V30H116V27H120V40Z" fill="#000" opacity=".28"/>`
+        + Array.from({ length: 5 }, (_, j) => `<path d="M40 ${6 + j * 5}H120" stroke="#fff" stroke-width=".35" opacity=".04"/>`).join('')]
+  ];
+
+  // ---- the servo-skull: a few merged primitives in the brothers' style (vertex colours, one mesh per joint and paint)
+  const COS_SKM = { metal: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, metalness: 0.85, flatShading: true }),
+    bone: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62, metalness: 0.04, flatShading: true }), eye: new THREE.MeshBasicMaterial({ vertexColors: true }) };
+  const COS_HALO = new THREE.SpriteMaterial({ map: canvasTex(64, 64, (g, w, h) => { const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); }),
+    color: new THREE.Color(0xff2a14).convertSRGBToLinear(), transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false });
+  function cosBuildSkull(kind) {
+    const J = { root: new THREE.Group(), parts: new Map() }, g = (parent, p) => { const o = new THREE.Group(); o.position.set(...p); parent.add(o); return o; };
+    J.body = g(J.root, [0, 0, 0]); const B = J.body, gild = kind === 'gilded', cher = kind === 'cherub';
+    const bone = gild ? 0xd8ad4a : 0xddd4bc, bm = gild ? 'plate' : 'cloth', dark = 0x0b0909, GM = gild ? 0xb88a36 : PAL.gun, brass = gild ? 0xf0cc6a : 0xb8893a;
+    const P_ = (j, geo, col, o = {}) => npcPart(J, j, geo, col, o);
+    // the optic: a brass-rimmed housing in the right socket (its right is -X, as the Templar's), a red lens on its own joint so it can flicker alone
+    const eyeAt = cher ? [-0.026, 0.024, 0.052] : [-0.034, -0.01, 0.048];
+    J.eye = g(B, eyeAt);
+    P_(J.eye, along(nC(0.026, 0.03, 0.046, 10), 0.046), GM); P_(J.eye, new THREE.TorusGeometry(0.026, 0.0065, 5, 12), brass, { p: [0, 0, 0.046] });
+    P_(J.eye, nC(0.019, 0.019, 0.004, 10), gild ? 0xff1430 : PAL.lens, { p: [0, 0, 0.047], r: [PI / 2, 0, 0], m: 'glow' });
+    const halo = new THREE.Sprite(COS_HALO); halo.position.set(0, 0, 0.056); halo.scale.setScalar(0.11); J.eye.add(halo); J.halo = halo;
+    if (!cher) {
+      // the skull: cranium, brow, cheekbones, the upper jaw and its teeth; a vox grille where the mandible was
+      P_(B, nS(0.085, 10, 8), bone, { p: [0, 0.02, -0.012], s: [1, 0.94, 1.14], m: bm });
+      P_(B, nB(0.15, 0.018, 0.046), bone, { p: [0, 0.022, 0.07], r: [0.22, 0, 0], m: bm });
+      for (const sx of [-1, 1]) P_(B, nB(0.036, 0.034, 0.06), bone, { p: [sx * 0.056, -0.032, 0.048], r: [0, sx * 0.3, 0], m: bm });
+      P_(B, nB(0.09, 0.046, 0.07), bone, { p: [0, -0.058, 0.044], m: bm });
+      for (let k = 0; k < 6; k++) P_(B, nB(0.0115, 0.02, 0.012), gild ? 0xf2d27a : 0xece4cc, { p: [(k - 2.5) * 0.0135, -0.085, 0.072], m: bm });
+      P_(B, nS(0.027, 7, 5), dark, { p: [0.034, -0.01, 0.074], s: [1, 1.05, 0.5], m: 'cloth' });
+      P_(B, nK(0.013, 0.028, 3), dark, { p: [0, -0.034, 0.083], r: [PI, 0, 0], m: 'cloth' });
+      P_(B, nB(0.08, 0.03, 0.064), PAL.gun, { p: [0, -0.094, 0.0] }); for (let k = 0; k < 3; k++) P_(B, nB(0.056, 0.005, 0.004), dark, { p: [0, -0.087 - k * 0.008, 0.033], m: 'cloth' });
+      // cables at the back of the skull, a whip antenna with a lit bead, a purity seal on the left temple
+      for (const sx of [-1, 1]) P_(B, along(nC(0.007, 0.007, 0.08, 5), 0.08), 0x1a1a1c, { p: [sx * 0.028, -0.05, -0.08], q: qFrom(v(0, 0, 1), v(sx * 0.2, -0.75, -0.6)), m: 'cloth' });
+      const ad = v(0.25, 0.85, -0.46).normalize(); P_(B, along(nC(0.0028, 0.002, 0.14, 4), 0.14), PAL.gun, { p: [0.042, 0.07, -0.05], q: qFrom(v(0, 0, 1), ad) });
+      P_(B, nS(0.007, 5, 4), PAL.lens, { p: v(0.042, 0.07, -0.05).addScaledVector(ad, 0.14).toArray(), m: 'glow' });
+      if (!gild) { P_(B, nC(0.022, 0.022, 0.008, 10), PAL.wax, { p: [0.087, 0.035, 0.0], r: [0, 0, PI / 2], m: 'cloth' });
+        for (const [dz, L, a] of [[-0.008, 0.075, 0.12], [0.009, 0.06, -0.08]]) P_(B, (() => { const ge = nB(0.003, L, 0.013); ge.translate(0, -L / 2, 0); return ge; })(), PAL.parch, { p: [0.09, 0.022, dz], r: [a, 0, 0.08], m: 'cloth' }); }
+      else { P_(B, ext(crossShape(0.044), 0.004, 0.001), 0x9a1424, { p: [0, 0.062, 0.078], r: [-0.55, 0, 0], m: 'cloth' });       // red enamel on the gilt brow
+        for (let k = 0; k < 9; k++) { const a = -1.2 + k * 0.3; P_(B, nS(0.011, 5, 3), 0xe8c060, { p: [Math.sin(a) * 0.084, 0.05 + Math.cos(a * 1.4) * 0.006, Math.cos(a) * 0.084 - 0.02], s: [1.6, 0.7, 0.8], r: [0, a, 0.5] }); } }   // a laurel round the crown
+      // the antigrav ring under the jaw, on a short stem
+      J.ring = g(B, [0, -0.14, 0]);
+      P_(B, nC(0.012, 0.012, 0.04, 6), PAL.gun, { p: [0, -0.12, 0] });
+      P_(J.ring, new THREE.TorusGeometry(0.066, 0.011, 5, 16), GM, { r: [PI / 2, 0, 0] });
+      for (let k = 0; k < 4; k++) { const a = k * PI / 2; P_(J.ring, nB(0.016, 0.006, 0.016), 0xffb060, { p: [Math.cos(a) * 0.066, -0.011, Math.sin(a) * 0.066], m: 'glow' }); }
+      if (kind === 'auspex') {
+        // the auspex: a dish on a mast above the cranium, turning as it sweeps, and a green readout on the right temple
+        P_(B, nC(0.007, 0.009, 0.06, 6), PAL.gun, { p: [0, 0.115, -0.04] }); P_(B, nB(0.04, 0.02, 0.04), PAL.gun, { p: [0, 0.09, -0.04] });
+        J.dish = g(B, [0, 0.15, -0.04]); const d = g(J.dish, [0, 0, 0]); d.rotation.x = 1.0;
+        P_(d, nC(0.07, 0.03, 0.02, 14), PAL.steel); P_(d, nC(0.062, 0.062, 0.003, 14), 0x2a2c30, { p: [0, 0.0105, 0] });
+        P_(d, nC(0.003, 0.003, 0.05, 4), PAL.steel, { p: [0, 0.035, 0] }); P_(d, nS(0.007, 5, 4), PAL.lensG, { p: [0, 0.06, 0], m: 'glow' });
+        P_(B, nB(0.004, 0.032, 0.044), PAL.lensG, { p: [-0.091, 0.02, -0.012], m: 'glow' }); P_(B, nB(0.01, 0.042, 0.054), PAL.gun, { p: [-0.086, 0.02, -0.012] });
+      }
+    } else {
+      // the cyber-cherub: a round infant head with an augmetic eye and a plated crown, a little body on an antigrav tail, a scroll, feathered wings
+      const skin = 0xe2bea6, skinD = 0xc9a088;
+      P_(B, nS(0.07, 10, 8), skin, { p: [0, 0.03, 0], m: 'cloth' });
+      for (const sx of [-1, 1]) P_(B, nS(0.03, 7, 5), skin, { p: [sx * 0.038, -0.004, 0.044], m: 'cloth' });
+      P_(B, nS(0.026, 7, 5), skin, { p: [0, -0.026, 0.04], m: 'cloth' }); P_(B, nS(0.011, 5, 4), skinD, { p: [0, 0.012, 0.068], m: 'cloth' });
+      P_(B, nS(0.011, 6, 4), dark, { p: [0.026, 0.026, 0.062], s: [1, 1.2, 0.6], m: 'cloth' });
+      P_(B, new THREE.SphereGeometry(0.075, 10, 4, 0, PI * 2, 0, PI * 0.36), PAL.gun, { p: [0, 0.036, -0.004], r: [-0.25, 0, 0] });
+      for (let k = 0; k < 5; k++) { const a = -0.9 + k * 0.45; P_(B, nS(0.006, 4, 3), brass, { p: [Math.sin(a) * 0.058, 0.084 - Math.abs(a) * 0.012, Math.cos(a) * 0.04 + 0.01] }); }
+      P_(B, nB(0.03, 0.011, 0.01), PAL.gun, { p: [0, -0.03, 0.062] });
+      P_(B, nS(0.052, 8, 6), skin, { p: [0, -0.098, -0.012], s: [1, 1.15, 0.9], m: 'cloth' });
+      P_(B, nB(0.094, 0.03, 0.08), PAL.red, { p: [0, -0.142, -0.012], m: 'cloth' });
+      P_(B, nC(0.036, 0.01, 0.09, 7), PAL.gun, { p: [0, -0.19, -0.012] }); P_(B, nS(0.012, 5, 4), 0xffb060, { p: [0, -0.238, -0.012], m: 'glow' });
+      for (const sx of [-1, 1]) { P_(B, along(nC(0.015, 0.013, 0.08, 6), 0.08), skin, { p: [sx * 0.048, -0.075, 0.0], q: qFrom(v(0, 0, 1), v(-sx * 0.35, -0.55, 0.75)), m: 'cloth' }); P_(B, nS(0.015, 5, 4), skin, { p: [sx * 0.02, -0.118, 0.058], m: 'cloth' }); }
+      P_(B, nC(0.012, 0.012, 0.1, 7), PAL.parch, { p: [0, -0.122, 0.07], r: [0, 0, PI / 2], m: 'cloth' });
+      P_(B, (() => { const ge = nB(0.074, 0.07, 0.003); ge.translate(0, -0.035, 0); return ge; })(), PAL.parch, { p: [0, -0.128, 0.078], r: [0.15, 0, 0], m: 'cloth' });
+      P_(B, nB(0.05, 0.004, 0.002), 0x5a3a20, { p: [0, -0.15, 0.083], r: [0.15, 0, 0], m: 'cloth' }); P_(B, nB(0.04, 0.004, 0.002), 0x5a3a20, { p: [0, -0.165, 0.085], r: [0.15, 0, 0], m: 'cloth' });
+      J.wings = [];
+      for (const sx of [-1, 1]) {
+        const wj = g(B, [sx * 0.03, -0.07, -0.05]); J.wings.push(wj);
+        const sd = v(sx * Math.cos(0.55), Math.sin(0.55), 0);
+        P_(wj, along(nC(0.006, 0.004, 0.13, 5), 0.13), brass, { q: qFrom(v(0, 0, 1), sd) });
+        // primaries fanning from the wingtip, shorter secondaries towards the body, a row of coverts over their roots
+        for (let i = 0; i < 6; i++) {
+          const u = i / 5, at = sd.clone().multiplyScalar(0.02 + u * 0.11), a = lerp(0.12, 1.3, u), L = lerp(0.075, 0.155, u), dir = v(sx * Math.sin(a), -Math.cos(a), -0.12).normalize();
+          const ge = nK(0.017, L, 4); ge.rotateZ(PI); ge.translate(0, -L / 2, 0); P_(wj, ge, i % 2 ? 0xe9e3d5 : 0xf7f3ea, { p: [at.x, at.y, at.z - 0.002 * i], q: qFrom(v(0, -1, 0), dir), s: [1, 1, 0.28], m: 'cloth' });
+        }
+        for (let i = 0; i < 4; i++) {
+          const u = i / 3, at = sd.clone().multiplyScalar(0.025 + u * 0.09), a = lerp(0.2, 1.1, u), dir = v(sx * Math.sin(a), -Math.cos(a), 0.1).normalize();
+          const ge = nK(0.016, 0.05, 4); ge.rotateZ(PI); ge.translate(0, -0.025, 0); P_(wj, ge, 0xfbf8f0, { p: [at.x, at.y, at.z + 0.008], q: qFrom(v(0, -1, 0), dir), s: [1, 1, 0.3], m: 'cloth' });
+        }
+      }
+    }
+    npcBake(J);
+    for (const me of J.meshes) me.material = me.material === NPCM.plate ? COS_SKM.metal : me.material === NPCM.cloth ? COS_SKM.bone : me.parent === J.eye ? COS_SKM.eye : NPCM.glow;
+    J.root.scale.setScalar(1.25);
+    return J;
+  }
+  // where it floats, how it turns, when its optic flickers
+  const SKL = { root: new THREE.Group(), v: {}, cur: null, on: true, t: 0, init: false, pos: new V3(), anc: new V3(), yawS: 0, q: new THREE.Quaternion(), qT: new THREE.Quaternion(),
+    fl: 1, flTo: 1, flT: 0, blinkT: 3, blink: 0, glT: 8, gl: 0, m4: new THREE.Matrix4(), aim: new V3(), d: new V3() };
+  SKL.root.visible = false; scene.add(SKL.root);
+  function cosSkullUpdate(dt) {
+    const ex = GAL.on ? EXHIBITS[GAL.i] : null, parent = ex ? (ex.id === 'templar' ? ex.g : null) : scene;
+    if (parent && SKL.root.parent !== parent) parent.add(SKL.root);
+    const show = SKL.on && !!SKL.cur && !!parent && (GAL.on || (G.state !== 'menu' && !FLY.on));
+    SKL.root.visible = show; if (!show) { SKL.init = false; return; }
+    const J = SKL.v[SKL.cur], t = (SKL.t += dt), k = smooth(clamp(C.cam, 0, 1)), viewCam = GAL.on ? GAL.cam : cam, faceCam = GAL.on || G.ui === 'build';
+    // the yaw it follows lags a little in third person (it drifts round as you turn), none in first person, so it never swings across your view
+    if (!SKL.init) { SKL.yawS = P.yaw; SKL.anc.copy(P.pos); }
+    SKL.yawS += angDiff(SKL.yawS, P.yaw) * damp(5, dt); SKL.yawS = P.yaw - clamp(angDiff(SKL.yawS, P.yaw), -0.3, 0.3);
+    const yaw = P.yaw - angDiff(SKL.yawS, P.yaw) * k, fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    SKL.anc.lerp(P.pos, damp(8, dt)); SKL.d.subVectors(SKL.anc, P.pos); const lag = 0.12 + 0.22 * k; if (SKL.d.length() > lag) SKL.anc.copy(P.pos).addScaledVector(SKL.d.normalize(), lag);
+    // over the right pauldron and high, so the over-the-shoulder camera keeps the middle of the screen; beside the helm when it poses for the viewer
+    const right = (faceCam ? 0.72 : lerp(0.74, 0.58, k)) + Math.sin(t * 0.53) * 0.03, fwd = faceCam ? -0.1 : lerp(-0.32, -0.25, k), up = (faceCam ? 2.3 : lerp(2.2, 2.6, k)) + Math.sin(t * 1.9) * 0.035 + Math.sin(t * 0.71) * 0.02;
+    SKL.pos.set(SKL.anc.x + rx * right + fx * fwd, SKL.anc.y + up, SKL.anc.z + rz * right + fz * fwd);
+    if (!GAL.on) {        // keep it out of walls and hillsides: pull it in along the line from your helm
+      tmp.set(P.pos.x, P.pos.y + 2.0, P.pos.z); SKL.d.subVectors(SKL.pos, tmp); const L = SKL.d.length(); SKL.d.divideScalar(L || 1);
+      const hit = rayWorld(tmp, SKL.d, L + 0.15); if (hit < L + 0.15) SKL.pos.copy(tmp).addScaledVector(SKL.d, Math.max(0.2, hit - 0.2));
+    }
+    SKL.root.position.copy(SKL.pos);
+    // it looks where you aim, now and then glances back at you (and blinks); in the gallery and the armoury it watches the viewer
+    SKL.glT -= dt; if (SKL.glT <= 0) { SKL.glT = rand(7, 14); SKL.gl = 1.3; SKL.blinkT = 0.05; }
+    SKL.gl = Math.max(0, SKL.gl - dt);
+    if (faceCam || (SKL.gl > 0 && k > 0.5 && !C.active)) SKL.aim.copy(viewCam.position).add(tmp.set(Math.sin(t * 0.4) * 0.6, Math.sin(t * 0.27) * 0.3, 0));
+    else SKL.aim.set(0, 0, -30).applyQuaternion(viewCam.quaternion).add(viewCam.position);
+    SKL.m4.lookAt(SKL.aim, SKL.pos, tmp.set(0, 1, 0)); SKL.qT.setFromRotationMatrix(SKL.m4);
+    if (!SKL.init) SKL.q.copy(SKL.qT); else SKL.q.slerp(SKL.qT, damp(faceCam ? 3 : 6, dt));
+    SKL.root.quaternion.copy(SKL.q); J.body.rotation.set(Math.sin(t * 1.3) * 0.05, 0, Math.sin(t * 0.8) * 0.13);     // a curious tilt
+    if (J.ring) J.ring.rotation.y += dt * 1.6;
+    if (J.dish) J.dish.rotation.y = Math.sin(t * 0.9) * 1.1;
+    if (J.wings) { const f = Math.sin(t * 16); J.wings.forEach((w, i) => { const sx = i ? 1 : -1; w.rotation.set(0, -sx * (0.55 + f * 0.35), sx * f * 0.3); }); J.body.position.y = Math.sin(t * 16) * 0.004; }
+    // the optic: a restless flicker, and now and then a blink
+    SKL.flT -= dt; if (SKL.flT <= 0) { SKL.flT = rand(0.04, 0.18); SKL.flTo = rand(0.72, 1.12); }
+    SKL.fl += (SKL.flTo - SKL.fl) * damp(25, dt);
+    SKL.blinkT -= dt; if (SKL.blinkT <= 0) { SKL.blink = 0.09; SKL.blinkT = SKL.gl > 0.6 ? 0.22 : rand(2.5, 6.5); }
+    SKL.blink = Math.max(0, SKL.blink - dt);
+    const f = SKL.blink > 0 ? 0.12 : SKL.fl;
+    COS_SKM.eye.color.setScalar(0.55 + f * 0.6); J.halo.material.opacity = 0.75 * f; J.halo.scale.setScalar(0.1 * (0.85 + 0.25 * f));
+    SKL.init = true;
+  }
+
+  // ---- the Thunderhawk's paint: its vertex colours, kept, then rewritten by rule; plus a few overlay parts per paint
+  const COS_HK = { BL: PAL.black, H2: 0x24262c, GM: PAL.gun, BN: PAL.bone, GD: PAL.gold };
+  function cosHawkPrep(J) {      // once per gunship: what paint each triangle wears, which joint it hangs on, and where it sits
+    if (J.cos) return J.cos;
+    const pal = Object.values(COS_HK).map(h => [h, new THREE.Color(h).convertSRGBToLinear()]);
+    const jk = j => j === J.hull ? 'hull' : j === J.turret ? 'turret' : j === J.ramp ? 'ramp' : J.gear.includes(j) ? 'gear' : J.vtol.includes(j) ? 'vtol'
+      : j.parent === J.hull && j.position.y === 3.6 ? 'wing' : j.parent && j.parent.parent === J.hull && j.parent.position.y === 3.6 ? 'tip' : j.position.z === -9 ? 'fin' : 'other';
+    const ms = (J.meshes || []).filter(m => m.geometry.attributes.color).map(m => {
+      const a = m.geometry.attributes.color.array, p = m.geometry.attributes.position.array, n = a.length / 9, hex = new Int32Array(n), cen = new Float32Array(n * 3);
+      for (let t = 0; t < n; t++) {
+        const o = t * 9; hex[t] = -1;
+        for (const [h, c] of pal) if (Math.abs(a[o] - c.r) < 1e-4 && Math.abs(a[o + 1] - c.g) < 1e-4 && Math.abs(a[o + 2] - c.b) < 1e-4) { hex[t] = h; break; }
+        for (let q = 0; q < 3; q++) cen[t * 3 + q] = (p[o + q] + p[o + 3 + q] + p[o + 6 + q]) / 3;
+      }
+      return { m, attr: m.geometry.attributes.color, orig: a.slice(), hex, cen, kind: jk(m.parent) };
+    });
+    return (J.cos = { ms, ov: {} });
+  }
+  const COS_HAWK = {
+    chapter: null,
+    // crimson bands round the hull, red fin caps, wing stripes and wingtip plates
+    crusade: { rule: (k, h, x, y) => (k === 'fin' && h === COS_HK.BN && y > 3) || (k === 'wing' && h === COS_HK.BN && Math.abs(x) > 4.9) || (k === 'tip' && h === COS_HK.H2) ? 0x8e1612 : undefined,
+      ov: (J, P_) => { const RD = 0x8e1612;
+        for (const [zc, w] of [[-5.6, 0.9], [-6.75, 0.3]]) { P_(J.hull, nB(4.36, 3.06, w), RD, { p: [0, 2.9, zc] }); P_(J.hull, nB(3.76, 1.06, w), RD, { p: [0, 4.85, zc] });
+          for (const sx of [-1, 1]) { P_(J.hull, nB(0.56, 1.06, w), RD, { p: [sx * 2.05, 4.55, zc], r: [0, 0, sx * 0.55] }); P_(J.hull, nC(1.18, 1.18, w, 12), RD, { p: [sx * 3.15, 4.25, zc], r: [PI / 2, 0, 0] }); P_(J.hull, nB(0.46, 0.66, w), RD, { p: [sx * 3.15, 5.45, zc] }); } }
+        P_(J.hull, nB(4.36, 3.06, 0.7), RD, { p: [0, 2.9, 5.1] }); P_(J.hull, nB(2.86, 1.56, 0.7), RD, { p: [0, 5.0, 5.1] }); } },
+    // gold on every edge that takes it: fin caps, wing stripes and leading edges, wingtips, intake rings, the cannon's muzzle, a pinstripe down the flanks
+    ceremonial: { rule: (k, h, x, y, z) => (k === 'fin' && h === COS_HK.BN && y > 3) || (k === 'wing' && h === COS_HK.BN && Math.abs(x) > 4.9) || (k === 'tip' && h === COS_HK.H2) || (k === 'wing' && h === COS_HK.H2 && z > 2.5)
+        || (k === 'hull' && h === COS_HK.GM && Math.abs(Math.abs(x) - 3.15) < 1.4 && z > -0.2 && z < 0.6) || (k === 'turret' && h === COS_HK.GM && z > 6.9) ? 0xd8ae4e : undefined,
+      ov: (J, P_) => { for (const sx of [-1, 1]) { P_(J.hull, nB(0.03, 0.12, 14.7), 0xd8ae4e, { p: [sx * 2.165, 1.5, -1.6] }); P_(J.hull, nB(0.03, 0.05, 14.7), 0xd8ae4e, { p: [sx * 2.165, 1.3, -1.6] }); } } },
+    // ash grey, the heraldry in black
+    ash: { rule: (k, h) => h === COS_HK.BL ? 0x6a6b6b : h === COS_HK.H2 ? 0x56585a : h === COS_HK.BN ? 0x1c1d22 : undefined }
+  };
+  function cosHawkPaint(J, id) {
+    if (!J || !J.hull) return;
+    const H = cosHawkPrep(J), d = COS_HAWK[id];
+    for (const s of H.ms) {
+      const a = s.attr.array; a.set(s.orig);
+      if (d && d.rule) for (let t = 0; t < s.hex.length; t++) { const nh = d.rule(s.kind, s.hex[t], s.cen[t * 3], s.cen[t * 3 + 1], s.cen[t * 3 + 2]); if (nh === undefined) continue; cosC.setHex(nh).convertSRGBToLinear(); for (let q = 0; q < 9; q += 3) { a[t * 9 + q] = cosC.r; a[t * 9 + q + 1] = cosC.g; a[t * 9 + q + 2] = cosC.b; } }
+      s.attr.needsUpdate = true;
+    }
+    if (d && d.ov && !H.ov[id]) { const J2 = { parts: new Map() }; d.ov(J, (j, geo, col, o) => npcPart(J2, j, geo, col, o)); npcBake(J2); H.ov[id] = J2.meshes; }
+    for (const k in H.ov) H.ov[k].forEach(m => { m.visible = k === id; });
+  }
+  const cosGalHawk = () => { const ex = EXHIBITS.find(e => e.id === 'hawk'); return ex && ex.J; };
+
+  // ================================================================ COS: what the lead's screens and the save talk to
+  const COS = {
+    SHADERS: [
+      { id: 'templar', name: 'Black Templar', desc: 'The Chapter’s black, bone heraldry and gold, as the Reach knows it.' },
+      { id: 'battleworn', name: 'Battleworn', desc: 'Plate that has seen too many crusades: scuffed and chipped, rust creeping from every edge, the gilt gone dull, the tabard torn.' },
+      { id: 'ceremonial', name: 'Ceremonial', desc: 'Polished for the high altar: mirror-black plate, burnished gold trim, a tabard of pure white.' },
+      { id: 'crusade', name: 'Crimson Crusade', desc: 'The colours of an Eternal Crusade: black plate, a crimson tabard, every edge lacquered red.' },
+      { id: 'penitent', name: 'Penitent', desc: 'Bone-grey plate and a black tabard, the crosses in black: worn by a brother doing penance for a failure he will not name.' },
+      { id: 'champion', name: 'Emperor’s Champion', desc: 'The armour of faith: black heavy with gold, every cross gilded, and the white cloak of the Champion.' }
+    ],
+    EMBLEMS: COS_EMB.map(([id, name, f, dev, motif]) => ({ id, name, svg: cosEmblem(id, f, dev, motif) })),
+    SKULLS: [{ id: 'bone', name: 'Servo-skull' }, { id: 'gilded', name: 'Gilded skull' }, { id: 'cherub', name: 'Cyber-cherub' }, { id: 'auspex', name: 'Auspex skull' }],
+    HAWKS: [{ id: 'chapter', name: 'Chapter black' }, { id: 'crusade', name: 'Crusade bands' }, { id: 'ceremonial', name: 'Gilded ceremony' }, { id: 'ash', name: 'Ash wastes' }],
+    ORNS: [{ id: 'field', name: 'Blessed field', blade: 'power' }, { id: 'gold', name: 'Solar field', blade: 'power' }, { id: 'crimson', name: 'Martyr’s field', blade: 'power' }, { id: 'white', name: 'Pure field', blade: 'power' },
+      { id: 'steel', name: 'Adamantium teeth', blade: 'chain' }, { id: 'bronze', name: 'Bronze teeth', blade: 'chain' }],
+    DEF: { shader: 'templar', emblem: 'cross', skull: 'bone', hawk: 'chapter', orn: 'field', teeth: 'steel' },
+    cur: { shader: 'templar', emblem: 'cross', skull: 'bone', hawk: 'chapter', orn: 'field', teeth: 'steel' },     // what the player wears (the save keeps this)
+    shown: { shader: 'templar', orn: 'field', teeth: 'steel' },       // what the Templar shows now (the gallery previews without touching cur)
+    fieldTrail: COS_FIELD0.trail,
+    // repaint without saving: the gallery's chips use this
+    paintShader(id) {
+      const d = COS_SH[id]; if (!d) return; this.shown.shader = id; cosCapeW = id === 'champion';
+      for (const r of COS_ROLES) cosSet(r, d[r]);
+    },
+    paintOrn(id) {
+      const o = this.ORNS.find(x => x.id === id); if (!o) return;
+      if (o.blade === 'chain') { this.shown.teeth = id; cosSet('teeth', COS_ORN[id] || undefined); } else { this.shown.orn = id; cosField(id); }
+    },
+    applyShader(id) { if (!COS_SH[id]) return; this.cur.shader = id; this.paintShader(id); if (!GAL.on) applyLook(); },     // applyLook: the Champion's cloak comes and goes with it
+    applyOrn(id) { const o = this.ORNS.find(x => x.id === id); if (!o) return; this.cur[o.blade === 'chain' ? 'teeth' : 'orn'] = id; this.paintOrn(id); },
+    applyHawk(id) { if (!(id in COS_HAWK)) return; this.cur.hawk = id; cosHawkPaint(FLY.J, id); cosHawkPaint(cosGalHawk(), id); },
+    applyEmblem(id) { if (this.EMBLEMS.some(e => e.id === id)) this.cur.emblem = id; },
+    // everything at once, from a save (missing keys fall back to the defaults)
+    applyAll(o = {}) {
+      const c = Object.assign({}, this.DEF, o);
+      this.applyEmblem(c.emblem); this.skull.setVariant(c.skull); this.applyHawk(c.hawk); this.applyOrn(c.orn); this.applyOrn(c.teeth); this.applyShader(c.shader);
+    },
+    restore() { this.paintShader(this.cur.shader); this.paintOrn(this.cur.orn); this.paintOrn(this.cur.teeth); this.skull.setVariant(this.cur.skull); },
+    state() { return Object.assign({}, this.cur); },
+    desc(id) { const s = this.SHADERS.find(x => x.id === id); return s ? s.desc : ''; },
+    emblemSVG(id) { const e = this.EMBLEMS.find(x => x.id === id) || this.EMBLEMS[0]; return e.svg; },
+    // the gallery: open on the player's own look; the chips preview (shader, field, skull, paint) without changing what is saved
+    galOpen() { Object.assign(GAL.look, { shader: this.cur.shader, orn: this.cur.orn, skull: this.cur.skull, paint: this.cur.hawk }); },
+    gallery(L) { this.paintShader(L.shader); this.paintOrn(L.orn); this.skull.setVariant(L.skull, true); cosHawkPaint(cosGalHawk(), L.paint); },
+    skull: {
+      setVariant(id, preview) {
+        if (!COS.SKULLS.some(s => s.id === id)) return;
+        if (!preview) COS.cur.skull = id;
+        if (!SKL.v[id]) { SKL.v[id] = cosBuildSkull(id); SKL.root.add(SKL.v[id].root); }
+        for (const k in SKL.v) SKL.v[k].root.visible = k === id;
+        SKL.cur = id;
+      },
+      setVisible(on) { SKL.on = !!on; },
+      update: cosSkullUpdate,
+      root: SKL.root
+    },
+    // each frame: the skull, and the trail takes the field's colour while the power sword is in hand
+    hold: false,      // an ability's blade look owns the trail colour while it runs
+    update(dt) { cosSkullUpdate(dt); if (!this.hold) cosTrailU.value.copy(T.look.blade === 'power' ? this.fieldTrail : COS_FIELD0.trail); }
+  };
+  COS.skull.setVariant('bone');
+  // the gallery's extra chip rows
+  GOPT.shader = COS.SHADERS.map(s => [s.id, s.name]); GOPT.orn = COS.ORNS.filter(o => o.blade === 'power').map(o => [o.id, o.name.replace(/ field$/, '')]);
+  GOPT.skull = COS.SKULLS.map(s => [s.id, s.name]); GOPT.paint = COS.HAWKS.map(s => [s.id, s.name]);
+  Object.assign(GAL.look, { shader: 'templar', orn: 'field', skull: 'bone', paint: 'chapter' });
   const ABIL = { grenade() {}, melee() {}, super() {}, active: () => false, update() {}, statusTick: () => false, speedMult: () => 1, dmgMult: () => 1, takenMult: () => 1,
     onSwing() {}, onHit() {}, onKill() {}, fireOverride: () => false, reset() {}, hud: () => null, quiet: false, state: () => ({}) };      // STUB
   // ================================================================ abilities: grenade (G), melee ability (V) and super (X), from the subclass you've chosen
@@ -6550,6 +7022,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
     if (!FLY.on && G.state !== 'menu') updateMark(dt);
     if (dt === 0 && jetSnd) jetRoar(false);
     updateTrail(dt);
+    COS.update(G.ui === 'build' ? realDt : dt);
     if (ZONE === 'world') W.update(dt, G.state === 'menu' ? performance.now() / 1000 : G.time, G.state === 'menu' ? W.HUB.x : P.pos.x, G.state === 'menu' ? W.HUB.z - 60 : P.pos.z);
     glowFX.update(dt); dustFX.update(dt); fireFX(dt || 0);
     for (const f of FLASH) { if (f.t > 0) { f.t -= dt; f.L.intensity = f.p * Math.max(0, f.t / f.max); } else f.L.intensity = 0; }
@@ -6637,6 +7110,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
         enemies: ENEMIES.map(e => ({ type: e.type, lvl: e.lvl, pw: e.pw, imm: immune(e), dm: +e.dm.toFixed(2), hp: Math.round(e.hp), maxHp: e.maxHp, alive: e.alive, state: e.state, aggro: e.aggro, boss: e.boss, name: e.name, pos: e.pos.toArray().map(x => +x.toFixed(1)) })),
         enc: ENC.filter(E => E.state !== 'dormant').map(E => `${E.id}:${E.state}`), cam: cam.position.toArray().map(x => +x.toFixed(1)) };
     },
+    cos: { shader: id => COS.applyShader(id), hawk: id => COS.applyHawk(id), orn: id => COS.applyOrn(id), skull: id => COS.skull.setVariant(id), emblems: () => COS.EMBLEMS.map(e => [e.id, e.name, e.svg]), state: () => COS.state(), vis: () => COS.skull.root.visible },
     W: () => W, R: () => R, P, G, C, ST, ENC, NPCS, KEEPERS, DUNS, FLY, JP, T, en: i => ENEMIES[i]
   };
 })();

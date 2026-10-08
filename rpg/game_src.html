@@ -3507,6 +3507,53 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
   function raySphere(o, d, c, r) { const ox = o.x - c.x, oy = o.y - c.y, oz = o.z - c.z, b = ox * d.x + oy * d.y + oz * d.z, cc = ox * ox + oy * oy + oz * oz - r * r, disc = b * b - cc; if (disc < 0) return Infinity; const t = -b - Math.sqrt(disc); return t > 0 ? t : Infinity; }
   function segPointDist(a, b, p) { tmp2.subVectors(b, a); const l2 = tmp2.lengthSq(); const t = l2 > 0 ? clamp(tmp.subVectors(p, a).dot(tmp2) / l2, 0, 1) : 0; return tmp.copy(a).addScaledVector(tmp2, t).distanceTo(p); }
 
+  // ================================================================ the Feyr: a sculpted mesh from the user's sheet, rigged and animated by Tripo
+  // tools/tripo_rig_pack.py packs the rig and its clips (idle, walk, run, slash, hurt) into ASSETS.feyr. Every Feyr shares the geometry, the
+  // maps and the clips; each one gets its own bones, material (so a dead one can go dark) and AnimationMixer. The mesh faces +X under its
+  // Armature, so the holder turns it a quarter round to face +Z like every other body.
+  const FEYR = (() => {
+    const A = ASSETS.feyr; if (!A) return null;
+    const bytes = s => Uint8Array.from(atob(s), c => c.charCodeAt(0)), g = A.geo, geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(bytes(g.pos).buffer), 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(new Int8Array(bytes(g.nrm).buffer), 3, true));
+    geo.setAttribute('uv', new THREE.BufferAttribute(new Uint16Array(bytes(g.uv).buffer), 2, true));
+    geo.setAttribute('skinIndex', new THREE.BufferAttribute(bytes(g.ji), 4));
+    geo.setAttribute('skinWeight', new THREE.BufferAttribute(bytes(g.jw), 4, true));
+    geo.setIndex(new THREE.BufferAttribute(g.i32 ? new Uint32Array(bytes(g.idx).buffer) : new Uint16Array(bytes(g.idx).buffer), 1));
+    const tl = new THREE.TextureLoader(), tex = (k, srgb) => { const t = tl.load(A.tex[k]); t.flipY = false; if (srgb) t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; return t; };
+    const orm = tex('orm');
+    const mat = new THREE.MeshStandardMaterial({ map: tex('color', true), normalMap: tex('normal'), normalScale: new THREE.Vector2(1, -1), roughnessMap: orm, metalnessMap: orm,
+      emissiveMap: tex('emis', true), emissive: 0xffffff, emissiveIntensity: 2.4, skinning: true });
+    const ibm = []; for (let i = 0; i < g.joints.length; i++) ibm.push(new THREE.Matrix4().fromArray(g.ibm, i * 16));
+    // clips: int16 quaternions and float hip positions at a fixed rate
+    const clips = {}, speed = {};
+    for (const [name, c] of Object.entries(A.clips)) {
+      const tracks = c.tr.map(([bone, k, n, b]) => {
+        const times = Float32Array.from({ length: n }, (_, i) => i / c.fps), raw = bytes(b).buffer;
+        if (k === 't') return new THREE.VectorKeyframeTrack(bone + '.position', times, new Float32Array(raw));
+        const q = new Int16Array(raw), f = new Float32Array(q.length); for (let i = 0; i < q.length; i++) f[i] = q[i] / 32767;
+        return new THREE.QuaternionKeyframeTrack(bone + '.quaternion', times, f);
+      });
+      clips[name] = new THREE.AnimationClip(name, c.d, tracks); speed[name] = c.v;
+    }
+    const H = 2.4, k = H / g.height;           // a Feyr stands 2.4 m, a head over the Templar
+    function build() {
+      const bones = A.tree.map(n => { const b = new THREE.Bone(); b.name = n.n; b.position.fromArray(n.t); b.quaternion.fromArray(n.r); b.scale.fromArray(n.s); return b; });
+      A.tree.forEach((n, i) => { if (n.p >= 0) bones[n.p].add(bones[i]); });
+      const arm = bones[0], root = new THREE.Group(), holder = new THREE.Group();
+      holder.rotation.y = -PI / 2; holder.scale.setScalar(k); holder.add(arm); root.add(holder);
+      const m = mat.clone(), mesh = new THREE.SkinnedMesh(geo, m); mesh.castShadow = true; mesh.frustumCulled = false; arm.add(mesh);
+      // bind in the rig's own space (the inverse binds were made there), not the scaled world, or the holder's scale would apply twice
+      arm.updateMatrix(); mesh.bind(new THREE.Skeleton(g.joints.map(i => bones[i]), ibm), arm.matrix.clone());
+      const mix = new THREE.AnimationMixer(arm), act = {};
+      for (const n in clips) { act[n] = mix.clipAction(clips[n]); if (n === 'slash') { act[n].setLoop(THREE.LoopOnce); act[n].clampWhenFinished = true; } }
+      act.idle.play();
+      return { root, holder, mesh, mat: m, mix, act, cur: 'idle', spine: bones.find(b => b.name === 'Spine01'), k };
+    }
+    // the slash clip winds up from 0.7 s and lands at 2.1 s; played at 1.6x the blow lands 0.875 s after the wind-up starts
+    return { build, speed, slash0: 0.7, slashK: 1.6, H };
+  })();
+
   // ================================================================ enemies
   // mass scales knockback (and whether a hit interrupts an attack); lockY is where the lock ring and execute marker sit; xp is per kill at level 1
   const TYPES = {
@@ -3514,6 +3561,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
     gunner: { name: 'Renegade gunner', hp: 110, speed: 3.2, r: 0.42, mass: 1, lockY: 1.3, xp: 16, build: () => mergeParts(buildGunnerHD()), spheres: [[0, 0.55, 0, 0.36, false], [0, 1.2, 0, 0.36, false], [0, 1.7, 0.03, 0.18, true]] },
     leaper: { name: 'Leaper', hp: 55, speed: 5.6, r: 0.42, mass: 1, lockY: 1.0, xp: 14, build: () => mergeParts(buildLeaperHD()), spheres: [[0, 0.9, 0.14, 0.4, false], [0, 1.18, 0.52, 0.19, true]] },
     brute: { name: 'Brute', hp: 380, speed: 2.9, r: 0.75, mass: 4, lockY: 1.7, guard: 140, xp: 60, build: () => mergeParts(buildBruteHD()), spheres: [[0, 0.75, 0, 0.5, false], [0, 1.65, 0, 0.62, false], [0, 2.4, 0.05, 0.28, true]] },
+    feyr: { name: 'Feyr', hp: 170, speed: 3.0, r: 0.55, mass: 1.6, lockY: 1.7, xp: 30, build: () => FEYR.build(), spheres: [[0, 0.95, 0, 0.42, false], [0, 1.5, 0, 0.46, false], [0, 2.02, 0.06, 0.22, true]] },
     champion: { name: 'Champion', hp: 2200, speed: 3.8, r: 0.9, mass: 12, lockY: 2.1, poise: 180, armour: 0.75, xp: 400, build: () => mergeParts(buildChampionHD()), spheres: [[0, 0.95, 0, 0.6, false], [0, 2.05, 0, 0.8, false], [0, 3.0, 0.05, 0.34, true]] }
   };
   const _bp = new V3();
@@ -3536,7 +3584,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
   const _hs = new V3();
   function enemySpheres(e, cb) {
     const s = Math.sin(e.yaw), c = Math.cos(e.yaw), k = e.sc;
-    const low = ((e.type === 'ghoul' || e.type === 'leaper') && (e.state === 'wind' || e.state === 'crouch')) ? -0.15 : (e.state === 'broken' || e.state === 'execd') && e.type !== 'ghoul' ? -0.3 * (e.type === 'champion' ? 1.5 : 1) : 0;
+    const low = ((e.type === 'ghoul' || e.type === 'leaper') && (e.state === 'wind' || e.state === 'crouch')) ? -0.15 : (e.state === 'broken' || e.state === 'execd') && e.type !== 'ghoul' ? -0.3 * (e.type === 'champion' ? 1.5 : e.type === 'feyr' ? 2.6 : 1) : 0;
     for (const [x, y, z, r, head] of e.D.spheres) { _hs.set(e.pos.x + (x * c + z * s) * k, e.pos.y + (y + low) * k + e.lift, e.pos.z + (-x * s + z * c) * k); if (cb(_hs, r * k, head)) return; }
   }
   const BLADE = new Set(['sword', 'slam', 'thrust', 'exec', 'finisher']);
@@ -3644,6 +3692,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
     if (e.state !== 'broken' && e.state !== 'execd') {
       const brk = e.boss ? 0.12 : 0.45;
       if (e.type === 'gunner' && !e.brokeOnce && e.hp <= e.maxHp * brk) breakEnemy(e, 3.5);
+      if (e.type === 'feyr' && !e.brokeOnce && e.hp <= e.maxHp * (e.boss ? 0.12 : 0.4)) breakEnemy(e, 3.5);
       if (e.type === 'champion' && e.breakCd <= 0 && e.hp <= e.maxHp * 0.12) { breakEnemy(e, 5); banner(e.name || 'The Champion', 'He kneels: execute him'); }
       if (e.type === 'champion' && e.sum < 2 && e.hp < e.maxHp * (e.sum ? 0.33 : 0.66) && e.state !== 'leap') { e.sum++; e.state = 'roar'; e.t = 0; e.vel.set(0, 0, 0); SYN.roar(at, 1.2); }
     }
@@ -3696,6 +3745,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
         J.root.rotation.set(0, 0, 0); J.root.rotation.y = e.yaw;
         J.root.rotateX(-smooth(f) * PI / 2 * (e.fall.dot(tmp.set(Math.sin(e.yaw), 0, Math.cos(e.yaw))) > 0 ? -1 : 1));
         J.root.position.copy(e.pos);
+        if (J.mix) { feyrPlay(J, 'hurt'); J.mix.update(dt); J.mat.emissiveIntensity = 2.4 * Math.max(0, 1 - e.deadT / 1.5); }
         if (e.deadT > 6) removeEnemy(e);
         continue;
       }
@@ -3740,6 +3790,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
       }
       else if (stunned) face = false;      // stunned: no AI, no attacks
       else if (e.type === 'ghoul') aiGhoul(e, dist, dir, want);
+      else if (e.type === 'feyr') aiFeyr(e, dist, dir, want);
       else if (e.type === 'gunner') aiGunner(e, dt, dist, dir, want);
       else if (e.type === 'leaper') aiLeaper(e, dist, dir, want);
       else if (e.type === 'brute') { const r = aiBrute(e, dt, dist, dir, want); if (r === false) steer = false; }
@@ -3789,6 +3840,28 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
       if (!e.struck && e.t > 0.1 && dist < 1.55 * e.sc && Math.abs(P.pos.y - e.pos.y) < 1.8) { e.struck = true; hurtPlayer(9 * e.dm, e.pos); }
       if (e.t > 0.24) { e.state = 'recover'; e.t = 0; }
     } else if (e.state === 'recover') { if (e.t > 0.45) { e.state = 'chase'; e.cd = rand(1.0, 1.8); } }
+    else e.state = 'chase';
+  }
+  // the Feyr: stalks in, quicker from far off, and swings two-handed overhead. The wind-up is long and readable (the slash clip's raise);
+  // a blow from behind or the side misses. Up to two swing at once, like ghouls.
+  function aiFeyr(e, dist, dir, want) {
+    const W = FEYR.slashK, hitAt = (2.1 - FEYR.slash0) / W;
+    if (e.state === 'chase') {
+      const busy = ENEMIES.reduce((n, o) => n + (o.alive && o.type === 'feyr' && (o.state === 'wind' || o.state === 'lunge') ? 1 : 0), 0);
+      want.copy(dir).multiplyScalar(dist > 8 ? e.D.speed : e.D.speed * 0.65);
+      if (busy >= 2 && dist < 5) { want.multiplyScalar(dist < 3.5 ? -0.4 : 0.1); want.x += -dir.z * e.side * 2; want.z += dir.x * e.side * 2; }
+      separate(e, want);
+      if (dist < 3.1 * e.sc && e.cd <= 0 && e.stag <= 0 && P.alive && busy < 2 && Math.abs(P.pos.y - e.pos.y) < 2) { e.state = 'wind'; e.t = 0; SYN.roar(eUp(e, 2), 0.35); }
+    } else if (e.state === 'wind') {
+      if (e.t > hitAt - 0.12) { e.state = 'lunge'; e.t = 0; e.struck = false; e.vel.copy(dir).multiplyScalar(4); SYN.heavySwing(eUp(e, 2)); }
+    } else if (e.state === 'lunge') {
+      want.copy(e.vel).multiplyScalar(0.5);
+      const fd = dir.x * Math.sin(e.yaw) + dir.z * Math.cos(e.yaw);
+      if (!e.struck && e.t > 0.12) { e.struck = true;
+        const c = e.pos.clone().add(v(Math.sin(e.yaw), 0, Math.cos(e.yaw)).multiplyScalar(1.6 * e.sc)); c.y = GY(c.x, c.z); sparks(c.clone().setY(c.y + 0.2), 10, [1, 0.25, 0.15, 1], 5);
+        if (dist < 3.3 * e.sc && fd > 0.35 && Math.abs(P.pos.y - e.pos.y) < 2) hurtPlayer(16 * e.dm, e.pos, 6); }
+      if (e.t > 0.3) { e.state = 'recover'; e.t = 0; }
+    } else if (e.state === 'recover') { if (e.t > 0.6) { e.state = 'chase'; e.cd = rand(1.3, 2.3); } }
     else e.state = 'chase';
   }
   function separate(e, want) { for (const o of ENEMIES) { if (o === e || !o.alive) continue; const dx = e.pos.x - o.pos.x, dz = e.pos.z - o.pos.z, d2 = dx * dx + dz * dz, R = (e.r + o.r) * 1.4; if (d2 < R * R && d2 > 1e-4) { want.x += dx / d2 * 1.6 * R; want.z += dz / d2 * 1.6 * R; } } }
@@ -3881,6 +3954,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
     const s = Math.sin(e.run), amp = Math.min(1, sp / 4);
     J.root.position.copy(e.pos); J.root.position.y += e.lift; J.root.rotation.set(0, e.yaw, 0);
     const down = e.state === 'broken' || (e.state === 'execd' && e.D.mass > 1), held = e.state === 'execd' && !down;
+    if (e.type === 'feyr') return animateFeyr(e, dt, sp, down || held);
     if (e.type === 'ghoul' || e.type === 'leaper') {
       const air = e.state === 'leap' || e.state === 'fall';
       const wind = e.state === 'wind' || e.state === 'crouch' ? smooth(Math.min(1, e.t / 0.3)) : 0, lunge = e.state === 'lunge' || air ? 1 : 0;
@@ -3905,6 +3979,23 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
       e.aimP += (wantP - e.aimP) * damp(8, dt); J.aim.rotation.x = e.aimP;
       J.head.rotation.x = down ? 0.4 : held ? -0.5 : e.state === 'aim' ? 0 : 0.15;
     } else animateHeavy(e, dt, s, amp, down);
+  }
+  // the Feyr's clips: cross-fade to the one its state calls for; walk and run play at the speed it actually moves
+  function feyrPlay(J, name) {
+    if (J.cur === name) return;
+    const a = J.act[name]; a.reset(); a.timeScale = 1;
+    if (name === 'slash') { a.time = FEYR.slash0; a.timeScale = FEYR.slashK; }
+    a.fadeIn(name === 'slash' ? 0.12 : 0.25).play(); J.act[J.cur].fadeOut(name === 'slash' ? 0.12 : 0.25); J.cur = name;
+  }
+  function animateFeyr(e, dt, sp, down) {
+    const J = e.J, st = e.state, swing = st === 'wind' || st === 'lunge' || st === 'recover';
+    // (no run: Tripo's sprint folds this body in half, so a Feyr stalks, its walk sped up to match)
+    const name = down ? 'hurt' : swing ? 'slash' : sp > 0.35 ? 'walk' : 'idle';
+    feyrPlay(J, name);
+    if (name === 'walk') J.act.walk.timeScale = clamp(sp / (FEYR.speed.walk * J.k * e.sc), 0.6, 2.1);
+    J.mix.update(dt);
+    // struck: a jolt back through the spine, on top of whatever clip is playing
+    if (e.hitT > 0 || e.stag > 0) J.spine.rotateZ(-0.25 * Math.max(e.hitT / 0.12, Math.min(1, e.stag * 3)));
   }
   // brute and champion: a heavy walk, the weapon arm wound up and brought down, kneeling when broken
   function animateHeavy(e, dt, s, amp, down) {
@@ -5757,6 +5848,10 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
       ENC.push({ id: 'hive' + i, kind: 'hive', name: 'A hive pack', x: s.x, z: s.z, r: 10, lvl: [12, 13, 16, 12, 18][i], comp: comp(['leaper', 2], ['ghoul', 3], ['gunner', 1]), respawn: true }); });
     { const s = W.site(420, -10, 12, (x, z) => W.zones(x, z)[1] > 0.6 && W.H(x, z) > W.WATER_Y + 1) || { x: 420, z: -10 };
       ENC.push({ id: 'skarn', kind: 'warband', name: 'Skarn’s warband', x: s.x, z: s.z, r: 10, lvl: 11, comp: [{ type: 'brute', boss: true, name: 'Skarn the Flayer' }, 'ghoul', 'ghoul', 'gunner'], bonus: 900 }); }
+    // the Feyr: a small rift by the Breach, and a larger one out in no-man's-land toward the dead hive
+    if (FEYR) [[30, 60, 4, 2, 'feyr0'], [-40, -170, 9, 3, 'feyr1']].forEach(([tx, tz, lvl, n, id]) => {
+      const s = W.site(tx, tz, 10, (x, z) => W.H(x, z) > W.WATER_Y + 1) || { x: tx, z: tz };
+      ENC.push({ id, kind: 'rift', name: 'A Feyr rift', x: s.x, z: s.z, r: 10, lvl, comp: comp(['feyr', n]), respawn: true, bonus: 120 * lvl }); });
     for (const [id, tx, tz, zi, c] of WARDS) {
       const s = W.site(tx, tz, 10, (x, z) => W.zones(x, z)[zi] > 0.7 && W.H(x, z) > W.WATER_Y + 1) || { x: tx, z: tz };
       ENC.push({ id, kind: 'ward', ward: true, name: c.name, x: s.x, z: s.z, r: 8, lvl: c.pw / 10, comp: [Object.assign({ boss: true, ward: true }, c)], respawn: true, bonus: c.pw * 8 });
@@ -7920,6 +8015,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
     key(code, on) { if (on) keys.add(code); else keys.delete(code); },
     act() { const a = nearestAct(); if (a) { a.go(); return a.text; } return null; },
     enter(id) { enterDungeon(id); }, exit() { exitDungeon(); }, wave(n) { if (DUN) { for (const e of ENEMIES) removeEnemy(e); ENEMIES = []; DUN.toSpawn = []; startDunWave(n); } },
+    hurtE(i, dmg) { const e = ENEMIES[i]; return e ? damageEnemy(e, dmg, v(0, 0, 1), 0, 'test') : null; },
     killAll() { for (const e of ENEMIES) if (e.alive) damageEnemy(e, 1e6, v(0, 0, 1), 0, 'test'); },
     xp(n) { gainXP(n); }, give(slot, rar, pw, exo) { const it = makeItem(slot, pw || 10 * R.lvl, rar || 0, null, null, exo); R.bag.push(it); return it; },
     equip(id) { const it = findItem(id); return it ? equipItem(it) : false; }, power() { return { power: ST.power, soft: softCap(), pow: powCap(), pin: pinCap(), eq: SLOTS.map(k => R.eq[k] && R.eq[k].pw) }; },

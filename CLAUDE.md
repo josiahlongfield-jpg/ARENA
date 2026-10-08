@@ -121,6 +121,13 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
   through the crosshair (30 m max, snaps to a foe within 2.6 m); `JPM` draws the ring over the ground. Click or F dives, C drops; `landJump` is the AoE.
   The character screen turns the camera onto the player (`armouryCam`).
 - No sword hum: it was removed at the user's request (2026-10-08); the swing keeps its whoosh and field crackle.
+- The Feyr (`FEYR`, `TYPES.feyr`, `aiFeyr`, `animateFeyr`): the first enemy from the user's own designs, a Tripo sculpt of their sheet,
+  rigged by Tripo with idle, walk, slash and hurt clips. `rpg/tools/tripo_rig_pack.py rig.glb rpg/assets/feyr_rig.json idle=… walk=… slash=… hurt=…`
+  packs it (joint tree, inverse binds, byte normals and skin, WebP maps with the red glow as emission, 30 fps int16 clips, root motion
+  taken out); build.py inlines it as `ASSETS.feyr`. Each Feyr gets its own bones, material and AnimationMixer; bind in the rig's own
+  space (`arm.matrix`), never the scaled world, or it renders 2.4x too big. 2.4 m tall, stalks on a sped-up walk (Tripo's run folds the
+  body), a long overhead slam, kneels (`hurt`) when broken at 40% for an execution. Two 'rift' encounters (by the Breach, lvl 4; and in
+  no-man's-land, lvl 9). Source GLBs: project files `templar-arena/concepts/step3/rig/`. Test hook `hurtE(i, dmg)`.
 - Gallery: `openGallery()` from the menu, and `rpg/gallery.html` (build.py, `GALLERY_ONLY`, no textures or sounds) is the same gallery alone,
   published to https://claude.ai/artifact/2dyF1DF8Zz8JJPPMpeA7pJ. Hook `window.__gal` (show, look, hawk, view, step) in that build.
 - Test hook `window.__rpg`: begin(fresh), sim(s, fps), set({pos,yaw,pitch,hp,gold,quest}), tp(x,z,yaw), spawn, clear, noEnc, fire, sword,

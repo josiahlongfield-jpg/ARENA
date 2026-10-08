@@ -25,7 +25,8 @@ for f in sorted(os.listdir(TEX)):
         mean[name] = [round(float(v), 4) for v in (px ** 2.2).reshape(-1, 3).mean(0)]
 
 assets = {'tex': tex, 'mean': mean, 'kenney': json.load(open(os.path.join(HERE, 'assets', 'kenney.json')))}
-game_assets = dict(assets, snd=json.load(open(os.path.join(HERE, '..', 'data', 'sounds.json'))))
+game_assets = dict(assets, snd=json.load(open(os.path.join(HERE, '..', 'data', 'sounds.json'))),
+                   feyr=json.load(open(os.path.join(HERE, 'assets', 'feyr_rig.json'))))      # the Tripo-rigged Feyr (tools/tripo_rig_pack.py)
 
 def build(src_name, out_name, data):
     src = open(os.path.join(HERE, src_name)).read()

@@ -48,7 +48,7 @@ function buildArms(A) {
   mesh.bind(new T.Skeleton(bones, bones.map(b => b.matrixWorld.clone().invert())), new T.Matrix4());
   J.mesh = mesh;
   if (A.hands) {      // the modelled gauntlets (vigil/tools/gauntlet.py) in place of the sculpt's fused hands, on the same skeleton
-    const hm = new T.SkinnedMesh(handsGeo(A.hands), handMats()); hm.frustumCulled = false; hm.receiveShadow = true; root.add(hm);
+    const hm = new T.SkinnedMesh(handsGeo(A.hands), handMats(A.hands, 8)); hm.frustumCulled = false; hm.receiveShadow = true; root.add(hm);
     hm.bind(mesh.skeleton, new T.Matrix4()); J.hands = hm;
   }
   J.rest = {}; J.restW = {};

@@ -35,7 +35,7 @@ button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
 <div id="cross"></div>
 <section id="panel" aria-label="Room controls">
   <div class="top"><h1>Character room</h1><button id="hide" type="button" aria-label="Hide the panel">Hide</button></div>
-  <p>The Vigil (at ease, and in a combat stance with her assault rifle), the Skeleton and the Feyr. The Vigil and the Skeleton are 1.95 m. The Feyr is 2.4 m and floats.</p>
+  <p>The Vigil (at ease, and in a combat stance with her assault rifle), the Skeleton, the Feyr and the Feyr caster. The Vigil and the Skeleton are 1.95 m. The Feyr (2.4 m) and the caster (2.43 m) float.</p>
   <dl id="keys" class="desk"><dt>W A S D</dt><dd>Walk (Shift to go faster)</dd><dt>Mouse</dt><dd>Look; click the room to lock it, Esc to free it</dd>
     <dt>Space / C</dt><dd>Raise or lower your eye</dd><dt>Wheel</dt><dd>Zoom</dd><dt>L / P / B</dt><dd>Light, pause the idle, back to the door</dd><dt>R</dt><dd>Old or new renderer</dd></dl>
   <p class="touch">Drag on the left half to walk and on the right half to look.</p>
@@ -114,12 +114,14 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
   }
   // The same light in the new pipeline. Physically correct units divide punctual and hemisphere light by PI, so they are scaled back up;
   // the hemisphere is turned down because the sky's image-based light now does part of its job (and adds reflections).
+  const GLOWS = [];      // point lights the figures carry (the caster's orb), scaled with the pipeline like the rest
   const NEWK = { hemi: 0.6, env: 1.5, exp: 1.0 };      // tuned by eye against the old look (see vigil/test/shots)
   function lookNew(L) {
     L = L || LIGHTS[li];
     sky.visible = !NEW; sun.visible = !NEW; rnd.sun.visible = NEW;
     hemi.intensity = L.hemi[2] * (NEW ? PI * NEWK.hemi : 1);
     fill.intensity = L.fill[1] * (NEW ? PI : 1);
+    for (const l of GLOWS) l.intensity = l.userData.i0 * (NEW ? PI * 0.06 : 1);      // a physical light falls off as 1/d², about 17x the old one's at a hand's reach, so it is turned down to match there
     rnd.sun.color.setHex(L.sun[0]); rnd.sun.intensity = L.sun[1] * PI;
     // the room's sky shader writes its linear colours straight to the sRGB canvas, so it shows them darker than their hex values;
     // the new sky is given the colours the old one shows, so the two modes differ by the renderer and not by the sky
@@ -207,7 +209,7 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
     mesh.castShadow = true; mesh.frustumCulled = false; root.add(mesh);
     mesh.bind(new THREE.Skeleton(bones, bones.map(b => b.matrixWorld.clone().invert())), new THREE.Matrix4());
     if (A.hands) {      // the gauntlets in place of the sculpt's fused hands, on the same skeleton
-      const hm = new THREE.SkinnedMesh(handsGeo(A.hands), handMats()); hm.castShadow = true; hm.frustumCulled = false; root.add(hm);
+      const hm = new THREE.SkinnedMesh(handsGeo(A.hands), handMats(A.hands, 8)); hm.castShadow = true; hm.frustumCulled = false; root.add(hm);
       hm.bind(mesh.skeleton, new THREE.Matrix4()); J.hands = hm;
     }
     J.rest = {}; J.restW = {}; for (const k of A.joints) { J.rest[k] = J[k].quaternion.clone(); J.restW[k] = J[k].matrixWorld.clone(); }
@@ -271,6 +273,48 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
   }
   function feyrDrift(F, t) { F.holder.position.y = FEYR_HOVER + 0.04 * Math.sin(t * 1.3); }
 
+  // ================================================================ the Feyr caster: the user's design, sculpted by Tripo from their front and back (2.43 m, faces +Z).
+  // It stands still here (its pack is skinned to the studies' code Feyr, which the room doesn't have). Tripo leaves out what floats,
+  // so the shards round it and the orb in its raised left hand are made here, as the studies viewer makes them.
+  let HALO = null;
+  const haloTex = () => HALO || (HALO = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'), r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.18, 'rgba(255,255,255,.55)'); r.addColorStop(0.45, 'rgba(255,255,255,.14)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = r; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })());
+  const halo = (parent, s, col, op) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }));
+    sp.scale.setScalar(s); sp.userData.o0 = op; parent.add(sp); return sp; };
+  function buildCaster(S) {
+    const tl = new THREE.TextureLoader(), tex = (k, srgb) => { const t = tl.load(S.tex[k]); if (srgb) t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t; };
+    const g = new THREE.BufferGeometry(), uv = new THREE.BufferAttribute(new Float32Array(bytes(S.uv).buffer), 2);
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(bytes(S.pos).buffer), 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(new Int8Array(bytes(S.nrm).buffer), 3, true));
+    g.setAttribute('uv', uv); g.setAttribute('uv2', uv);
+    g.setIndex(new THREE.BufferAttribute(S.i32 ? new Uint32Array(bytes(S.idx).buffer) : new Uint16Array(bytes(S.idx).buffer), 1));
+    const orm = tex('orm'), root = new THREE.Group(), holder = new THREE.Group(); root.add(holder);
+    const m = new THREE.MeshStandardMaterial({ map: tex('color', true), normalMap: tex('normal'), aoMap: orm, roughnessMap: orm, metalnessMap: orm,
+      emissiveMap: tex('emis', true), emissive: 0xffffff, emissiveIntensity: S.ei || 2.2, envMapIntensity: 0.45 });
+    const body = new THREE.Mesh(g, m); body.castShadow = body.receiveShadow = true; holder.add(body);
+    const P = new THREE.MeshStandardMaterial({ color: 0x0b0a0c, roughness: 0.22, metalness: 0.7, envMapIntensity: 0.6 }), shards = [], pulse = [];
+    let seed = 7; const rand = (a, b) => { seed = (seed * 16807) % 2147483647; return a + (seed / 2147483647) * (b - a); };      // seeded, so the shards sit the same on every visit
+    for (let i = 0; i < 10; i++) {          // obsidian shards in orbit, the studies' numbers
+      const L = rand(0.08, 0.19), w = L * rand(0.16, 0.24), sh = new THREE.Mesh(new THREE.OctahedronGeometry(1, 0).scale(w / 2, L / 2, w * 0.45), P);
+      sh.castShadow = true; holder.add(sh);
+      shards.push({ m: sh, a: i / 10 * 2 * PI + rand(-0.2, 0.2), r: rand(0.48, 0.7), y: rand(0.7, 2.0) * 1.05, sp: rand(0.12, 0.3) * (i % 2 ? 1 : -1), bob: rand(0, 6), tilt: rand(-0.4, 0.4) });
+    }
+    // the orb: a dark glass ball, a red glow round it, a hot star at its heart (drawn over the ball) and a red light
+    const orb = new THREE.Group(); orb.position.set(...S.orb); holder.add(orb);
+    orb.add(new THREE.Mesh(new THREE.SphereGeometry(0.058, 40, 20), new THREE.MeshStandardMaterial({ color: 0x0c0101, roughness: 0.08, metalness: 0.1, emissive: 0x2a0301, emissiveIntensity: 1, envMapIntensity: 0.5 })));
+    const star = halo(orb, 0.085, 0xfff4ee, 1); star.material.depthTest = false; star.renderOrder = 2;
+    pulse.push(halo(orb, 0.36, 0xff2410, 0.8), star);
+    const l = new THREE.PointLight(0xff2a12, 1.8, 1.5, 2); l.userData.i0 = 1.8; orb.add(l); GLOWS.push(l);
+    return { root, holder, shards, pulse };
+  }
+  function casterDrift(C, t) {
+    C.holder.position.y = 0.06 + 0.035 * Math.sin(t * 1.3); C.holder.rotation.z = 0.012 * Math.sin(t * 0.7);
+    for (const s of C.shards) { const a = s.a + t * s.sp; s.m.position.set(Math.sin(a) * s.r, s.y + Math.sin(t * 1.1 + s.bob) * 0.05, Math.cos(a) * s.r); s.m.rotation.set(s.tilt, a * 2, s.tilt * 0.5 + Math.sin(t + s.bob) * 0.2); }
+    const k = 0.8 + 0.2 * Math.sin(t * 2.3) + 0.06 * Math.sin(t * 7.1);
+    for (const h of C.pulse) h.material.opacity = h.userData.o0 * k;
+  }
+
   // ================================================================ the rifle (vigil/tools/rifle_pack.py): metres, muzzle -Z, top +Y, its right side +X,
   // origin at the rear sight on the sight line. Quantised in chunks; the UVs are already flipped for three's flipY.
   function buildRifle(R) {
@@ -311,7 +355,8 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
   const STANCE = { px: -0.033, py: -0.442, drop: 0.046, wx: 0.286, wy: -0.227, wz: 0.101, hx: 0.35, hy: 0.392, hz: 0.1,      // the left elbow bent about 40 degrees
     eye: new V3(-0.032, 1.80, 0.055), pocket: new V3(-0.112, 1.589, 0.040),      // her right eye, and the butt's place on her armour, at rest
     feet: { L: [0.20, 0.13, -0.25], R: [-0.20, -0.22, -0.75] },                  // x, z and the way each foot points (left forward, right turned out)
-    elbow: { L: new V3(0.25, -1, 0.05), R: new V3(-1, -0.45, -0.25) } };         // which way each elbow goes
+    elbow: { L: new V3(0.25, -1, 0.05), R: new V3(-1, -0.45, -0.25) },          // which way each elbow goes
+    flare: { L: 0.5 } };      // the left elbow: radians out from hanging straight down, away from her body (about the shoulder-hand line, so the bend is kept)
   const FING = ['thumb', 'index', 'middle', 'ring', 'little'], _Y = new V3(0, 1, 0), _X = new V3(1, 0, 0);
   const atv = (J, k) => new V3(...J.A.at[k]), _qw = new THREE.Quaternion(), _qp = new THREE.Quaternion(), _mb = new THREE.Matrix4();
   const _a = new V3(), _b = new V3(), _c = new V3(), _d = new V3();
@@ -330,10 +375,15 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
     return out.copy(up).multiplyScalar(-2.5).add(pp);
   }
   // arms: bones hang along their local -Y and bend about local x, as buildBody set them; Mt is where the hand's joint must end up
-  function armTo(J, s, Mt, pole) {
+  function armTo(J, s, Mt, pole, flare) {
     const sh = J['sh' + s], el = J['el' + s], hd = J['hd' + s], tw = J['tw' + s];
     const S = sh.getWorldPosition(new V3()), W = new V3().setFromMatrixPosition(Mt);
     if (J.handU) pole = straightPole(S, W, new V3().copy(J.handU[s]).applyMatrix4(new THREE.Matrix4().extractRotation(Mt)).normalize(), pole, new V3());
+    if (flare !== undefined) {      // the elbow hangs straight down from the shoulder-hand line, then swings out by flare toward her side
+      const n = new V3().subVectors(W, S).normalize(), dn = new V3(0, -1, 0).transformDirection(J.root.matrixWorld), o = new V3(s === 'L' ? 1 : -1, 0, 0).transformDirection(J.root.matrixWorld);
+      dn.addScaledVector(n, -dn.dot(n)).normalize(); o.addScaledVector(n, -o.dot(n));
+      pole = dn.applyAxisAngle(n, Math.sign(new V3().crossVectors(dn, o).dot(n)) * flare);
+    }
     const E = midJoint(S, W, el.position.length(), hd.position.length(), pole);
     const x = new V3().crossVectors(_c.subVectors(E, S), _d.subVectors(W, E)).normalize(), y = new V3().subVectors(S, E).normalize();
     setWorldQ(sh, basisQ(x, y, new V3().crossVectors(x, y)));
@@ -376,7 +426,7 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
     R.relief = RB.z - sz * len; R.matrix.makeBasis(X, Yr, Zr); R.matrix.setPosition(B.clone().sub(RB.applyMatrix4(R.matrix)));
     root.updateMatrixWorld(true);
     for (const s of 'LR') {
-      armTo(J, s, new THREE.Matrix4().multiplyMatrices(R.matrix, GRIP[s].T).multiply(J.restW['hd' + s]), S.elbow[s]);
+      armTo(J, s, new THREE.Matrix4().multiplyMatrices(R.matrix, GRIP[s].T).multiply(J.restW['hd' + s]), S.elbow[s], S.flare[s]);
       FING.forEach((f, fi) => { for (let k = 0; k < 3; k++) { const n = f + (k + 1) + s; J[n].quaternion.copy(J.rest[n]).multiply(GRIP[s].q[fi * 3 + k]); } });
     }
     root.position.copy(p0); root.quaternion.copy(q0); root.updateMatrixWorld(true);
@@ -385,14 +435,14 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
 
   // they stand mid-hall facing the door, with the sun behind you as you come in; the armed Vigil aims off to her left, so you see her
   // right side (the trigger hand, the stock in her shoulder, her head on it) as you come in
-  const VG = buildBody(ASSETS.vigil), AV = buildBody(ASSETS.vigil), RIFLE = buildRifle(ASSETS.rifle), SK = buildBody(ASSETS.skeleton), FY = buildFeyr();
+  const VG = buildBody(ASSETS.vigil), AV = buildBody(ASSETS.vigil), RIFLE = buildRifle(ASSETS.rifle), SK = buildBody(ASSETS.skeleton), FY = buildFeyr(), FC = buildCaster(ASSETS.caster);
   AV.root.add(RIFLE);
-  VG.root.position.set(-4.5, 0, 0); AV.root.position.set(-1.5, 0, 0); SK.root.position.set(1.5, 0, 0); FY.root.position.set(4.5, 0, 0);
-  for (const o of [VG, AV, SK, FY]) { o.root.rotation.y = PI; scene.add(o.root); }
+  VG.root.position.set(-6, 0, 0); AV.root.position.set(-3, 0, 0); SK.root.position.set(0, 0, 0); FY.root.position.set(3, 0, 0); FC.root.position.set(6, 0, 0);
+  for (const o of [VG, AV, SK, FY, FC]) { o.root.rotation.y = PI; scene.add(o.root); }
   AV.root.rotation.y = PI + 0.6; stanceBody(AV, RIFLE, 0);
-  plaque('The Vigil', 'player · 1.95 m', -4.5, -1.0); plaque('The Vigil, armed', 'rifle · combat stance', -1.5, -1.1);
-  plaque('The Skeleton', 'sculpt · 1.95 m', 1.5, -1.0); plaque('The Feyr', 'enemy · 2.4 m', 4.5, -1.2);
-  const BODIES = [{ x: -4.5, z: 0, r: 0.42, h: 2.0 }, { x: -1.5, z: 0, r: 0.55, h: 2.0 }, { x: 1.5, z: 0, r: 0.42, h: 2.0 }, { x: 4.5, z: 0, r: 0.55, h: 2.45 }];
+  plaque('The Vigil', 'player · 1.95 m', -6, -1.0); plaque('The Vigil, armed', 'rifle · combat stance', -3, -1.1);
+  plaque('The Skeleton', 'sculpt · 1.95 m', 0, -1.0); plaque('The Feyr', 'enemy · 2.4 m', 3, -1.2); plaque('The Feyr caster', 'enemy · 2.43 m', 6, -1.2);
+  const BODIES = [{ x: -6, z: 0, r: 0.42, h: 2.0 }, { x: -3, z: 0, r: 0.55, h: 2.0 }, { x: 0, z: 0, r: 0.42, h: 2.0 }, { x: 3, z: 0, r: 0.55, h: 2.45 }, { x: 6, z: 0, r: 0.6, h: 2.5 }];
 
   // ================================================================ you: walk, look, raise your eye, zoom
   const ME = { pos: new V3(0, 0, -5.5), yaw: PI, pitch: -0.05, eye: 1.7, fov: 70 }, HOME = { x: 0, z: -5.5, yaw: PI, pitch: -0.05, eye: 1.7 };
@@ -460,7 +510,7 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
   let t = 0, last = performance.now(), frozen = false;
   function step(dt) {
     move(dt);
-    if (!paused) { t += dt; FY.mix.update(dt); feyrDrift(FY, t); idleBody(VG, t); stanceBody(AV, RIFLE, t + 1.3); idleBody(SK, t + 2.7); }
+    if (!paused) { t += dt; FY.mix.update(dt); feyrDrift(FY, t); casterDrift(FC, t + 0.8); idleBody(VG, t); stanceBody(AV, RIFLE, t + 1.3); idleBody(SK, t + 2.7); }
     cam.position.set(ME.pos.x, ME.eye, ME.pos.z); cam.rotation.set(ME.pitch, ME.yaw, 0);
     if (Math.abs(cam.fov - ME.fov) > 0.01) { cam.fov += (ME.fov - cam.fov) * damp(12, dt); cam.updateProjectionMatrix(); }
     if (hintT > 0 && (hintT -= dt) <= 0 && locked) $('hint').classList.add('off');
@@ -478,7 +528,7 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
   window.__room = { set(o) { if (o.pos) ME.pos.set(o.pos[0], 0, o.pos[1]); for (const k of ['yaw', 'pitch', 'eye', 'fov']) if (o[k] !== undefined) ME[k] = o[k]; },
     light: i => setLight(i), sim(s) { for (let i = 0; i < Math.round(s * 30); i++) step(1 / 30); }, still() { frozen = true; cam.fov = ME.fov; cam.updateProjectionMatrix(); step(0); draw(1 / 30); },
     mode(on) { toggleRenderer(on); return NEW; }, rnd, newK: NEWK, look: () => lookNew(),
-    armed: AV, rifle: RIFLE, stance: STANCE, pose(tt) { stanceBody(AV, RIFLE, tt || 0); return { relief: RIFLE.relief }; },
+    armed: AV, rifle: RIFLE, caster: FC, stance: STANCE, pose(tt) { stanceBody(AV, RIFLE, tt || 0); return { relief: RIFLE.relief }; },
     run() { frozen = false; }, me: ME,
     clip(name, at) { const a = FY.act[name]; if (!a) return false; FY.act[FY.cur].stop(); a.reset().play(); FY.cur = name; FY.mix.update(at || 0); return true; } };
   window.__ready = true;

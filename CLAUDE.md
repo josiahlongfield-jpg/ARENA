@@ -140,15 +140,18 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
 - Gallery: `openGallery()` from the menu, and `rpg/gallery.html` (build.py, `GALLERY_ONLY`, no textures or sounds) is the same gallery alone,
   published to https://claude.ai/artifact/2dyF1DF8Zz8JJPPMpeA7pJ. Hook `window.__gal` (show, look, hawk, view, step) in that build.
 - Character room: `rpg/room_src.html` -> `rpg/room.html` (build.py) is an empty stone hall where the Vigil (twice: at ease, and armed in a combat stance),
-  the Skeleton and the Feyr stand with the game's own meshes, maps and lights, to walk round and inspect. The Skeleton is the user's skeletal design, Tripo-rigged
+  the Skeleton, the Feyr and the Feyr caster stand (x -6, -3, 0, 3, 6) with the game's own meshes, maps and lights, to walk round and inspect. The caster
+  (`buildCaster`, `vigil/assets/feyr_caster.json`, copied from the studies viewer's `fc_sculpt_data.js`) stands still, unskinned; its orbiting shards and the
+  orb in its raised left hand are made in code as the studies make them, and the orb's light goes in `GLOWS` (turned down in the new pipeline). The Skeleton is the user's skeletal design, Tripo-rigged
   and packed by `vigil_pack.py` (GLOW=red) into `rpg/assets/skeleton_rig.json`, so it could be worn with `wearBody` like the Vigil. Both Vigils use
   `vigil/assets/vigil_body.json` (her rig plus finger joints). The armed one (`AV`, `stanceBody`, `STANCE`) is posed by hand each frame: legs by two-bone IK
   (`legTo`), the rifle placed from her right eye (sight line) and her shoulder pocket (butt), then the arms by IK (`armTo`) onto the grips from
   `vigil/assets/grips_body.json`, fingers included; the at-ease one's fingers fall into a loose curl (`relaxHands`). R (or the panel button) switches between Vigil's renderer (`vigil/src/js/render.js`, injected at
   `/*__RENDER__*/`) and the plain one; B goes back to the door; `?old` starts plain. The hands are the game's own (`vigil/src/js/hands.js`, injected at
-  `/*__HANDS__*/`). `armTo` turns each elbow round so the forearm lines up with the hand (`straightPole`, from `J.handU`), so the wrists bend less.
+  `/*__HANDS__*/`). `armTo` turns each elbow round so the forearm lines up with the hand (`straightPole`, from `J.handU`), so the wrists bend less; the left elbow instead
+  hangs from the shoulder-hand line and swings out by `STANCE.flare.L` (0.5 rad), so the upper arm stays off her chest (the user's call).
   room.html passed 16 MB, so build.py also writes `rpg/room_artifact/` (index.html and an `a_<asset>.js` per asset, filling `window.VGA`), and that is
-  what gets published (with `files`) to https://claude.ai/artifact/LWHmSFayM8rJzQn44RZJCZ. Hook `window.__room` (set, light, sim, still, run, mode(on), armed, rifle, stance, pose).
+  what gets published (with `files`) to https://claude.ai/artifact/LWHmSFayM8rJzQn44RZJCZ. Hook `window.__room` (set, light, sim, still, run, mode(on), armed, rifle, caster, stance, pose).
 - Test hook `window.__rpg`: begin(fresh), sim(s, fps), set({pos,yaw,pitch,hp,gold,quest}), tp(x,z,yaw), spawn, clear, noEnc, fire, sword,
   execute, dash, key, act, enter(id), exit, wave(n), killAll, xp, give(slot,rar,pw,exo), equip(id), power(), ab(k), fill(), node, subUse,
   cs(o), week(), abil {g, m, s, st, hud}, cos {shader, hawk, orn, skull, emblems, state, vis}, ui(name), talk(id), travel(id), save, quest, norender, render, view(cam, target, fov)/unview, board, land, fly, jump, trial,
@@ -176,6 +179,11 @@ The player is the Vigil with an assault rifle as the primary weapon; enemies wil
   new hands, and adds `hands` (16-bit positions, one joint per vertex, `wear` a byte for a plate's worn rim, groups 0 glove / 1 plate) beside the sculpt's
   mesh, skinned to the same skeleton. `src/js/hands.js` (shared with the room) draws them: her greys, a grain and bump in rest space, rims worn lighter
   and smoother, no glow (the user's call). Any change to the plating must keep the grips clear: check every part's distance to the rifle (1 mm or more). Reference photos of the grips: project files `templar-arena/concepts/step3/hand_refs/` (grip only, not the look).
+- Sculpted hands, set aside: grafting a separately sculpted glove (`tools/hand_sculpt.py`, from the user's glove sheets in project files
+  `templar-arena/concepts/step3/wraith_hands/`) onto her arms was rejected: the user wants her hands to come from the same sculpt as her body, so it all
+  flows ("you can't add them in after"). The next step is a whole-body re-sculpt from new views with open, spread hands. hand_sculpt.py stays for its digit
+  finder (slabs cut from the fingertips down, each piece followed until it joins the palm, finger joints placed on them), which can place the finger joints
+  on that sculpt's hands. hands.js can draw textured hands (`tex`, `ji`/`jw` skinning) and grip_solve.py reads either kind.
 - Rifle: `tools/rifle_pack.py` packs the user's assault rifle (Tripo bake, project files `templar-arena/concepts/step3/rifle/ar_150k.glb`) into
   `assets/rifle.js` (`window.VG_RIFLE`): body and a removable magazine, quantised to 16 bits in chunks of under 65536 vertices, 2K maps, and the
   points the hands, sights and effects need (`pts`: sight, front, muzzle, gripTop/Bot, trigger, guard, butt, ejector, magTop/magDir, peep).

@@ -25,10 +25,14 @@ dec = lambda s, t: np.frombuffer(base64.b64decode(s), t)
 g = A['geo']; P = dec(g['pos'], np.float32).reshape(-1, 3).astype(float); NV = len(P)
 JI = dec(g['ji'], np.uint8).reshape(-1, 4).astype(int); JW = dec(g['jw'], np.uint8).reshape(-1, 4) / 255
 IDX = dec(g['idx'], np.uint32 if g['i32'] else np.uint16).astype(int).reshape(-1, 3)
-if 'hands' in A:      # gauntlet.py's modelled hands: their own geometry, skinned to the same joints
+if 'hands' in A:      # hands with their own geometry, skinned to the same joints: gauntlet.py's (one joint a vertex) or hand_sculpt.py's
     h = A['hands']; IDX = np.vstack([IDX, dec(h['idx'], np.uint32 if h['i32'] else np.uint16).astype(int).reshape(-1, 3) + NV])
-    hj = dec(h['j'], np.uint8).astype(int); P = np.vstack([P, np.array(h['lo']) + dec(h['pos'], np.uint16).reshape(-1, 3) * np.array(h['sc'])])
-    JI = np.vstack([JI, np.stack([hj] + [np.zeros_like(hj)] * 3, 1)]); JW = np.vstack([JW, np.repeat([[1.0, 0, 0, 0]], len(hj), 0)]); NV = len(P)
+    P = np.vstack([P, np.array(h['lo']) + dec(h['pos'], np.uint16).reshape(-1, 3) * np.array(h['sc'])])
+    if 'ji' in h: JI = np.vstack([JI, dec(h['ji'], np.uint8).reshape(-1, 4).astype(int)]); JW = np.vstack([JW, dec(h['jw'], np.uint8).reshape(-1, 4) / 255])
+    else:
+        hj = dec(h['j'], np.uint8).astype(int)
+        JI = np.vstack([JI, np.stack([hj] + [np.zeros_like(hj)] * 3, 1)]); JW = np.vstack([JW, np.repeat([[1.0, 0, 0, 0]], len(hj), 0)])
+    NV = len(P)
 BASE = A['arm'] if 'arm' in A else [n for n in A['joints'] if n not in F['names']]
 NB = len(BASE); NJ = NB + len(F['names'])
 JP = np.array([A['at'][k] for k in BASE] + F['pos']); AX = np.array([[0, 0, 1.0]] * NB + F['axis'])

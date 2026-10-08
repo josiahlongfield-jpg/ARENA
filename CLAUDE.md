@@ -94,7 +94,10 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
   While flying P.pos follows the ship, damage and sight aggro are off.
 - Wargear kinds: each item has `kind` (`KINDS`: blade power/chain/hammer, pistol bolt/plasma, armour mk7/mk6/crusader/mk10, pack jump/power);
   `kindOf` infers it for old saves. `buildGear(T)` adds the models, `applyLook(over)` shows them, `BK()` is the blade's speed/damage/knock.
-  The jump pack (`JP`, C; sword in the air = ground pound) is issued once per save (`R.gotJump`). B opens the armoury (`renderArmoury`, `armouryCam`).
+  The jump pack (`JP`, C) is issued once per save (`R.gotJump`). `JP.phase`: 'rise' (about 12 m), 'hover' (3 s real time, world at half speed,
+  the aim camera in `updateCamera` follows pitch), 'dive' (straight onto `JP.mark`, re-homing on `JP.lock`), 'fall'. `aimMark` casts from the camera
+  through the crosshair (30 m max, snaps to a foe within 2.6 m); `JPM` draws the ring over the ground. Click or F dives, C drops; `landJump` is the AoE.
+  B opens the armoury (`renderArmoury`, `armouryCam`).
 - No sword hum: it was removed at the user's request (2026-10-08); the swing keeps its whoosh and field crackle.
 - Gallery: `openGallery()` from the menu, and `rpg/gallery.html` (build.py, `GALLERY_ONLY`, no textures or sounds) is the same gallery alone,
   published to https://claude.ai/artifact/2dyF1DF8Zz8JJPPMpeA7pJ. Hook `window.__gal` (show, look, hawk, view, step) in that build.

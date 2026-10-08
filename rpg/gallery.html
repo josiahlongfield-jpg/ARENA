@@ -30,6 +30,12 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); 
 #hitm.kill i { background: var(--wax); }
 #lock { position: absolute; width: 46px; height: 46px; margin: -23px 0 0 -23px; border: 2px solid var(--field); border-radius: 50%; opacity: 0; transform: scale(1.3); transition: opacity .1s, transform .15s; box-shadow: 0 0 8px rgba(120, 190, 255, .6); }
 #lock.on { opacity: .9; transform: scale(1); }
+/* the jump pack's hover: what to press, how long the jets hold, and how many stand inside the blast */
+#jpaim { position: absolute; left: 50%; top: 58px; transform: translateX(-50%); width: min(340px, calc(100vw - 32px)); text-align: center; font: 500 .8rem var(--ui); letter-spacing: .06em; color: var(--ink); text-shadow: 0 1px 4px #000; pointer-events: none; }
+#jpaim .jpbar { width: 120px; height: 3px; margin: 0 auto 6px; background: rgba(236, 228, 210, .18); }
+#jpaim .jpbar i { display: block; height: 100%; width: 100%; background: var(--field); box-shadow: 0 0 6px var(--field); }
+#jpaim kbd { color: var(--field); font: inherit; font-weight: 700; }
+#jpaim .n { display: block; margin-top: 3px; color: #ff8a5a; font-weight: 700; min-height: 1.2em; }
 .panel { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; }
 #hpbox { left: 16px; bottom: 16px; width: min(300px, calc(50vw - 28px)); display: grid; gap: 6px; }
 .lbl { font: 500 .72rem var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); display: flex; justify-content: space-between; gap: 8px; }
@@ -264,6 +270,7 @@ details.credits a { color: var(--gold); }
   <div id="hitm"><i></i><i></i><i></i><i></i></div>
   <div id="dashbar"><i></i></div>
   <div id="lock"></div>
+  <div id="jpaim" hidden><div class="jpbar"><i></i></div><span><kbd>Click</kbd> or <kbd>F</kbd> strike the mark &middot; <kbd>C</kbd> drop</span><span class="n"></span></div>
   <div id="banner"></div>
   <div id="compass" aria-hidden="true"></div>
   <div class="panel" id="wavebox"><div id="wave"></div><div id="left"></div></div>
@@ -300,7 +307,7 @@ details.credits a { color: var(--gold); }
       <kbd>Space</kbd><span>Dash. Dash then sword for a lunge; sword, sword, fire for a point-blank bolt</span>
       <kbd>E</kbd><span>Execute a staggered foe (red marker), talk, open, enter</span>
       <kbd>Q</kbd><span>Sacred unguent: heals</span>
-      <kbd>C</kbd><span>Jump pack: leap (two charges); sword in mid-air for a ground pound</span>
+      <kbd>C</kbd><span>Jump pack: launch high and hover (two charges); aim at the ground, then click or F to slam down on the mark</span>
       <kbd>B</kbd><span>The armoury: try on every blade, pistol, plate and pack you own</span>
       <kbd>I / Tab</kbd><span>Character, oaths, wargear and quests</span>
       <kbd>M</kbd><span>Map and travel between shrines</span>
@@ -2813,33 +2820,55 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   T.swordBase = T.bladeBase; T.swordTip = T.bladeTip;
   const BK = () => BLADES[T.look.blade];
 
-  // ---- the jump pack. C launches you up and forward (two charges); press the sword in the air to come down in a ground pound.
-  const JP = { charges: 2, max: 2, cd: 0, air: false, vy: 0, jetT: 0, t: 0, pound: false };
+  // ---- the jump pack. C launches you about 12 m up (two charges). At the top you hang on the jets for three seconds, the world slows,
+  // and a ring the size of the blast marks the ground where the crosshair meets it (a foe near the crosshair pulls the mark onto him).
+  // Click or F dives you onto the mark in a ground pound; C again drops you without one.
+  const JP = { charges: 2, max: 2, cd: 0, air: false, vy: 0, jetT: 0, t: 0, pound: false, phase: 'none', hoverT: 0, pitch0: 0, camK: 0,
+    mark: new V3(), markOk: false, lock: null, inBlast: 0, diveT: 0, diveDur: 0 };
+  const JP_RISE = 25, JP_RISE_G = 26, JP_HOVER = 3, JP_RANGE = 30;
   const hasJump = () => T.look.pack === 'jump';
+  const poundR = () => 6 * (T.look.blade === 'hammer' ? 1.2 : 1);
+  // can you still choose a spot? Not once diving, and not when you've dropped too low to make a dive of it
+  const jpAiming = () => JP.air && !JP.pound && JP.phase !== 'none' && (JP.phase !== 'fall' || P.pos.y - GY(P.pos.x, P.pos.z) > 1.5);
   function jumpPack() {
     if (!P.alive || G.state !== 'play' || FLY.on) return;
     if (!hasJump()) { feed('Equip a jump pack in the armoury (B)'); SYN.deny(); return; }
+    if (JP.air) { if (!JP.pound && JP.phase !== 'fall') dropJump(); return; }
     if (JP.charges < 1 || (C.active && C.mode !== 'combo')) { SYN.deny(); return; }
     if (C.active) endCombo();
-    JP.charges--; JP.air = true; JP.pound = false; JP.t = 0; JP.jetT = 0.45;
+    JP.charges--; Object.assign(JP, { air: true, pound: false, t: 0, jetT: 0.5, phase: 'rise', hoverT: 0, lock: null, markOk: false, pitch0: P.pitch, vy: JP_RISE });
     const fz = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0), fx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0), sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
-    let wx = -sy * fz + cy * fx, wz = -cy * fz - sy * fx; if (!fx && !fz) { wx = -sy; wz = -cy; } const l = Math.hypot(wx, wz);
-    P.vel.set(wx / l * 12, 0, wz / l * 12); JP.vy = 13.5 + (JP.vy > 0 ? 2 : 0);
-    P.pos.y += 0.05; dust(P.pos, 18, 1.2); SYN.jet(0.9); G.shake = Math.max(G.shake, 0.15);
+    const wx = -sy * fz + cy * fx, wz = -cy * fz - sy * fx, l = Math.hypot(wx, wz);
+    if (l > 0) P.vel.set(wx / l * 5, 0, wz / l * 5); else P.vel.set(-sy * 2, 0, -cy * 2);
+    P.pos.y += 0.05; dust(P.pos, 26, 1.7); SYN.jet(1.2); G.shake = Math.max(G.shake, 0.22);
     moveToast('Jump pack');
   }
+  function jpReset() { Object.assign(JP, { air: false, pound: false, vy: 0, phase: 'none', lock: null, markOk: false, camK: 0 }); }
+  function dropJump() { JP.phase = 'fall'; JP.vy = Math.min(JP.vy, 0); JP.jetT = Math.min(JP.jetT, 0.15); JP.lock = null; }
   function startPound() {
-    JP.pound = true; JP.jetT = 0.6; JP.vy = -26; SYN.jet(1.1);
-    const t = pickTargetFrom(12);
-    if (t) { const dx = t.pos.x - P.pos.x, dz = t.pos.z - P.pos.z, d = Math.hypot(dx, dz) || 1, tt = Math.max(0.15, (P.pos.y - GY(P.pos.x, P.pos.z)) / 26); P.vel.set(dx / tt, 0, dz / tt).clampLength(0, 28); P.yaw = Math.atan2(-dx, -dz); }
-    else P.vel.multiplyScalar(0.6);
-    C.active = true; C.mode = 'pound'; C.phase = 'w'; C.t = 0; copyPose(fromPose, pose); C.hits = new Set();
+    if (!jpAiming()) return;
+    if (!JP.markOk) aimMark();
+    JP.pound = true; JP.phase = 'dive'; JP.jetT = 0.6; SYN.jet(1.4); mouseDown = false;
+    const m = JP.mark, dx = m.x - P.pos.x, dz = m.z - P.pos.z;
+    JP.diveT = 0; JP.diveDur = Math.max(0.28, Math.hypot(dx, m.y - P.pos.y, dz) / 38);
+    if (Math.hypot(dx, dz) > 0.5) P.yaw = Math.atan2(-dx, -dz);
+    C.active = true; C.mode = 'pound'; C.phase = 'w'; C.t = 0; copyPose(fromPose, pose); C.hits = new Set(); C.target = null;
     moveToast('Ground pound');
   }
-  function pickTargetFrom(range) {
-    const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw); let best = null, bs = Infinity;
-    for (const e of ENEMIES) { if (!e.alive || e.state === 'execd') continue; const dx = e.pos.x - P.pos.x, dz = e.pos.z - P.pos.z, d = Math.hypot(dx, dz); if (d > range) continue; const c = (dx * fx + dz * fz) / (d || 1); if (c < 0.3) continue; const s = d * (1.6 - c); if (s < bs) { bs = s; best = e; } }
-    return best;
+  // the mark: from the camera through the crosshair to the ground, no further than JP_RANGE from you
+  const _ad = new V3(), _ao = new V3();
+  function aimMark() {
+    _ao.copy(cam.position); _ad.set(0, 0, -1).applyQuaternion(cam.quaternion);
+    let t = rayWorld(_ao, _ad, 120), x, z;
+    if (t >= 120) { const h = Math.hypot(_ad.x, _ad.z) || 1; x = P.pos.x + _ad.x / h * JP_RANGE; z = P.pos.z + _ad.z / h * JP_RANGE; }   // at the sky: as far as it reaches
+    else { t = Math.max(0, t - 0.3); x = _ao.x + _ad.x * t; z = _ao.z + _ad.z * t; }
+    const dx = x - P.pos.x, dz = z - P.pos.z, dd = Math.hypot(dx, dz);
+    if (dd > JP_RANGE) { x = P.pos.x + dx / dd * JP_RANGE; z = P.pos.z + dz / dd * JP_RANGE; }
+    JP.mark.set(x, 0, z); clampBounds(JP.mark, 0.8);
+    let best = null, bd = 2.6;
+    for (const e of ENEMIES) { if (!e.alive || e.state === 'execd') continue; const d = Math.hypot(e.pos.x - JP.mark.x, e.pos.z - JP.mark.z) - e.r * 0.5; if (d < bd) { bd = d; best = e; } }
+    JP.lock = best; if (best) JP.mark.set(best.pos.x, 0, best.pos.z);
+    JP.mark.y = GY(JP.mark.x, JP.mark.z); JP.markOk = true;
   }
   function updatePound(dt) {
     C.t += dt;
@@ -2847,37 +2876,125 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     else { swingPose(pose, STRIKES[2].k, Math.min(1, C.t / 0.12)); if (C.t > 0.45) endCombo(); }
   }
   function landJump() {
-    JP.air = false; JP.vy = 0;
+    JP.air = false; JP.vy = 0; JP.phase = 'none'; JP.lock = null; JP.markOk = false;
+    P.pitch = clamp(JP.pitch0, -0.4, 0.4);      // the dive leaves you staring at the ground; look ahead again as the camera comes back
     if (JP.pound) {
       JP.pound = false; C.t = 0;
-      const c = v(P.pos.x, GY(P.pos.x, P.pos.z) + 0.05, P.pos.z), Rr = 5.5 * (T.look.blade === 'hammer' ? 1.2 : 1);
-      ring.position.copy(c); ring.visible = true; ringT = 0.5; ring.scale.setScalar(0.3); shock(c, Rr, 0x8ac8ff);
-      dust(c, 45, 2.2); sparks(c, 50, BK().col, 10, 0.5); flash(c.clone().setY(c.y + 0.6), 0x8ac8ff, 8, 0.25);
-      SYN.slam(c, 1.2); G.shake = Math.max(G.shake, 0.6); G.hitStop = Math.max(G.hitStop, 0.1);
+      const c = v(P.pos.x, GY(P.pos.x, P.pos.z) + 0.05, P.pos.z), Rr = poundR();
+      ring.position.copy(c); ring.visible = true; ringT = 0.5; ring.scale.setScalar(0.3); shock(c, Rr, 0x8ac8ff); shock(c, Rr * 0.55, 0xffd08a);
+      dust(c, 60, 2.6); sparks(c, 60, BK().col, 12, 0.5); flash(c.clone().setY(c.y + 0.6), 0x8ac8ff, 10, 0.3);
+      SYN.slam(c, 1.4); G.shake = Math.max(G.shake, 0.75); G.hitStop = Math.max(G.hitStop, 0.12);
       for (const e of ENEMIES) {
         if (!e.alive || e.state === 'execd' || Math.abs(e.pos.y - c.y) > 3) continue;
         const dx = e.pos.x - c.x, dz = e.pos.z - c.z, d = Math.max(0, Math.hypot(dx, dz) - (e.r - 0.45));
-        if (d < Rr) strike(e, Math.round(lerp(130, 45, d / Rr) * BK().dmg * ST.pound), v(dx, 0, dz).normalize(), 12 * (1 - d / (Rr + 1)), 'slam');
+        if (d < Rr) strike(e, Math.round(lerp(170, 60, d / Rr) * BK().dmg * ST.pound), v(dx, 0, dz).normalize(), 14 * (1 - d / (Rr + 1)), 'slam');
       }
-      for (const t of TARGETS) if (Math.hypot(t.x - c.x, t.z - c.z) < Rr) hitTarget(t, 130 * ST.pound, 'slam', v(t.x, t.y + 1.4, t.z), true);
+      for (const t of TARGETS) if (Math.hypot(t.x - c.x, t.z - c.z) < Rr) hitTarget(t, 170 * ST.pound, 'slam', v(t.x, t.y + 1.4, t.z), true);
     } else { dust(P.pos, 14, 1); SYN.slam(P.pos, 0.25); }
     P.vel.multiplyScalar(0.3);
   }
-  function updateJump(dt) {
+  // rdt is real time: the hover's three seconds don't stretch with the slow motion
+  function updateJump(dt, rdt = dt) {
     JP.cd -= dt;
     if (JP.charges < JP.max) { JP.cd = Math.min(JP.cd, ST.jumpCd); if (JP.cd <= 0) { JP.charges++; JP.cd = ST.jumpCd; } } else JP.cd = ST.jumpCd;
     if (JP.air) {
-      JP.t += dt; JP.vy -= (JP.pound ? 40 : 24) * dt;
-      // a little steering in the air
-      if (!JP.pound) { const fz = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0), fx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0), sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
-        P.vel.x += (-sy * fz + cy * fx) * 6 * dt; P.vel.z += (-cy * fz - sy * fx) * 6 * dt; }
+      JP.t += dt;
+      const fz = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0), fx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0), sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
+      const ix = -sy * fz + cy * fx, iz = -cy * fz - sy * fx;
+      if (JP.phase === 'rise') {
+        JP.vy -= JP_RISE_G * dt; JP.jetT = Math.max(JP.jetT, 0.4);
+        const k = damp(1.5, dt); P.vel.x += (ix * 3 - P.vel.x) * k; P.vel.z += (iz * 3 - P.vel.z) * k;
+        if (JP.t < 0.4 && P.pitch > -0.78) P.pitch += (-0.78 - P.pitch) * damp(7, dt);      // tip the view down so the mark starts on the ground ahead
+        if (JP.vy <= 0) { JP.phase = 'hover'; JP.hoverT = 0; SYN.jet(0.6); }
+      } else if (JP.phase === 'hover') {
+        JP.hoverT += rdt; JP.jetT = Math.max(JP.jetT, 0.4);
+        JP.vy += (-0.35 + Math.sin(JP.hoverT * 4) * 0.25 - JP.vy) * damp(4, dt);        // hanging on the jets, sinking a little
+        const k = damp(3, dt); P.vel.x += (ix * 3.5 - P.vel.x) * k; P.vel.z += (iz * 3.5 - P.vel.z) * k;
+        if (JP.hoverT > JP_HOVER) dropJump();
+      } else if (JP.phase === 'dive') {
+        JP.diveT += dt;
+        if (JP.lock && JP.lock.alive) JP.mark.set(JP.lock.pos.x, GY(JP.lock.pos.x, JP.lock.pos.z), JP.lock.pos.z);     // he moves; the dive follows
+        const rem = JP.diveDur - JP.diveT;
+        if (rem > 0.02) { P.vel.set((JP.mark.x - P.pos.x) / rem, 0, (JP.mark.z - P.pos.z) / rem); if (P.vel.length() > 60) P.vel.setLength(60); JP.vy = Math.min(-6, (JP.mark.y - P.pos.y) / rem); }
+        else { JP.vy -= 40 * dt; P.vel.multiplyScalar(1 - Math.min(1, 6 * dt)); }
+      } else {
+        JP.vy -= 24 * dt; P.vel.x += ix * 6 * dt; P.vel.z += iz * 6 * dt;
+      }
       P.pos.y += JP.vy * dt;
+      // killed in the air: nothing else lands you, so fall and settle here
+      if (!P.alive) { if (JP.phase !== 'fall') dropJump(); const g = GY(P.pos.x, P.pos.z); if (P.pos.y <= g) { P.pos.y = g; jpReset(); } }
     }
     JP.jetT = Math.max(0, JP.jetT - dt);
     const j = JP.jetT > 0 ? Math.min(1, JP.jetT * 3) : 0;
     T.jets.forEach((m, i) => { m.material.opacity = j * (i % 2 ? 0.9 : 0.55); m.scale.set(1, 0.6 + j * (0.8 + Math.random() * 0.4), 1); });
     T.jetLight.intensity = j * 2.5;
     if (j > 0 && Math.random() < 0.5) { T.jump.localToWorld(tmp.set(0, -0.8, -0.2)); glowFX.spawn(tmp, v(rand(-1, 1), -4, rand(-1, 1)), [0.6, 0.8, 1, 1], rand(0.05, 0.1), 0.25); }
+    jetRoar(JP.air && (JP.phase === 'rise' || JP.phase === 'hover'));
+  }
+  // the jets' roar while you hang in the air (a filtered rush of noise, no tone)
+  let jetSnd = null;
+  function jetRoar(on) {
+    if (on && !jetSnd && live()) {
+      const t = actx.currentTime, s = actx.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+      const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700; f.Q.value = 0.7;
+      const g = out(0, 0.15); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.2, t + 0.2);
+      s.connect(f); f.connect(g); s.start(t, Math.random() * 0.5); jetSnd = { s, g };
+    } else if (!on && jetSnd) {
+      const { s, g } = jetSnd; jetSnd = null;
+      try { const t = actx.currentTime; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25); s.stop(t + 0.3); } catch (_) {}
+    }
+  }
+  // the landing mark: a ring the size of the blast laid over the ground, a reticle and a beam at its heart, and the line you'll dive along.
+  // Blue over empty ground, orange once a foe stands inside the blast.
+  const JPM = (() => {
+    const N = 72, AN = 28, g = new THREE.Group(); g.visible = false; scene.add(g);
+    // drawn over everything (it's a sight, not scenery), in plain colour so it reads on pale grass as well as dark rock
+    const mat = (col, o, add) => new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: o, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide, fog: false });
+    const band = (m, order) => {
+      const pos = new Float32Array((N + 1) * 2 * 3), idx = [];
+      for (let i = 0; i < N; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setIndex(idx);
+      const mesh = new THREE.Mesh(geo, m); mesh.frustumCulled = false; mesh.renderOrder = order; g.add(mesh); return { pos, geo };
+    };
+    const ringMat = mat(0x8ac8ff, 0.95), shadeMat = mat(0x05070a, 0.45);
+    const shade = band(shadeMat, 9), edge = band(ringMat, 10);
+    const retMat = mat(0x8ac8ff, 0.95), ret = new THREE.Group(); ret.rotation.x = -PI / 2; ret.position.y = 0.15; g.add(ret);
+    const parts = [new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 40), retMat)];
+    for (let i = 0; i < 4; i++) { const a = i * PI / 2, m = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.75), retMat); m.position.set(Math.cos(a) * 1.4, Math.sin(a) * 1.4, 0); m.rotation.z = a + PI / 2; parts.push(m); }
+    parts.forEach(m => { m.renderOrder = 11; ret.add(m); });
+    const beamMat = mat(0x8ac8ff, 0.2, true); beamMat.depthTest = true;
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.38, 16, 12, 1, true), beamMat); beam.position.y = 8; g.add(beam);
+    const ap = new Float32Array(AN * 3), ag = new THREE.BufferGeometry(); ag.setAttribute('position', new THREE.BufferAttribute(ap, 3));
+    const arcMat = new THREE.LineBasicMaterial({ color: 0x8ac8ff, transparent: true, opacity: 0.6, depthWrite: false, depthTest: false, fog: false });
+    const arc = new THREE.Line(ag, arcMat); arc.frustumCulled = false; arc.visible = false; arc.renderOrder = 10; scene.add(arc);
+    return { g, N, AN, edge, shade, ret, beam, arc, ap, ag, mats: [ringMat, retMat, beamMat, arcMat], t: 0 };
+  })();
+  // lay a band of the ring over the ground between radii r0 and r1
+  function layBand(B, m, r0, r1, lift) {
+    const N = JPM.N;
+    for (let i = 0; i <= N; i++) {
+      const a = i / N * PI * 2, c = Math.cos(a), s = Math.sin(a);
+      for (let k = 0; k < 2; k++) { const r = k ? r1 : r0, x = c * r, z = s * r, o = (i * 2 + k) * 3; B.pos[o] = x; B.pos[o + 1] = GY(m.x + x, m.z + z) - m.y + lift; B.pos[o + 2] = z; }
+    }
+    B.geo.attributes.position.needsUpdate = true;
+  }
+  function updateMark(dt) {
+    const show = JP.air && (jpAiming() || JP.pound);
+    JPM.g.visible = JPM.arc.visible = show;
+    if (!show) return;
+    if (!JP.pound) aimMark();
+    const m = JP.mark, R = poundR();
+    let n = 0; for (const e of ENEMIES) if (e.alive && e.state !== 'execd' && Math.hypot(e.pos.x - m.x, e.pos.z - m.z) - (e.r - 0.45) < R) n++;
+    JP.inBlast = n;
+    JPM.g.position.copy(m); JPM.t += dt;
+    layBand(JPM.edge, m, R - 0.28, R, 0.15); layBand(JPM.shade, m, R - 0.62, R + 0.12, 0.12);
+    JPM.ret.rotation.z = JPM.t * 1.6; JPM.ret.scale.setScalar((1 + Math.sin(JPM.t * (JP.lock ? 12 : 6)) * 0.08) * (JP.lock ? 0.8 : 1));
+    JPM.beam.material.opacity = 0.16 + Math.sin(JPM.t * 6) * 0.05;
+    for (const mm of JPM.mats) mm.color.setHex(n ? 0xff5a26 : 0x6ab8ff).convertSRGBToLinear();      // the renderer writes sRGB, so pick the colour in sRGB
+    // the dive line: from the jets, a slight arc down onto the mark
+    const ax = P.pos.x, ay = P.pos.y + 1.1, az = P.pos.z, cx = (ax + m.x) / 2, cz = (az + m.z) / 2, cyy = Math.max(ay, m.y) + 0.8;
+    for (let i = 0; i < JPM.AN; i++) { const u = i / (JPM.AN - 1), q = 1 - u, o = i * 3; JPM.ap[o] = q * q * ax + 2 * q * u * cx + u * u * m.x; JPM.ap[o + 1] = q * q * ay + 2 * q * u * cyy + u * u * (m.y + 0.2); JPM.ap[o + 2] = q * q * az + 2 * q * u * cz + u * u * m.z; }
+    JPM.ag.attributes.position.needsUpdate = true; JPM.ag.computeBoundingSphere();
   }
 
   // ================================================================ the armoury: every piece you carry, on the Templar as you pick it
@@ -2908,7 +3025,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     const k = kindOf(it, it.slot);
     return { power: 'Balanced: the field splits armour; the arcs crawl along its edges.', chain: 'Fast and savage: quicker cuts that each bite a little less.', hammer: 'Slow and crushing: every blow lands like a slam and throws foes back.',
       bolt: 'Mass-reactive bolts that burst where they strike.', plasma: 'Slow, heavy plasma bolts: double the damage and a wider burst, fewer shots.',
-      jump: 'C to leap (two charges). Swing the sword in the air to come down in a ground pound.', power_pack: 'The standard power pack.',
+      jump: 'C to launch high and hover (two charges). Aim at the ground, then click or F to slam down on the mark.', power_pack: 'The standard power pack.',
       mk7: 'Aquila-pattern plate, the Chapter’s standard.', mk6: 'Corvus plate, light and quick.', crusader: 'Crusader plate with a white cloak.', mk10: 'Tacticus plate, the newest pattern.' }[it.slot === 'pack' && k === 'power' ? 'power_pack' : k] || (it.slot === 'relic' ? 'A relic of the Chapter. Carried, not worn.' : '');
   }
   function armouryPick(o) { ARM.sel = o; if (o) { applyLook({ [o.it.slot]: o.it }); if (o.it.slot === 'pistol' || o.it.slot === 'blade') ARM.ang = o.it.slot === 'pistol' ? -0.6 : 0.6; if (o.it.slot === 'pack') ARM.ang = PI; } renderArmoury(); }
@@ -3492,6 +3609,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
 
   // ================================================================ the heavy bolt pistol
   function fire() {
+    if (JP.air && !JP.pound && JP.phase !== 'none') { startPound(); return; }      // in the air the click picks the spot
     if (!P.alive || GUN.reloadT > 0 || GUN.cd > 0) return;
     if (C.active && (C.mode === 'exec' || C.mode === 'finisher')) return;
     // sword, sword, fire: the pistol comes round for a point-blank shot instead of pulling back to first person
@@ -3879,7 +3997,8 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
       // blend towards the carry; when the camera is still pulled back, settle into READY instead
       const tgtH = C.cam > 0.5 ? READY.h : fp.h, tgtB = C.cam > 0.5 ? READY.b : fp.b;
       const k = damp(C.cam > 0.02 ? 10 : 30, dt);
-      pose.h.lerp(tgtH, k); pose.b.lerp(tgtB, k).normalize(); pose.tw = lerp(pose.tw, 0, k); pose.lean = lerp(pose.lean, 0, k); pose.py = lerp(pose.py, 0, k);
+      if (JP.air && (JP.phase === 'rise' || JP.phase === 'hover')) { const K = STRIKES[2].k[0], q = damp(7, dt); pose.h.lerp(K.h, q); pose.b.lerp(K.b, q).normalize(); pose.tw = lerp(pose.tw, K.tw, q); pose.lean = lerp(pose.lean, K.lean, q); pose.py = lerp(pose.py, 0, q); }
+      else { pose.h.lerp(tgtH, k); pose.b.lerp(tgtB, k).normalize(); pose.tw = lerp(pose.tw, 0, k); pose.lean = lerp(pose.lean, 0, k); pose.py = lerp(pose.py, 0, k); }
     }
     // left arm: in first person the pistol is levelled at the crosshair; in the combo it hangs out to the side
     const reloadK = GUN.reloadT > 0 ? Math.sin(PI * (1 - GUN.reloadT / GUN.reloadDur)) : 0;
@@ -3977,6 +4096,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     return out;
   }
   const qTP = new THREE.Quaternion(), tpPos = new V3(), look = new V3(), _mL = new THREE.Matrix4();
+  const _ap = new V3(), _aq = new THREE.Quaternion();
   function updateCamera(dt) {
     const want = C.active || !P.alive || JP.air ? 1 : 0;
     C.cam = clamp(C.cam + (want ? dt : -dt) / 0.25, 0, 1);
@@ -3994,6 +4114,19 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     if (C.target && C.target.alive) look.lerp(tmp.set(C.target.pos.x, C.target.pos.y + 1.1, C.target.pos.z), 0.35);
     if (C.mode === 'exec' && C.ex) { execCam(C.ex.side, C.t, tpPos); look.set((P.pos.x + C.ex.e.pos.x) / 2, P.pos.y + 1.3 * C.ex.big, (P.pos.z + C.ex.e.pos.z) / 2); }
     _mL.lookAt(tpPos, look, tmp.set(0, 1, 0)); qTP.setFromRotationMatrix(_mL);
+    // in the air the camera rises behind your shoulder and follows the mouse, pitch and all, so the crosshair can pick a spot on the ground
+    JP.camK = clamp(JP.camK + (JP.air ? dt : -dt) / 0.3, 0, 1);
+    if (JP.camK > 0) {
+      const kk = smooth(JP.camK), cp = Math.cos(P.pitch);
+      _ad.set(-Math.sin(P.yaw) * cp, Math.sin(P.pitch), -Math.cos(P.yaw) * cp);
+      tmp.set(P.pos.x, P.pos.y + 1.7, P.pos.z);
+      _ap.copy(tmp).addScaledVector(_ad, -6.5); _ap.x += rx * 1.1; _ap.z += rz * 1.1; _ap.y += 0.9;
+      tmp2.subVectors(_ap, tmp); const L2 = tmp2.length(); tmp2.divideScalar(L2);
+      const h2 = rayWorld(tmp, tmp2, L2); if (h2 < L2) _ap.copy(tmp).addScaledVector(tmp2, Math.max(0.6, h2 - 0.3));
+      _ap.y = Math.max(_ap.y, GY(_ap.x, _ap.z) + 0.7);
+      _mL.lookAt(_ap, tmp3.copy(_ap).add(_ad), tmp.set(0, 1, 0)); _aq.setFromRotationMatrix(_mL);
+      tpPos.lerp(_ap, kk); qTP.slerp(_aq, kk);
+    }
     cam.position.lerpVectors(eyeW, tpPos, k);
     const arc = Math.sin(k * PI); cam.position.x += rx * arc * 0.45; cam.position.z += rz * arc * 0.45; cam.position.y += arc * 0.4;
     cam.quaternion.copy(qFP).slerp(qTP, k);
@@ -4838,7 +4971,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     FLY.on = false; T.root.visible = true; $('flyhud').classList.remove('on'); engineHum(false);
     // step off at the foot of the ramp
     const f = hawkFwd(tmp); const x = FLY.pos.x + f.x * 14.5, z = FLY.pos.z + f.z * 14.5;
-    placeAtWp({ x, z }); P.yaw = Math.atan2(f.x, f.z); P.pitch = 0; C.cam = 0; settleWorld();
+    placeAtWp({ x, z }); P.yaw = Math.atan2(f.x, f.z); P.pitch = 0; C.cam = 0; jpReset(); settleWorld();
   }
   function hawkGround(x, z) {      // the highest ground under the hull and wings
     const f = hawkFwd(tmp2), rx = f.z, rz = -f.x; let g = -1e9;
@@ -5125,7 +5258,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
       ZONE = 'dungeon'; W.root.visible = false; DG.visible = true; buildArena(def.arena);
       cam.near = 0.05; cam.far = 900; cam.updateProjectionMatrix();
       DUN = { id, def, wave: 0, toSpawn: [], spawnT: 0, breakT: 2.5, done: false, chest: null, first: !R.cleared['dun:' + id] };
-      P.pos.set(ARENA.start[0], 0, ARENA.start[1]); P.vel.set(0, 0, 0); P.yaw = 0; P.pitch = 0;
+      P.pos.set(ARENA.start[0], 0, ARENA.start[1]); P.vel.set(0, 0, 0); P.yaw = 0; P.pitch = 0; jpReset();
       banner(def.name, `Level ${def.lvl}`); SYN.horn();
     });
   }
@@ -5135,7 +5268,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
       clearEnemies();
       ZONE = 'world'; DG.visible = false; W.root.visible = true; renderer.toneMappingExposure = 1.05;
       cam.near = 0.1; cam.far = 4000; cam.updateProjectionMatrix();
-      const g = W.GATES[id]; placeAtWp({ x: g.at.x + Math.sin(g.ry) * 2, z: g.at.z + Math.cos(g.ry) * 2 }); P.yaw = g.ry + PI; P.pitch = 0;
+      const g = W.GATES[id]; placeAtWp({ x: g.at.x + Math.sin(g.ry) * 2, z: g.at.z + Math.cos(g.ry) * 2 }); P.yaw = g.ry + PI; P.pitch = 0; jpReset();
       DUN = null; settleWorld(); if (!dead) saveGame();
     });
   }
@@ -5286,6 +5419,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   function interact() { const a = nearestAct(); if (a && P.alive && !C.active) a.go(); }
   let actHTML = '', questHTML = '';
   const pips = [...document.querySelectorAll('#combo i')], jpEl = $('jp'), jpPips = [...document.querySelectorAll('#jp i')];
+  const jpAimEl = $('jpaim'), jpAimBar = jpAimEl.querySelector('.jpbar i'), jpAimN = jpAimEl.querySelector('.n');
   const lockEl = $('lock'), emark = $('emark');
   function updateHUD(dt) {
     frameN++;
@@ -5298,7 +5432,9 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     $('wavebox').classList.toggle('on', ZONE === 'dungeon' && !!DUN);
     if (ZONE === 'dungeon' && DUN) { $('wave').textContent = DUN.def.name; const left = ENEMIES.filter(e => e.alive).length + DUN.toSpawn.length; $('left').textContent = DUN.done ? 'Cleared' : DUN.wave ? `Wave ${DUN.wave} of ${DUN.def.waves.length}` + (left ? ` · ${left} remaining` : '') : 'Brace'; }
     pips.forEach((p, i) => p.classList.toggle('on', C.active && i < C.pips));
-    $('cross').style.opacity = C.cam > 0.3 ? 0 : 1;
+    $('cross').style.opacity = C.cam > 0.3 && !jpAiming() ? 0 : 1;
+    { const on = jpAiming(); jpAimEl.hidden = !on;
+      if (on) { jpAimBar.style.width = (JP.phase === 'hover' ? Math.max(0, 1 - JP.hoverT / JP_HOVER) * 100 : JP.phase === 'rise' ? 100 : 0) + '%'; jpAimN.textContent = JP.inBlast ? `${JP.inBlast} in the blast` : ''; } }
     vigT = Math.max(0, vigT - dt); $('vig').style.opacity = Math.max(vigT * 1.6, P.hp < P.maxHp * 0.35 ? (P.maxHp * 0.35 - P.hp) / (P.maxHp * 0.6) : 0);
     bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('on');
     hitmT = Math.max(0, hitmT - dt); $('hitm').style.opacity = hitmT > 0 ? 1 : 0;
@@ -5499,7 +5635,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     clearEnemies(); toWorld();
     G.state = 'menu'; G.ui = null; G.paused = false;
     for (const id of ['hud', 'over', 'pause', 'inv', 'mapscr', 'talk', 'build']) $(id).classList.add('off');
-    parkHawk(); JP.air = false;
+    parkHawk(); jpReset();
     $('hud').style.visibility = ''; $('menu').classList.remove('off'); refreshMenu();
     P.pos.set(W.HUB.x, W.gH(W.HUB.x, W.HUB.z - 40), W.HUB.z - 40); updateRig(0);
     if (document.pointerLockElement) document.exitPointerLock();
@@ -5523,7 +5659,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     for (const k of ['oath', 'eq']) R[k] = Object.assign(freshR()[k], R[k]);
     P.maxHp = 100; Object.assign(P, { alive: true, lastHurt: -99, dashT: 0, dashCd: 0, iframes: 0, healT: 0, pitch: 0 }); P.push.set(0, 0, 0); P.vel.set(0, 0, 0);
     calcStats(); P.hp = s ? clamp(s.hp || P.maxHp, 1, P.maxHp) : P.maxHp;
-    parkHawk(); Object.assign(JP, { air: false, pound: false, charges: JP.max, vy: 0 }); G.buffT = 0; TRIAL.on = false;
+    parkHawk(); jpReset(); JP.charges = JP.max; G.buffT = 0; TRIAL.on = false;
     const issueJump = !R.gotJump; R.gotJump = true;
     if (issueJump) { const jp = makeItem('pack', Math.max(1, R.lvl), 1, 'Mk X jump pack', 'jump'); if (!R.eq.pack) R.eq.pack = jp; else R.bag.push(jp); calcStats(); }
     Object.assign(GUN, { ammo: GUN.mag, cd: 0, reloadT: 0, kick: 0 });
@@ -5591,7 +5727,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   const GDESC = { power: 'The power sword: balanced, the field splits armour.', chain: 'The chainsword: faster cuts that each bite a little less.', hammer: 'The thunder hammer: slow, crushing, every blow a slam.',
     bolt: 'Heavy bolt pistol: mass-reactive bolts.', plasma: 'Plasma pistol: twice the damage and a wider burst, fewer shots.',
     mk7: 'Mark VII Aquila plate, the Chapter’s standard.', mk6: 'Mark VI Corvus plate, the beaked helm.', crusader: 'Crusader plate with the white cloak.', mk10: 'Mark X Tacticus plate, the raised gorget.', castellan: 'The Castellan’s mantle: a crimson cloak.',
-    jump: 'The jump pack: C to leap, sword in the air to come down in a ground pound.', pack_power: 'The standard power pack.' };
+    jump: 'The jump pack: C launches you high and holds you there while you mark a spot; click and you come down on it sword first.', pack_power: 'The standard power pack.' };
   function buildGallery() {
     const S = new THREE.Scene(); GAL.scene = S; S.background = new THREE.Color(0x141317).convertSRGBToLinear();
     GAL.cam = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 600);
@@ -5661,7 +5797,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
       const per = 1.5 * BK().spd, k = Math.floor(GAL.t / per) % 3, u = (GAL.t % per) / per, S_ = STRIKES[k], w = 0.3, s_ = 0.42;
       if (u < w) lerpPose(pose, READY, S_.k[0], smooth(u / w)); else if (u < s_) swingPose(pose, S_.k, (u - w) / (s_ - w)); else lerpPose(pose, S_.k[2], READY, smooth((u - s_) / (1 - s_)));
       C.active = true; C.mode = 'combo'; C.phase = u > w && u < s_ ? 's' : 'r'; updateRig(dt); C.active = false; C.phase = '';
-    } else { JP.air = L.pose === 'jets'; updateRig(dt); JP.air = false; }
+    } else { JP.air = L.pose === 'jets'; JP.phase = JP.air ? 'hover' : 'none'; updateRig(dt); JP.air = false; JP.phase = 'none'; }
     const j = L.pose === 'jets' && L.pack === 'jump' ? 1 : 0;
     T.jets.forEach((m, i) => { m.material.opacity = j * (i % 2 ? 0.9 : 0.55); m.scale.set(1, 0.6 + j * (0.9 + Math.random() * 0.3), 1); }); T.jetLight.intensity = j * 2.5;
   }
@@ -5718,13 +5854,14 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     // hit-stop: the world almost freezes for a few frames when the blade bites
     if (G.hitStop > 0) { G.hitStop -= dt; dt *= 0.05; }
     else if (G.slowT > 0) { G.slowT -= dt; dt *= 0.35; }     // slow motion for the execution's big moments
+    else if (JP.air && JP.phase === 'hover') dt *= 0.5;       // and while you hang on the jets choosing where to come down
     const paused = G.state === 'play' && (G.paused || G.ui || (!locked && !lockFailed && !window.__taNoLock));
     if (G.state === 'menu' || paused || G.fading) dt = 0;
     G.time += dt;
     if (dt > 0) {
       G.hunted = ENEMIES.some(e => e.alive && e.aggro);
       if (!FLY.on) {
-        updateJump(dt); updatePlayer(dt);
+        updateJump(dt, paused ? 0 : realDt); updatePlayer(dt);
         const ox = P.pos.x, oz = P.pos.z; updateCombo(dt); if (P.pos.x !== ox || P.pos.z !== oz) groundPlayer(ox, oz);
         updateGun(dt);
       }
@@ -5737,6 +5874,8 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     updateRig(G.ui === 'build' ? realDt : dt);
     if (dt > 0 && !FLY.on) bladeHits();
     if (FLY.on) hawkCam(dt); else if (G.ui === 'build') armouryCam(realDt); else updateCamera(dt);
+    if (!FLY.on && G.state !== 'menu') updateMark(dt);
+    if (dt === 0 && jetSnd) jetRoar(false);
     updateTrail(dt);
     if (ZONE === 'world') W.update(dt, G.state === 'menu' ? performance.now() / 1000 : G.time, G.state === 'menu' ? W.HUB.x : P.pos.x, G.state === 'menu' ? W.HUB.z - 60 : P.pos.z);
     glowFX.update(dt); dustFX.update(dt); fireFX(dt || 0);
@@ -5813,7 +5952,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     jump() { jumpPack(); return JP.air; }, trial() { startTrial(); }, look(over) { applyLook(over); return T.look; }, cannon() { FLY.canCd = 0; hawkCannon(); },
     keep: () => ({ n: KEEPERS.length, named: NPCS.map(n => n.id), targets: TARGETS.map(t => t.kind + ':' + t.hits), trial: { on: TRIAL.on, hits: TRIAL.hits }, buff: G.buffT }),
     hawk: () => ({ on: FLY.on, landed: FLY.landed, landing: FLY.landing, pos: FLY.pos.toArray().map(x => +x.toFixed(1)), alt: +FLY.alt.toFixed(1), spd: +FLY.vel.length().toFixed(1), gear: +FLY.gear.toFixed(2), ramp: +FLY.ramp.toFixed(2) }),
-    jp: () => ({ air: JP.air, pound: JP.pound, charges: JP.charges, y: +P.pos.y.toFixed(2), g: +GY(P.pos.x, P.pos.z).toFixed(2) }),
+    jp: () => ({ air: JP.air, pound: JP.pound, phase: JP.phase, hoverT: +JP.hoverT.toFixed(2), charges: JP.charges, y: +P.pos.y.toFixed(2), g: +GY(P.pos.x, P.pos.z).toFixed(2), mark: JP.markOk ? [+JP.mark.x.toFixed(1), +JP.mark.y.toFixed(1), +JP.mark.z.toFixed(1)] : null, lock: JP.lock ? ENEMIES.indexOf(JP.lock) : -1, inBlast: JP.inBlast, pos: [+P.pos.x.toFixed(1), +P.pos.z.toFixed(1)] }),
     save() { saveGame(); return readSave(); }, quest() { checkQuests(); return R.quest; }, norender(on) { noRender = on; }, render() { renderer.render(scene, cam); },
     state() {
       return { state: G.state, zone: ZONE, ui: G.ui, dun: DUN && { id: DUN.id, wave: DUN.wave, done: DUN.done, toSpawn: DUN.toSpawn.length }, hp: Math.round(P.hp), maxHp: P.maxHp, alive: P.alive, pos: P.pos.toArray().map(x => +x.toFixed(2)), yaw: +P.yaw.toFixed(3),

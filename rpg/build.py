@@ -26,7 +26,8 @@ for f in sorted(os.listdir(TEX)):
 
 assets = {'tex': tex, 'mean': mean, 'kenney': json.load(open(os.path.join(HERE, 'assets', 'kenney.json')))}
 game_assets = dict(assets, snd=json.load(open(os.path.join(HERE, '..', 'data', 'sounds.json'))),
-                   feyr=json.load(open(os.path.join(HERE, 'assets', 'feyr_rig.json'))))      # the Tripo-rigged Feyr (tools/tripo_rig_pack.py)
+                   feyr=json.load(open(os.path.join(HERE, 'assets', 'feyr_rig.json'))),      # the Tripo-rigged Feyr (tools/tripo_rig_pack.py)
+                   vigil=json.load(open(os.path.join(HERE, 'assets', 'vigil_rig.json'))))    # the player's body (tools/vigil_pack.py)
 
 def build(src_name, out_name, data):
     src = open(os.path.join(HERE, src_name)).read()

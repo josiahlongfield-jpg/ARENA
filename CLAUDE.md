@@ -128,6 +128,14 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
   space (`arm.matrix`), never the scaled world, or it renders 2.4x too big. 2.4 m tall, stalks on a sped-up walk (Tripo's run folds the
   body), a long overhead slam, kneels (`hurt`) when broken at 40% for an execution. Two 'rift' encounters (by the Breach, lvl 4; and in
   no-man's-land, lvl 9). Source GLBs: project files `templar-arena/concepts/step3/rig/`. Test hook `hurtE(i, dmg)`.
+- The player's body is the Vigil (`VIGIL`, `wearBody`): the user's own design, sculpted by Tripo from their four views and rigged there.
+  `rpg/tools/vigil_pack.py rig.glb rpg/assets/vigil_rig.json` folds Tripo's 41 joints into the Templar's 17 (plus a forearm twist joint each side)
+  and records her joint positions, hand directions, eye and back. `wearBody('vigil')` moves the Templar's joints to her proportions, hides his
+  armour (`J.body`) and skins her mesh to his joints, bound in the root's own space, so everything that poses him poses her. `fitReach` moves
+  his third-person poses onto her shoulders and shorter reach; `twistForearms` shares the hand's roll down the forearm; in first person her head
+  bone shrinks to nothing. Arm, leg and eye sizes live on T (`armA/armB`, `legA/legB/footH`, `eyeH/eyeF`). Settings > Body switches back to the
+  Templar (`SET.body`). His cloaks, gorget and beak stay off her; armour kinds and shaders don't change her look. Source GLBs: project files
+  `templar-arena/concepts/step3/vigil_player/`. Test hooks `body(kind)`, `thirdP(on)`.
 - Gallery: `openGallery()` from the menu, and `rpg/gallery.html` (build.py, `GALLERY_ONLY`, no textures or sounds) is the same gallery alone,
   published to https://claude.ai/artifact/2dyF1DF8Zz8JJPPMpeA7pJ. Hook `window.__gal` (show, look, hawk, view, step) in that build.
 - Test hook `window.__rpg`: begin(fresh), sim(s, fps), set({pos,yaw,pitch,hp,gold,quest}), tp(x,z,yaw), spawn, clear, noEnc, fire, sword,

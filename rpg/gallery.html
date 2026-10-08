@@ -463,6 +463,7 @@ details.credits a { color: var(--gold); }
       <label for="sVol">Volume</label><input id="sVol" type="range" min="0" max="1" step="0.05"><output id="oVol"></output>
       <label for="sSword">Sword sound</label><select id="sSword"><option value="mix">Recorded + synth</option><option value="rec">Recorded only</option><option value="synth">Synth only</option></select><span></span>
       <label for="sShake">Screen shake</label><input id="sShake" type="checkbox"><span></span>
+      <label for="sBody">Body</label><select id="sBody"><option value="vigil">The Vigil</option><option value="templar">The Templar</option></select><span></span>
     </div>
     <div class="pbtns"><button class="go" id="resume" type="button">Resume</button><button class="opt" id="quit" type="button">Save and quit to menu</button></div>
   </div>
@@ -481,7 +482,7 @@ details.credits a { color: var(--gold); }
 </div></div>
 <div id="build" class="off" aria-label="Character">
   <div class="cs-top"><div id="csBanner" class="cs-ban"></div><nav id="csTabs" class="cs-tabs" aria-label="Character screens"></nav><div id="csMats" class="cs-mats"></div><button class="opt" data-act="cs-close" type="button">Close (Esc)</button></div>
-  <div id="csGear"><div class="cs-col l" id="csL"></div><div class="cs-col r" id="csR"></div><div id="csFan" class="cs-ui" hidden></div><div id="csStats"></div><div class="drag">Drag to turn him</div></div>
+  <div id="csGear"><div class="cs-col l" id="csL"></div><div class="cs-col r" id="csR"></div><div id="csFan" class="cs-ui" hidden></div><div id="csStats"></div><div class="drag">Drag to turn</div></div>
   <div id="csSub" class="cs-panel" hidden></div>
   <div id="csCru" class="cs-panel" hidden></div>
   <div id="csCard" class="cs-ui" hidden></div>
@@ -2129,6 +2130,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     chainLoop(J.elR, v(0, -0.22, 0), v(0, 1, 0), 0.105, 14);
     purity(J.elL, v(0.08, -0.1, 0.02), v(1, 0.2, 0.3), 0.75, 2);
 
+    J.body = []; root.traverse(o => { if (o.geometry) J.body.push(o); });      // his armour: wearBody('vigil') hides these and keeps the wargear below
     // ---- the power sword (grip origin in the fist, blade along the hand's +Z, edges in line with the forearm)
     { const g = grp(J.hdR, [0, -0.07, 0]); g.rotation.set(PI / 2, PI / 2, 0, 'XYZ'); J.sword = g;
       const L = 1.02, b0 = 0.11, wB = 0.062, wT = 0.05, th = 0.016; J.bladeLen = L + b0 + 0.16;
@@ -2225,7 +2227,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   }
   function solveArm(J, side, targetW, poleW, handZW, handYW, primaryY) {
     const sh = J['sh' + side], el = J['el' + side], hd = J['hd' + side];
-    const a = 0.32, b = 0.34;
+    const a = J.armA || 0.32, b = J.armB || 0.34;
     sh.updateWorldMatrix(true, false); sh.getWorldPosition(_S);
     _d.subVectors(targetW, _S); let dist = _d.length(); _d.divideScalar(dist || 1);
     dist = clamp(dist, 0.12, (a + b) * 0.995);
@@ -2705,7 +2707,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   // sword audio to trial the CC0 recordings: 'mix' layers them under the synthesis, 'rec' plays only them, 'synth' only the synthesis
   let swordAudio = 'mix'; try { swordAudio = localStorage.getItem('templar-reach-sword-audio') || 'mix'; } catch (_) {}
   // player settings, kept in this browser (the pause screen edits them)
-  const SET = { sens: 1, invert: false, fov: 74, vol: 0.8, shake: true };
+  const SET = { sens: 1, invert: false, fov: 74, vol: 0.8, shake: true, body: 'vigil' };
   try { Object.assign(SET, JSON.parse(localStorage.getItem('templar-reach-settings') || '{}')); } catch (_) {}
   const saveSet = () => { try { localStorage.setItem('templar-reach-settings', JSON.stringify(SET)); localStorage.setItem('templar-reach-sword-audio', swordAudio); } catch (_) {} };
   const SYN = {
@@ -2952,12 +2954,102 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     T.bladeTip = L.blade === 'chain' ? T.chainTip : L.blade === 'hammer' ? T.hammerTip : T.swordTip;
     T.swordLight.visible = L.blade === 'power'; T.arcs.forEach(a => { a.visible = L.blade === 'power' && a.visible; });
     T.pistol.visible = L.pistol === 'bolt'; T.plasma.visible = L.pistol === 'plasma'; T.muzzle = L.pistol === 'plasma' ? T.plasmaMuzzle : T.boltMuzzle;
-    T.capeW.visible = L.cape === 'W'; T.capeR.visible = L.cape === 'R';
-    T.beak.visible = L.armour === 'mk6'; T.gorget.visible = L.armour === 'mk10';
+    T.capeW.visible = !T.vigil && L.cape === 'W'; T.capeR.visible = !T.vigil && L.cape === 'R';
+    T.beak.visible = !T.vigil && L.armour === 'mk6'; T.gorget.visible = !T.vigil && L.armour === 'mk10';
     $('gunname').textContent = PISTOLS[L.pistol].name;
   }
   T.swordBase = T.bladeBase; T.swordTip = T.bladeTip;
   const BK = () => BLADES[T.look.blade];
+
+  // ================================================================ the Vigil: the player's body
+  // The user's own design, sculpted by Tripo from their four views and rigged there; tools/vigil_pack.py folds that rig into the
+  // Templar's joints. wearBody('vigil') moves the joints to her proportions, hides his armour and skins her mesh to the same joints,
+  // so everything that poses him (the IK arms, strikes, executions, the stride) poses her. wearBody('templar') puts him back.
+  const TEMPLAR_RIG = { armA: 0.32, armB: 0.34, legA: 0.42, legB: 0.44, footH: 0.14, eyeH: 1.93, eyeF: -0.06 };
+  const VIGIL = (() => {
+    const A = ASSETS.vigil; if (!A) return null;
+    const bytes = s => Uint8Array.from(atob(s), c => c.charCodeAt(0)), g = A.geo, geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(bytes(g.pos).buffer), 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(new Int8Array(bytes(g.nrm).buffer), 3, true));
+    geo.setAttribute('uv', new THREE.BufferAttribute(new Uint16Array(bytes(g.uv).buffer), 2, true));
+    geo.setAttribute('skinIndex', new THREE.BufferAttribute(bytes(g.ji), 4));
+    geo.setAttribute('skinWeight', new THREE.BufferAttribute(bytes(g.jw), 4, true));
+    geo.setIndex(new THREE.BufferAttribute(g.i32 ? new Uint32Array(bytes(g.idx).buffer) : new Uint16Array(bytes(g.idx).buffer), 1));
+    const tl = new THREE.TextureLoader(), tex = (k, srgb) => { const t = tl.load(A.tex[k]); t.flipY = false; if (srgb) t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t; };
+    const orm = tex('orm');
+    const mat = new THREE.MeshStandardMaterial({ map: tex('color', true), normalMap: tex('normal'), normalScale: new THREE.Vector2(1, -1), roughnessMap: orm, metalnessMap: orm,
+      emissiveMap: tex('emis', true), emissive: 0xffffff, emissiveIntensity: 2.4, skinning: true });
+    return { A, geo, mat, at: k => new V3(...A.at[k]) };
+  })();
+  const MOVED = ['pelvis', 'waist', 'head', 'shL', 'elL', 'hdL', 'shR', 'elR', 'hdR', 'hipL', 'kneeL', 'ankleL', 'hipR', 'kneeR', 'ankleR', 'jump', 'pistol', 'plasma'];
+  function wearBody(kind) {
+    const J = T, vig = kind === 'vigil' && VIGIL;
+    if (!J.rest0) { J.rest0 = {}; for (const k of MOVED) J.rest0[k] = { p: J[k].position.clone(), q: J[k].quaternion.clone(), s: J[k].scale.clone() }; }
+    for (const k of MOVED) { const r = J.rest0[k]; J[k].position.copy(r.p); J[k].quaternion.copy(r.q); J[k].scale.copy(r.s); }
+    J.body.forEach(o => { o.visible = !vig; });
+    Object.assign(J, TEMPLAR_RIG); J.vigil = null; J.bodyKind = vig ? 'vigil' : 'templar';
+    if (J.skin) J.skin.visible = !!vig;
+    if (vig) {
+      const { A, at } = VIGIL;
+      // her joints where Tripo put them. The legs and spine rest unturned, as his do; each arm bone hangs along its own -Y
+      J.pelvis.position.copy(at('pelvis'));
+      J.waist.position.copy(at('waist')).sub(at('pelvis')); J.head.position.copy(at('head')).sub(at('waist'));
+      for (const s of 'LR') {
+        J['hip' + s].position.copy(at('hip' + s)).sub(at('pelvis')); J['knee' + s].position.copy(at('knee' + s)).sub(at('hip' + s));
+        J['ankle' + s].position.copy(at('ankle' + s)).sub(at('knee' + s));
+        J['sh' + s].position.copy(at('sh' + s)).sub(at('waist'));
+        J['el' + s].position.set(0, -at('el' + s).distanceTo(at('sh' + s)), 0); J['hd' + s].position.set(0, -at('hd' + s).distanceTo(at('el' + s)), 0);
+        if (!J['tw' + s]) J['tw' + s] = grp(J['el' + s]);      // the forearm's twist joint, halfway to the wrist
+        J['tw' + s].position.set(0, -at('tw' + s).distanceTo(at('el' + s)), 0); J['tw' + s].quaternion.identity();
+      }
+      const arm = s => at('sh' + s).distanceTo(at('el' + s)) + at('el' + s).distanceTo(at('hd' + s));
+      J.armA = (at('shL').distanceTo(at('elL')) + at('shR').distanceTo(at('elR'))) / 2; J.armB = (at('elL').distanceTo(at('hdL')) + at('elR').distanceTo(at('hdR'))) / 2;
+      const hip = at('hipL'), knee = at('kneeL'), ank = at('ankleL');
+      J.legA = hip.y - knee.y; J.legB = knee.y - ank.y; J.footH = at('pelvis').y - (hip.y - ank.y);
+      J.eyeH = A.eye[0]; J.eyeF = A.eye[1] - 0.12;            // A.eye[1] is the front of the visor
+      // his strikes are posed for his shoulders (0.42 out, 1.52 up) and his 0.66 m reach: fitReach moves them onto hers
+      J.vigil = { k: (arm('L') + arm('R')) / 2 / 0.66, shY: 1.52 - at('waist').y, shZ: -at('waist').z };
+      // the jump pack on her back plate, and his heavy pistols cut down to her hand
+      const w0 = at('waist'), js = 0.6; J.jump.scale.setScalar(js); J.jump.position.set(0, A.back[0] - w0.y, A.back[1] - 0.14 * js - w0.z);
+      for (const g of [J.pistol, J.plasma]) { g.scale.setScalar(0.8); g.position.set(0, -0.09, 0); }     // and back into her smaller hand
+      // bind in the root's own space: arms as hers hang (each bone's +Z towards the point of the elbow, behind her), hands down their fingers, grip axis forward
+      const keepP = J.root.position.clone(), keepQ = J.root.quaternion.clone();
+      J.root.position.set(0, 0, 0); J.root.quaternion.identity(); J.root.updateMatrixWorld(true);
+      for (const s of 'LR') {
+        setBoneWorld(J['sh' + s], tmp.subVectors(at('el' + s), at('sh' + s)), tmp2.set(0, 0, -1));
+        setBoneWorld(J['el' + s], tmp.subVectors(at('hd' + s), at('el' + s)), tmp2.set(0, 0, -1));
+        setHandWorld(J['hd' + s], tmp2.set(0, 0, 1), tmp.fromArray(A.hand[s]), true);
+      }
+      J.root.updateMatrixWorld(true);
+      if (!J.skin) {
+        const bones = A.joints.map(k => J[k]), mesh = new THREE.SkinnedMesh(VIGIL.geo, VIGIL.mat);
+        mesh.castShadow = true; mesh.frustumCulled = false; J.root.add(mesh);
+        mesh.bind(new THREE.Skeleton(bones, bones.map(b => b.matrixWorld.clone().invert())), new THREE.Matrix4());     // bindMatrix: the root's own space
+        J.skin = mesh; J.handRest = { L: J.hdL.quaternion.clone(), R: J.hdR.quaternion.clone() };
+      }
+      J.root.position.copy(keepP); J.root.quaternion.copy(keepQ); J.root.updateMatrixWorld(true);
+    }
+  }
+  // a pose made for him, in third person, is moved onto her shoulder and scaled to her reach, so her arm bends as his would.
+  // (In first person the targets come from the camera and stay put; the IK just reaches as far as she can.)
+  const _sv = new V3(), _st = new V3();
+  function fitReach(J, s, tW, w) {
+    if (!J.vigil || w <= 0) return;
+    J['sh' + s].getWorldPosition(_sv); _st.set(s === 'L' ? 0.42 : -0.42, J.vigil.shY, J.vigil.shZ); J.waist.localToWorld(_st);
+    tmp.subVectors(tW, _st).multiplyScalar(J.vigil.k).add(_sv); tW.lerp(tmp, w);
+  }
+  // her hand turns on a skinned forearm: the twist joint halfway down takes half the hand's roll, so the wrist doesn't wring
+  const _tq = new THREE.Quaternion(), _Y = new V3(0, 1, 0);
+  function twistForearms(J) {
+    if (!J.vigil) return;
+    for (const s of 'LR') {
+      _tq.copy(J.handRest[s]).invert().premultiply(J['hd' + s].quaternion);      // the hand's turn since the bind, in the forearm's frame
+      if (_tq.w < 0) { _tq.x = -_tq.x; _tq.y = -_tq.y; _tq.z = -_tq.z; _tq.w = -_tq.w; }
+      J['tw' + s].quaternion.setFromAxisAngle(_Y, Math.atan2(_tq.y, _tq.w));      // half the roll about the forearm (2·atan2 is the whole)
+    }
+  }
+  Object.assign(T, TEMPLAR_RIG);
+  wearBody(SET.body);
 
   // ---- the jump pack. C launches you about 12 m up (two charges). At the top you hang on the jets for three seconds, the world slows,
   // and a ring the size of the blast marks the ground where the crosshair meets it (a foe near the crosshair pulls the mark onto him).
@@ -4517,7 +4609,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     rootQinv.copy(J.root.quaternion).invert();
     // first-person eye
     eFP.set(P.pitch, P.yaw, 0); qFP.setFromEuler(eFP);
-    eyeW.set(P.pos.x, P.pos.y + 1.93, P.pos.z).addScaledVector(tmp.set(-Math.sin(P.yaw), 0, -Math.cos(P.yaw)), -0.06);   // a little behind the visor so the pistol sits at arm's length
+    eyeW.set(P.pos.x, P.pos.y + J.eyeH, P.pos.z).addScaledVector(tmp.set(-Math.sin(P.yaw), 0, -Math.cos(P.yaw)), J.eyeF);   // a little behind the visor so the pistol sits at arm's length
     const bobX = Math.sin(P.bob) * 0.018 * P.bobAmt, bobY = -Math.abs(Math.cos(P.bob)) * 0.022 * P.bobAmt;
     // right arm: combo pose, or the first-person carry (sword low on the right, pointing ahead)
     if (!C.active && P.alive) {
@@ -4559,30 +4651,32 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     if (JP.air) { J.hipR.rotation.x = -0.75; J.kneeR.rotation.x = 1.25; J.hipL.rotation.x = JP.pound ? -0.2 : 0.1; J.kneeL.rotation.x = JP.pound ? 0.5 : 0.75; }
     J.ankleR.rotation.x = -(J.hipR.rotation.x + J.kneeR.rotation.x); J.ankleL.rotation.x = -(J.hipL.rotation.x + J.kneeL.rotation.x);
     J.hipR.rotation.z = -0.06 * st; J.hipL.rotation.z = 0.06 * st;
-    const legH = (h, k) => 0.42 * Math.cos(h) + 0.44 * Math.cos(h + k);
-    J.pelvis.position.y = 0.14 + Math.min(legH(hipR, knR), legH(hipL, knL)) + Math.max(0, pose.py) + (C.active ? 0 : Math.abs(Math.cos(P.walk)) * 0.03 * amp);
+    const legH = (h, k) => J.legA * Math.cos(h) + J.legB * Math.cos(h + k);
+    J.pelvis.position.y = J.footH + Math.min(legH(hipR, knR), legH(hipL, knL)) + Math.max(0, pose.py) + (C.active ? 0 : Math.abs(Math.cos(P.walk)) * 0.03 * amp);
     J.pelvis.rotation.y = -pose.tw * 0.3;
     J.tabF.rotation.x = Math.min(0, Math.min(hipR, hipL)) * 0.8; J.tabB.rotation.x = Math.max(0, Math.max(hipR, hipL)) * 0.6;
     J.root.updateMatrixWorld(true);
     // IK: right arm to the pose
-    _a.copy(pose.h); J.root.localToWorld(_a);
+    _a.copy(pose.h); J.root.localToWorld(_a); fitReach(J, 'R', _a, C.cam);
     _b.copy(pose.b).applyQuaternion(J.root.quaternion);
     _pole.set(-0.9, -0.6, -0.3).applyQuaternion(J.root.quaternion);
     solveArm(J, 'R', _a, _pole, _b, null, false);
     // IK: left arm (pistol barrel exact, top of the gun towards "up")
-    _a.copy(lPose.h); J.root.localToWorld(_a);
+    _a.copy(lPose.h); J.root.localToWorld(_a); fitReach(J, 'L', _a, C.mode === 'finisher' ? 0 : C.cam);     // the finisher already aims from her shoulder
     _b.copy(lPose.aim).applyQuaternion(J.root.quaternion); _c.copy(lPose.up).applyQuaternion(J.root.quaternion);
     _pole.set(0.9, -0.7, -0.2).applyQuaternion(J.root.quaternion);
     solveArm(J, 'L', _a, _pole, _c, _b, true);
+    twistForearms(J);
     // pauldrons follow the upper arms part of the way
     for (const [side, PD] of [['R', J.paulR], ['L', J.paulL]]) {
       const sh = J['sh' + side]; tmp.set(0, -1, 0).applyQuaternion(sh.quaternion);
       PD.g.rotation.set(clamp(tmp.z * 0.5, -0.4, 0.6), 0, PD.base + clamp(-tmp.x * 0.35 * (side === 'L' ? -1 : 1), -0.1, 0.5) * (side === 'L' ? 1 : -1));
     }
     // in first person the helm, pack and pauldrons would fill the view: hide them until the camera pulls back
-    const tp = C.cam > 0.45 || !P.alive;
+    const tp = C.cam > 0.45 || !P.alive, his = !J.vigil;      // the cloaks and the Mark X gorget are cut for his armour, not hers
     J.head.visible = tp; J.pack.visible = tp && T.look.pack !== 'jump'; J.jump.visible = tp && T.look.pack === 'jump'; J.paulL.g.visible = tp; J.paulR.g.visible = tp;
-    J.capeW.visible = tp && T.look.cape === 'W'; J.capeR.visible = tp && T.look.cape === 'R'; J.gorget.visible = tp && T.look.armour === 'mk10';
+    J.capeW.visible = his && tp && T.look.cape === 'W'; J.capeR.visible = his && tp && T.look.cape === 'R'; J.gorget.visible = his && tp && T.look.armour === 'mk10';
+    if (J.vigil) J.head.scale.setScalar(tp ? 1 : 1e-3);      // her helm is part of one skinned mesh: in first person it shrinks to nothing round the camera
     if (T.look.blade === 'hammer') J.hammerGlow.intensity = C.active ? 1.4 : 0.35;
     if (T.look.blade === 'chain') { const run = C.active ? G.time * 3 : 0; J.chainTeeth.forEach((m, i) => { m.position.y = 0.22 + ((i * 0.045 + run) % 0.81); }); }
     // sword field: arcs and glow, brighter in the combo
@@ -4626,7 +4720,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   const qTP = new THREE.Quaternion(), tpPos = new V3(), look = new V3(), _mL = new THREE.Matrix4();
   const _ap = new V3(), _aq = new THREE.Quaternion();
   function updateCamera(dt) {
-    const want = C.active || !P.alive || JP.air ? 1 : 0;
+    const want = C.active || !P.alive || JP.air || G.tpTest ? 1 : 0;
     C.cam = clamp(C.cam + (want ? dt : -dt) / 0.25, 0, 1);
     const k = smooth(C.cam);
     const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), rx = Math.cos(P.yaw), rz = -Math.sin(P.yaw);
@@ -6366,6 +6460,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     vol.addEventListener('input', () => { SET.vol = +vol.value; if (master) master.gain.value = SET.vol; show(); saveSet(); });
     $('sInv').addEventListener('change', e => { SET.invert = e.target.checked; saveSet(); });
     $('sShake').addEventListener('change', e => { SET.shake = e.target.checked; saveSet(); });
+    $('sBody').value = SET.body; $('sBody').addEventListener('change', e => { SET.body = e.target.value; saveSet(); wearBody(SET.body); applyLook(); updateRig(0); });
     $('sSword').addEventListener('change', e => { swordAudio = e.target.value; saveSet(); initAudio().then(() => { if (actx.state !== 'running') actx.resume().then(() => SYN.swing(0, 0.15)); else SYN.swing(0, 0.15); }); });
   }
   $('openSet').addEventListener('click', () => { initAudio(); openSettings(); });
@@ -8016,6 +8111,8 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     act() { const a = nearestAct(); if (a) { a.go(); return a.text; } return null; },
     enter(id) { enterDungeon(id); }, exit() { exitDungeon(); }, wave(n) { if (DUN) { for (const e of ENEMIES) removeEnemy(e); ENEMIES = []; DUN.toSpawn = []; startDunWave(n); } },
     hurtE(i, dmg) { const e = ENEMIES[i]; return e ? damageEnemy(e, dmg, v(0, 0, 1), 0, 'test') : null; },
+    thirdP(on) { G.tpTest = !!on; },      // the camera pulls back as it does in a fight, so the whole body shows
+    body(kind) { if (kind) { wearBody(kind); applyLook(); updateRig(0); } return { kind: T.bodyKind, eyeH: T.eyeH, arm: [T.armA, T.armB], leg: [T.legA, T.legB, T.footH], fit: T.vigil }; },
     killAll() { for (const e of ENEMIES) if (e.alive) damageEnemy(e, 1e6, v(0, 0, 1), 0, 'test'); },
     xp(n) { gainXP(n); }, give(slot, rar, pw, exo) { const it = makeItem(slot, pw || 10 * R.lvl, rar || 0, null, null, exo); R.bag.push(it); return it; },
     equip(id) { const it = findItem(id); return it ? equipItem(it) : false; }, power() { return { power: ST.power, soft: softCap(), pow: powCap(), pin: pinCap(), eq: SLOTS.map(k => R.eq[k] && R.eq[k].pw) }; },

@@ -71,15 +71,28 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
 - `buildRegion()` builds the world once into `W` (terrain `W.gH`, `W.collide`, `W.ray`, `W.clampB`, CAMPS, GATES, CHESTS, places).
   `ZONE` is 'world' or 'dungeon'; `GY(x, z)` is the ground under any point (0 in a dungeon), and `collide`/`rayWorld`/`clampBounds`
   hand off to `W` in the world. Dungeons rebuild an arena (`buildArena`) into `DG` and run `DUNS[id].waves`, with a named boss on the last.
-- Progress lives in `R` (`freshR()`: lvl, xp, oath points, gold, unguents, equipped `eq`, `bag`, quest, cleared, opened, found, shop stock)
-  and is saved to localStorage (`SAVE_KEY`, autosave every 30 s outside a fight). `calcStats()` folds level, oaths and gear into `ST`;
-  player hits go through `strike()` (crits, multipliers) into `damageEnemy()`.
-- Enemies carry `lvl`, `sc` (scale), `dm` (damage multiplier), `pack` (the encounter that owns them) and `home`. In the world they idle and
+- Progress lives in `R` (`freshR()`, save v2: lvl, xp, gold, unguents, equipped `eq`, `bag`, materials `mat` {adam, oil}, subclasses `sub`,
+  cosmetics `cos`, weekly `week`, quest, cleared, opened, found, shop stock) and is saved to localStorage (`SAVE_KEY`, autosave every 30 s
+  outside a fight). `migrateSave` turns a v1 save (level 1-20, oath points) into v2. `calcStats()` folds level, subclass nodes and gear into `ST`;
+  player hits go through `strike()` (Power, crits, perks, `ABIL.dmgMult`) into `damageEnemy()`. Levels run to `MAXLVL` 50 (`xpNext` = 60·L^1.5).
+- Power (Destiny-style Light): `charPower()` is the average of the five slots' `pw`. Drops: `dropPw('world'|'powerful'|'pinnacle')` against
+  `softCap()` 10L+20, `powCap()` +30, `pinCap()` +50. Enemies have `pw` (`ePow(lvl)` = 10·lvl unless set); the gap d = ST.power - e.pw drives
+  `dealtMult(d)` (Immune at -50 or worse) and `takenMult(d)` (up to x3 below, at least x0.8 above; `e.dm = e.dm0 * takenMult`). `pScale` grows
+  both sides with Power. The world rises with the player: `riseLvl(base)` keeps foes within four levels, `dunLvl` keeps dungeons within two.
+- Enemies carry `lvl`, `pw`, `sc` (scale), `dm` (damage multiplier), `pack` (the encounter that owns them) and `home`. In the world they idle and
   wander, aggro by sight, alert their pack, and leash home (`return` heals them). `buildEncounters()` lists every pack; they spawn within
   130 m (`SPQ`, two per frame) and despawn past 240 m. Cleared camps with a waypoint become fast travel points.
-- Loot: `makeItem(slot, lvl, rarity)` with affixes from `AFX`, uniques in `UNIQ`; `drop()` puts gems with rarity beams on the ground.
-  Chests (`addChest`, tiers 1-3), the Quartermaster's shop (`genStock`), five main quests (`QUESTS`, `checkQuests`).
-- Screens: character/inventory (I or Tab, `renderSheet`, clicks via data-act), map with waypoints (M, `drawMap`), talk (`openTalk`).
+- Loot: `makeItem(slot, pw, rar, name, kind, exo)` in five tiers (`RAR`: Standard, Blessed, Master-crafted, Relic, Artificer; `RHEX` colours).
+  Perks from `PERKS` (weapons and armour roll by tier), Artificer exotics in `EXO` (one weapon and one armour piece at a time, `exoClash`).
+  `infuse(it, fuel)`, `masterwork(it)`, `dismantle(it)` use gold, adamantium and blessed oil. `lootBurst` drops gems with rarity beams.
+  Chests (`addChest`, tiers 1-3 = world, powerful, pinnacle), the Quartermaster's shop (`genStock`), five main quests (`QUESTS`, `checkQuests`).
+- Warded foes (`WARDS`, encounter kind 'ward'): the Hollow Saint (pw 250), Warlord Skarr (350), Vorlakh the Daemon Prince (500, sealed until
+  the Nave is cleared). Violet shield sphere (`addWard`), respawn after 15 min, exotic drop (`wardSlain`, `newExo`).
+  The weekly crusade (`WEEK`, `weekCheck`, `weekStep`) resets Tuesday 17:00 UTC (`weekNo`) and pays pinnacle drops.
+- Subclasses (`SUBS`: sword from L1, crusader L5, chaplain L10): Destiny 1 style trees, eight rows, one point per level per subclass
+  (`subPts`, `subPick(row)`, `subSwitch`). Energy `AB` {gren, melee, sup} charges over time and on kills; G, V and X fire `useAbility`.
+- Screens: the character screen (I, Tab or B; `#build`, `renderCS`: Gear with slot fans, cards with compare and two-step actions, drag to
+  equip; Subclass trees; Cosmetics) in `CS` state, Quartermaster shop (`renderSheet`), map with waypoints (M, `drawMap`), talk (`openTalk`).
 - `rpg/tools/kenney_convert.py <cc0-world/models> rpg/assets/kenney.json` bakes the Kenney GLBs to vertex colours with a per-surface class
   (stone, wood, metal, cloth) that picks the scanned texture. The full download is in the project files under `templar-arena/assets/cc0-world/`.
 - `triMat()` lays scanned textures on by world position (triplanar). Give each new variant a distinct key: r128 caches programs
@@ -97,11 +110,12 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
   The jump pack (`JP`, C) is issued once per save (`R.gotJump`). `JP.phase`: 'rise' (about 12 m), 'hover' (3 s real time, world at half speed,
   the aim camera in `updateCamera` follows pitch), 'dive' (straight onto `JP.mark`, re-homing on `JP.lock`), 'fall'. `aimMark` casts from the camera
   through the crosshair (30 m max, snaps to a foe within 2.6 m); `JPM` draws the ring over the ground. Click or F dives, C drops; `landJump` is the AoE.
-  B opens the armoury (`renderArmoury`, `armouryCam`).
+  The character screen turns the camera onto the player (`armouryCam`).
 - No sword hum: it was removed at the user's request (2026-10-08); the swing keeps its whoosh and field crackle.
 - Gallery: `openGallery()` from the menu, and `rpg/gallery.html` (build.py, `GALLERY_ONLY`, no textures or sounds) is the same gallery alone,
   published to https://claude.ai/artifact/2dyF1DF8Zz8JJPPMpeA7pJ. Hook `window.__gal` (show, look, hawk, view, step) in that build.
 - Test hook `window.__rpg`: begin(fresh), sim(s, fps), set({pos,yaw,pitch,hp,gold,quest}), tp(x,z,yaw), spawn, clear, noEnc, fire, sword,
-  execute, dash, key, act, enter(id), exit, wave(n), killAll, xp, give(slot,rar,lvl), ui(name), talk(id), travel(id), save, quest,
-  norender, render, view(cam, target, fov)/unview, board, land, fly, jump, trial, look, cannon, keep(), hawk(), jp(), state().
+  execute, dash, key, act, enter(id), exit, wave(n), killAll, xp, give(slot,rar,pw,exo), equip(id), power(), ab(k), fill(), node, subUse,
+  cs(o), week(), ui(name), talk(id), travel(id), save, quest, norender, render, view(cam, target, fov)/unview, board, land, fly, jump, trial,
+  look, cannon, keep(), hawk(), jp(), state(). `noEnc(true)` stops encounters; `noEnc()` turns them back on.
   The page takes about 17 s to load headless (SwiftShader). `window.__world` is the old preview's hook.

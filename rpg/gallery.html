@@ -5,7 +5,7 @@
 /* One dark, candle-lit look by choice (the arena's): bone text on near-black, wax red and gold accents, the power field's blue. */
 :root {
   --bg: #0b0b0d; --ink: #ece4d2; --dim: #a59d8c; --line: rgba(236, 228, 210, 0.18); --panel: rgba(14, 13, 15, 0.8); --panel2: rgba(22, 20, 22, 0.92);
-  --wax: #b3191e; --gold: #c9a24a; --field: #8fd0ff; --r0: #d8cfbc; --r1: #8fd0ff; --r2: #e0b24a; --r3: #ff7a4a; --xp: #c9a24a;
+  --wax: #b3191e; --gold: #c9a24a; --field: #8fd0ff; --r0: #d8cfbc; --r1: #7fcf6a; --r2: #5aa8ff; --r3: #b07aff; --r4: #f2c03a; --xp: #c9a24a;
   --display: "IM Fell English SC", "Iowan Old Style", Georgia, serif; --ui: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
   color-scheme: dark;
 }
@@ -101,10 +101,12 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); 
 #feed .xp { border-color: var(--xp); color: var(--gold); }
 .rar0 { color: var(--r0); border-color: var(--r0) !important; } .rar1 { color: var(--r1); border-color: var(--r1) !important; }
 .rar2 { color: var(--r2); border-color: var(--r2) !important; } .rar3 { color: var(--r3); border-color: var(--r3) !important; }
+.rar4 { color: var(--r4); border-color: var(--r4) !important; }
 #bars i { position: absolute; width: 56px; height: 5px; margin-left: -28px; background: rgba(0, 0, 0, .6); border: 1px solid rgba(0, 0, 0, .8); display: none; }
 #bars i b { display: block; height: 100%; background: #c32a22; }
 #bars i span { position: absolute; right: 100%; top: -5px; margin-right: 4px; font: 700 .7rem var(--ui); color: var(--ink); text-shadow: 0 0 3px #000; }
 #bars i.hi span { color: #ff6a5a; }
+#bars i.imm span { color: #c9a0ff; } #bars i.imm b { background: #7a52c0; }
 #nums span { position: absolute; font: 700 1rem var(--ui); color: #fff; text-shadow: 0 0 4px #000, 0 1px 2px #000; transform: translate(-50%, -50%); white-space: nowrap; display: none; }
 #nums span.crit { color: var(--gold); font-size: 1.3rem; }
 #nums span.heal { color: #9fe08a; }
@@ -209,6 +211,18 @@ details.credits a { color: var(--gold); }
 #talk .btnrow { margin-top: 14px; }
 #jp i { display: inline-block; width: 8px; height: 8px; margin-left: 4px; transform: rotate(45deg); border: 1px solid var(--line); background: rgba(0, 0, 0, .4); }
 #jp i.on { background: var(--field); border-color: var(--field); box-shadow: 0 0 6px var(--field); }
+/* abilities: grenade and melee charge as rings, the super as a diamond, all in the subclass's colour */
+#abil { left: calc(28px + min(300px, calc(50vw - 28px))); bottom: 16px; display: flex; gap: 12px; align-items: flex-end; padding: 8px 12px; --sc: var(--field); }
+#abil .ab { display: grid; justify-items: center; gap: 4px; width: 62px; }
+#abil .ab i { --p: 0; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle, rgba(10, 9, 11, .95) 58%, transparent 60%), conic-gradient(var(--sc) calc(var(--p) * 1turn), rgba(236, 228, 210, .14) 0); }
+#abil .ab.sup i { width: 44px; height: 44px; border-radius: 0; transform: rotate(45deg) scale(.82); background: linear-gradient(0deg, var(--sc) calc(var(--p) * 100%), rgba(236, 228, 210, .1) 0); border: 2px solid rgba(236, 228, 210, .3); }
+#abil .ab.sup i kbd { transform: rotate(-45deg); }
+#abil .ab kbd { font: 700 .72rem var(--ui); color: var(--ink); text-shadow: 0 0 3px #000; }
+#abil .ab.full i { box-shadow: 0 0 12px var(--sc); } #abil .ab.sup.full i { border-color: #fff; animation: supglow 1.4s ease-in-out infinite; }
+@keyframes supglow { 50% { box-shadow: 0 0 22px var(--sc); } }
+#abil .ab small { font: 500 .64rem/1.1 var(--ui); color: var(--dim); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 62px; }
+@media (max-width: 760px) { #abil { left: auto; right: 16px; bottom: 112px; } }
+#sheet .grid .slot .pwn { position: absolute; right: 3px; bottom: 1px; font: 700 .62rem var(--ui); font-style: normal; color: var(--ink); text-shadow: 0 0 3px #000; }
 /* the gunship: speed and height top left of the crosshair, the controls along the bottom */
 #flyhud { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 5; }
 #flyhud.on { display: block; }
@@ -216,25 +230,144 @@ details.credits a { color: var(--gold); }
 #flyhint { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); width: min(820px, calc(100vw - 32px)); text-align: center; font: 500 .82rem var(--ui); letter-spacing: .06em; color: var(--ink); text-shadow: 0 1px 4px #000; }
 #flyhud .ring { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border: 1px solid rgba(143, 208, 255, .55); border-radius: 50%; }
 /* the armoury: the Templar stands in the open middle, his wargear on the left, the piece and the build on the right */
-#build { position: fixed; inset: 0; z-index: 10; display: flex; justify-content: space-between; align-items: stretch; gap: 16px; padding: 16px; box-sizing: border-box; cursor: grab; background: linear-gradient(90deg, rgba(8, 7, 9, .7), transparent 34%, transparent 66%, rgba(8, 7, 9, .7)); }
+/* the character screen, after Destiny 1's: the Templar in the middle, weapon tiles on his left, armour and cosmetics on his right,
+   a heraldic banner with Power top left, the six stats along the bottom. Tier colours: bone, green, blue, violet, Artificer gold. */
+#build { position: fixed; inset: 0; z-index: 10; cursor: grab; color: var(--ink); background: radial-gradient(ellipse 34% 60% at 50% 52%, transparent 40%, rgba(6, 6, 8, .5) 100%), linear-gradient(180deg, rgba(6, 6, 8, .65), transparent 18%, transparent 78%, rgba(6, 6, 8, .7)); }
 #build.off { display: none; }
-#build .apanel { width: min(340px, 42vw); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 14px; box-sizing: border-box; overflow: auto; cursor: default; }
-#build h2 { margin: 0 0 8px; font: 400 1.35rem var(--display); }
-#build .tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin-bottom: 10px; }
-#build .tab { display: grid; place-items: center; gap: 2px; padding: 6px 2px; font: 500 .66rem var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); background: rgba(0, 0, 0, .35); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
-#build .tab i { font-style: normal; color: var(--gold); font-variant-numeric: tabular-nums; }
-#build .tab.on { color: var(--ink); border-color: var(--gold); }
-#build .alist { display: grid; gap: 6px; }
-#build .arow { text-align: left; background: rgba(0, 0, 0, .35); border: 1px solid var(--line); border-left-width: 3px; border-radius: 4px; padding: 7px 10px; cursor: pointer; font: 500 .9rem var(--ui); }
-#build .arow small { display: block; color: var(--dim); font-size: .74rem; margin-top: 2px; }
-#build .arow small em { font-style: normal; color: var(--gold); }
-#build .arow.sel { outline: 2px solid var(--gold); }
-#build .tab:focus-visible, #build .arow:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-#build .feel { color: var(--ink); font-size: .84rem; line-height: 1.4; margin: 8px 0 0; }
-#build .hint { color: var(--dim); font-size: .82rem; }
-#build .eqline { display: grid; gap: 4px; margin-top: 10px; font-size: .82rem; color: var(--ink); }
-#build .eqline i { color: var(--dim); }
-#build .drag { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); color: var(--dim); font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; text-shadow: 0 1px 3px #000; pointer-events: none; }
+#build [hidden] { display: none !important; }
+#build .t0 { --rc: var(--r0); --rb: rgba(216, 207, 188, .1); } #build .t1 { --rc: var(--r1); --rb: rgba(127, 207, 106, .13); } #build .t2 { --rc: var(--r2); --rb: rgba(90, 168, 255, .15); }
+#build .t3 { --rc: var(--r3); --rb: rgba(176, 122, 255, .17); } #build .t4 { --rc: var(--r4); --rb: rgba(242, 192, 58, .2); }
+.cs-top { position: absolute; left: 16px; right: 16px; top: 12px; display: flex; align-items: flex-start; gap: 18px; cursor: default; }
+.cs-ban { position: relative; width: min(380px, 44vw); height: 76px; border: 1px solid rgba(236, 228, 210, .22); overflow: hidden; flex: none; background: #120d0c; }
+.cs-ban .emb { position: absolute; inset: 0; } .cs-ban .emb svg { width: 100%; height: 100%; display: block; }
+.cs-ban .who { position: absolute; left: 34%; top: 9px; display: grid; text-shadow: 0 1px 3px #000; }
+.cs-ban .who b { font: 400 1.25rem/1.05 var(--display); } .cs-ban .who small { font: 500 .78rem var(--ui); letter-spacing: .04em; color: var(--dim); }
+.cs-ban .pwr { position: absolute; right: 12px; top: 8px; text-align: right; text-shadow: 0 1px 4px #000; }
+.cs-ban .pwr span { display: block; font: 700 2.1rem/1 var(--ui); color: var(--gold); font-variant-numeric: tabular-nums; }
+.cs-ban .pwr span::before { content: ""; display: inline-block; width: .42em; height: .42em; margin-right: .2em; vertical-align: .18em; background: currentColor; transform: rotate(45deg); }
+.cs-ban .pwr small { font: 500 .66rem var(--ui); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+.cs-tabs { display: flex; gap: 2px; margin: 18px auto 0; }
+.cs-tabs button { font: 400 1.05rem var(--display); letter-spacing: .06em; color: var(--dim); background: none; border: 0; border-bottom: 2px solid transparent; padding: 6px 14px; cursor: pointer; }
+.cs-tabs button.on { color: var(--ink); border-bottom-color: var(--gold); }
+.cs-tabs button i { font: 700 .7rem var(--ui); font-style: normal; color: #0b0b0d; background: var(--gold); border-radius: 8px; padding: 1px 6px; vertical-align: 2px; }
+.cs-tabs button:focus-visible, #build .tile:focus-visible, #build .node:focus-visible, #build .subtab:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.cs-mats { display: grid; gap: 2px; justify-items: end; font: 500 .8rem var(--ui); color: var(--dim); font-variant-numeric: tabular-nums; margin-top: 4px; }
+.cs-mats b { color: var(--ink); }
+.cs-top > .opt { flex: none; margin-top: 2px; }
+/* the slot columns */
+.cs-col { position: absolute; top: 50%; transform: translateY(-50%); display: grid; gap: 12px; cursor: default; }
+.cs-col.l { right: calc(50% + 150px); } .cs-col.r { left: calc(50% + 150px); }
+.cs-col .row { display: flex; align-items: center; gap: 12px; }
+.cs-col.l .row { justify-content: flex-end; text-align: right; }
+.cs-col .cap { display: grid; width: 170px; text-shadow: 0 1px 3px #000, 0 0 10px rgba(0, 0, 0, .8); }
+.cs-col .cap small { font: 500 .66rem var(--ui); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+.cs-col .cap b { font: 500 .92rem/1.2 var(--ui); }
+#build .tile { position: relative; width: 66px; height: 66px; flex: none; display: grid; place-items: center; padding: 0; cursor: pointer; color: var(--ink);
+  border: 2px solid var(--rc, rgba(236, 228, 210, .3)); background: linear-gradient(155deg, var(--rb, rgba(255, 255, 255, .05)), rgba(10, 9, 11, .88) 70%); box-shadow: 0 2px 10px rgba(0, 0, 0, .6); }
+#build .tile svg { width: 58%; height: 58%; filter: drop-shadow(0 1px 2px #000); }
+#build .tile .pw { position: absolute; right: 2px; bottom: 1px; font: 700 .72rem var(--ui); font-variant-numeric: tabular-nums; color: var(--ink); text-shadow: 0 0 3px #000, 0 0 3px #000; }
+#build .tile:hover { filter: brightness(1.25); }
+#build .tile.open, #build .tile.on { outline: 2px solid var(--ink); outline-offset: 2px; }
+#build .tile.mw::after { content: ""; position: absolute; left: 0; top: 0; border: 9px solid transparent; border-left-color: var(--r4); border-top-color: var(--r4); }
+#build .tile.t4 { background: linear-gradient(155deg, rgba(242, 192, 58, .3), rgba(26, 18, 6, .9) 75%); }
+#build .tile.better::before { content: ""; position: absolute; left: 4px; top: 4px; border: 5px solid transparent; border-bottom: 7px solid #7fcf6a; border-top: 0; }
+#build .tile.empty { opacity: .45; }
+#build .tile.subt { --rc: var(--sc); background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--sc) 35%, transparent), rgba(10, 9, 11, .9) 75%); transform: rotate(45deg) scale(.86); }
+#build .tile.subt svg { transform: rotate(-45deg); color: var(--sc); }
+#build .tile.sm { width: 48px; height: 48px; }
+#build .tile.cos { --rc: rgba(201, 162, 74, .55); color: var(--gold); }
+#build .tile.lockd { opacity: .3; cursor: not-allowed; }
+.cosrow { display: flex; gap: 8px; margin-top: 6px; }
+.cosc { display: grid; justify-items: center; gap: 3px; width: 54px; text-align: center; }
+.cosc small { font: 500 .58rem/1.1 var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); text-shadow: 0 1px 3px #000; }
+.cosc.open .tile { outline: 2px solid var(--ink); outline-offset: 2px; }
+/* the fan of alternatives */
+#csFan { position: fixed; z-index: 2; padding: 10px; background: rgba(12, 11, 13, .9); border: 1px solid var(--line); box-shadow: 0 8px 30px rgba(0, 0, 0, .7); cursor: default; max-width: 260px; }
+#csFan h3 { margin: 0 0 8px; font: 500 .7rem var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+#csFan .grid3 { display: grid; grid-template-columns: repeat(3, 66px); gap: 8px; }
+#csFan .grid3 .tile.sm { width: 66px; height: 66px; }
+#csFan .tile .nm { position: absolute; left: 0; right: 0; bottom: 2px; font: 500 .56rem/1.05 var(--ui); color: var(--ink); text-shadow: 0 0 3px #000; padding: 0 2px; }
+#csFan .tile .embm { position: absolute; inset: 3px 3px 16px; } #csFan .tile .embm svg { width: 100%; height: 100%; filter: none; }
+#csFan .hint { grid-column: 1 / -1; color: var(--dim); font-size: .82rem; margin: 0; width: 214px; }
+#csFan .pager { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; font-size: .8rem; color: var(--dim); }
+/* the item card */
+#csCard { position: fixed; z-index: 3; width: 300px; background: rgba(14, 13, 16, .96); border: 1px solid rgba(236, 228, 210, .22); box-shadow: 0 10px 34px rgba(0, 0, 0, .75); cursor: default; }
+#csCard.exo { border-color: var(--r4); }
+.cd-h { padding: 9px 12px 8px; background: var(--rc); color: #0e0d10; }
+.cd-h.r0 { --rc: var(--r0); } .cd-h.r1 { --rc: #4f9a3e; color: #fff; } .cd-h.r2 { --rc: #2f6fbf; color: #fff; } .cd-h.r3 { --rc: #6c3fb8; color: #fff; } .cd-h.r4 { --rc: linear-gradient(100deg, #f2c03a, #c99418); }
+.cd-h b { display: block; font: 400 1.22rem/1.1 var(--display); letter-spacing: .02em; }
+.cd-h small { font: 500 .74rem var(--ui); letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+.cd-b { padding: 10px 12px 12px; display: grid; gap: 9px; }
+.cd-pw { display: flex; align-items: baseline; gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.cd-pw span { font: 700 1.9rem/1 var(--ui); font-variant-numeric: tabular-nums; }
+.cd-pw small { font: 500 .7rem var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+.cd-pw em, .cd-bars em { font-style: normal; font-weight: 700; letter-spacing: 0; }
+#build .up { color: #8fe07a; } #build .dn { color: #ff7a6a; }
+.cd-bars { display: grid; gap: 4px; }
+.cd-bars div { display: grid; grid-template-columns: 86px 1fr 28px; align-items: center; gap: 8px; font-size: .8rem; color: var(--dim); }
+.cd-bars i { height: 6px; background: rgba(236, 228, 210, .1); } .cd-bars i b { display: block; height: 100%; background: var(--ink); }
+.cd-bars em { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+.cd-af { margin: 0; padding: 0; list-style: none; font-size: .86rem; color: var(--field); }
+.cd-perk { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; }
+.cd-perk i { width: 14px; height: 14px; margin: 3px 0 0 3px; border: 2px solid var(--ink); transform: rotate(45deg); }
+.cd-perk.exo i { border-color: var(--r4); background: rgba(242, 192, 58, .35); }
+.cd-perk b { font: 700 .86rem var(--ui); } .cd-perk.exo b { color: var(--r4); }
+.cd-perk p { margin: 1px 0 0; font-size: .8rem; line-height: 1.3; color: var(--dim); }
+.cd-mw { font-size: .8rem; color: var(--r4); }
+.cd-feel, .cd-note { margin: 0; font-size: .78rem; line-height: 1.35; color: var(--dim); font-style: italic; }
+.cd-note { font-style: normal; }
+.cd-btns { display: grid; gap: 6px; margin-top: 2px; }
+.cd-btns .opt { text-align: left; }
+.cd-btns .opt.warn { border-color: var(--wax); color: #ffb0a0; }
+.cd-tip { margin: 0; padding: 0 12px 9px; font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+/* the six stats */
+#csStats { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: grid; grid-template-columns: repeat(6, minmax(0, 130px)); gap: 16px; cursor: default; width: min(880px, calc(100vw - 32px)); text-shadow: 0 1px 3px #000; }
+#csStats .st { display: grid; gap: 4px; }
+#csStats .lbl b { font-variant-numeric: tabular-nums; }
+#csStats small { font-size: .74rem; color: var(--dim); }
+#csStats .tiers, #csStats .pips { display: grid; gap: 2px; height: 6px; }
+#csStats .tiers { grid-template-columns: repeat(5, 1fr); } #csStats .pips { grid-template-columns: repeat(10, 1fr); }
+#csStats .tiers span, #csStats .pips span { background: rgba(236, 228, 210, .14); }
+#csStats .tiers b { display: block; height: 100%; background: var(--gold); } #csStats .pips span.on { background: var(--ink); }
+#build .drag { position: absolute; left: 50%; bottom: 88px; transform: translateX(-50%); color: var(--dim); font-size: .74rem; letter-spacing: .14em; text-transform: uppercase; text-shadow: 0 1px 3px #000; pointer-events: none; }
+/* subclass and crusade panels */
+.cs-panel { position: absolute; left: 50%; top: 104px; bottom: 16px; transform: translateX(-50%); width: min(1040px, calc(100vw - 32px)); overflow: auto; cursor: default; background: rgba(10, 9, 11, .9); border: 1px solid var(--line); padding: 16px 18px; box-sizing: border-box; }
+.subtabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.subtab { display: grid; grid-template-columns: 34px 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; text-align: left; padding: 8px 12px; color: var(--ink); background: rgba(255, 255, 255, .03); border: 1px solid var(--line); border-bottom: 3px solid transparent; cursor: pointer; }
+.subtab svg { grid-row: 1 / 3; width: 30px; height: 30px; color: var(--sc); }
+.subtab b { font: 400 1.1rem var(--display); } .subtab small { font-size: .74rem; color: var(--dim); }
+.subtab.on { border-bottom-color: var(--sc); background: rgba(255, 255, 255, .07); } .subtab.lockd { opacity: .5; }
+.subhead { margin: 14px 0 6px; display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; align-items: end; }
+.subhead h2 { margin: 0; font: 400 1.8rem var(--display); color: var(--sc); } .subhead p { margin: 0; color: var(--dim); font-size: .9rem; grid-column: 1; }
+.subact { grid-column: 2; grid-row: 1 / 3; display: grid; justify-items: end; gap: 6px; font-size: .86rem; color: var(--dim); } .subact b { color: var(--gold); font-size: 1.1rem; }
+.subact .go { margin: 0; font-size: 1rem; padding: 6px 18px; }
+.tree { display: grid; grid-template-columns: 1fr minmax(0, .8fr) 1fr; gap: 14px 22px; margin-top: 12px; }
+.tcol { display: grid; gap: 14px; align-content: start; } .tcol.mid { align-content: center; }
+.grp h4 { margin: 0 0 6px; font: 500 .68rem var(--ui); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+.tcol.mid .grp h4 { text-align: center; }
+.nodes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .tcol.mid .grp:first-child .nodes { grid-template-columns: 1fr; justify-items: center; }
+.node { display: grid; justify-items: center; gap: 6px; padding: 4px 2px; background: none; border: 0; color: var(--dim); cursor: pointer; font: 500 .74rem/1.15 var(--ui); text-align: center; }
+.node i { width: 40px; height: 40px; display: grid; place-items: center; transform: rotate(45deg); border: 2px solid rgba(236, 228, 210, .22); background: rgba(0, 0, 0, .45); }
+.node i svg { width: 22px; height: 22px; transform: rotate(-45deg); }
+.node.big i { width: 64px; height: 64px; } .node.big i svg { width: 34px; height: 34px; } .node.big span { font: 400 1rem var(--display); color: var(--ink); }
+.node.can i { border-color: rgba(236, 228, 210, .55); } .node.can { color: var(--ink); }
+.node.own i { border-color: var(--sc); } .node.own { color: var(--ink); }
+.node.on i { border-color: var(--sc); background: color-mix(in srgb, var(--sc) 55%, #000); box-shadow: 0 0 14px color-mix(in srgb, var(--sc) 60%, transparent); color: #fff; } .node.on { color: var(--sc); }
+.node:disabled { cursor: not-allowed; opacity: .55; }
+.ndesc { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); font-size: .88rem; color: var(--dim); min-height: 2.6em; } .ndesc b { color: var(--ink); }
+#csCru { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+#csCru h2 { margin: 0 0 8px; font: 400 1.3rem var(--display); } #csCru h2 small { font: 500 .74rem var(--ui); color: var(--dim); letter-spacing: .06em; }
+#csCru ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+#csCru li { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; } #csCru li.done { opacity: .55; } #csCru li.near { border-left-color: var(--r3); }
+#csCru li b { font-weight: 700; } #csCru li p { margin: 2px 0 0; color: var(--dim); font-size: .84rem; }
+#csCru .wk li { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; } #csCru .wk li i { grid-column: 1 / -1; height: 4px; background: rgba(236, 228, 210, .12); } #csCru .wk li i b { display: block; height: 100%; background: var(--r3); }
+#csCru .wards li { display: grid; grid-template-columns: 1fr auto; } #csCru .wards li span { color: var(--r3); font-weight: 700; } #csCru .wards li p { grid-column: 1 / -1; }
+#csCru .hint { color: var(--dim); font-size: .8rem; }
+.pcaps { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 0; font-size: .9rem; } .pcaps dt { color: var(--dim); } .pcaps dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
+@media (max-width: 860px) {
+  .cs-col.l { right: auto; left: 12px; } .cs-col.r { left: auto; right: 12px; } .cs-col .cap { display: none; } .cosrow { flex-direction: column; }
+  #csStats { grid-template-columns: repeat(3, minmax(0, 1fr)); } .tree, #csCru { grid-template-columns: 1fr; } .cs-mats { display: none; }
+}
 /* the gallery: exhibits on the left, the caption and its options along the bottom, the model turning in the open middle */
 #gal { position: fixed; inset: 0; z-index: 12; cursor: grab; }
 #gal.off { display: none; }
@@ -257,7 +390,6 @@ details.credits a { color: var(--gold); }
 #gal .gnav .opt { min-width: 38px; }
 #gal .arow:focus-visible, #gal .chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 @media (max-width: 760px) { #gal .gpanel { top: auto; bottom: auto; left: 16px; right: 16px; top: 64px; width: auto; max-height: 26vh; } #gal .gcap { left: 16px; max-height: 42vh; overflow: auto; } }
-@media (max-width: 700px) { #build { flex-direction: column; justify-content: flex-end; background: rgba(8, 7, 9, .55); } #build .apanel { width: 100%; max-height: 40vh; } #build .drag { display: none; } }
 @media (max-width: 640px) { #mini, #where { display: none; } #quest { max-width: calc(100vw - 32px); } }
 </style>
 <canvas id="c" aria-label="The Reach of Saint Ansgar"></canvas>
@@ -279,9 +411,10 @@ details.credits a { color: var(--gold); }
   <div id="where"></div>
   <div class="panel" id="hpbox">
     <div class="lbl">Armour <b id="hpnum">100</b></div><div class="bar"><div id="hpfill"></div></div>
-    <div class="lbl">Level <b id="lvl">1</b><span id="xptxt"></span></div><div class="bar" id="xpbar"><div id="xpfill"></div></div>
-    <div class="purse"><span><kbd>Q</kbd>Unguent <b id="ung">0</b></span><span>Thrones <b id="gold">0</b></span><span id="jp"><kbd>C</kbd>Jump <i></i><i></i></span></div>
+    <div class="lbl"><span>Level <b id="lvl">1</b></span><span>Power <b id="pwrn">10</b></span><span id="xptxt"></span></div><div class="bar" id="xpbar"><div id="xpfill"></div></div>
+    <div class="purse"><span><kbd>Q</kbd>Unguent <b id="ung">0</b></span><span>Thrones <b id="gold">0</b></span><span id="jp"><kbd>C</kbd>Jump <i></i><i></i><i></i></span></div>
   </div>
+  <div class="panel" id="abil" aria-label="Abilities"><div class="ab" id="abG"><i><kbd>G</kbd></i><small></small></div><div class="ab sup" id="abX"><i><kbd>X</kbd></i><small></small></div><div class="ab" id="abV"><i><kbd>V</kbd></i><small></small></div></div>
   <div class="panel" id="ammobox"><div class="lbl" style="justify-content:flex-end" id="gunname">Heavy bolt pistol</div><div id="ammo">8 <small>/ 8</small></div><div id="reload"></div></div>
   <div id="feed"></div>
   <div id="combo"><i></i><i></i><i></i></div>
@@ -307,9 +440,9 @@ details.credits a { color: var(--gold); }
       <kbd>Space</kbd><span>Dash. Dash then sword for a lunge; sword, sword, fire for a point-blank bolt</span>
       <kbd>E</kbd><span>Execute a staggered foe (red marker), talk, open, enter</span>
       <kbd>Q</kbd><span>Sacred unguent: heals</span>
-      <kbd>C</kbd><span>Jump pack: launch high and hover (two charges); aim at the ground, then click or F to slam down on the mark</span>
-      <kbd>B</kbd><span>The armoury: try on every blade, pistol, plate and pack you own</span>
-      <kbd>I / Tab</kbd><span>Character, oaths, wargear and quests</span>
+      <kbd>C</kbd><span>Jump pack: launch high and hover; aim at the ground, then click or F to slam down on the mark</span>
+      <kbd>G · V · X</kbd><span>Grenade, melee ability and super, from your subclass</span>
+      <kbd>I / Tab / B</kbd><span>Character: wargear and Power, subclass tree, the crusade and the week’s tasks</span>
       <kbd>M</kbd><span>Map and travel between shrines</span>
       <kbd>Esc</kbd><span>Pause and settings</span>
       <kbd>Thunderhawk</kbd><span>On the landing field past the west gate: E to board, mouse to steer, W/S throttle, Space/C climb/sink, clicks fire, E to set down</span>
@@ -346,7 +479,13 @@ details.credits a { color: var(--gold); }
   <div class="maphead"><div><h2>The Reach of Saint Ansgar</h2><p id="maphint">Gold markers are shrines you can travel to.</p></div><button class="opt" id="mapclose" type="button">Close (M)</button></div>
   <div class="mapwrap"><canvas id="bigmap" width="900" height="900" aria-label="Map of the Reach"></canvas><div id="wps"></div></div>
 </div></div>
-<div id="build" class="off"><div class="apanel" id="armL"></div><div class="drag">Drag to turn him</div><div class="apanel" id="armR"></div></div>
+<div id="build" class="off" aria-label="Character">
+  <div class="cs-top"><div id="csBanner" class="cs-ban"></div><nav id="csTabs" class="cs-tabs" aria-label="Character screens"></nav><div id="csMats" class="cs-mats"></div><button class="opt" data-act="cs-close" type="button">Close (Esc)</button></div>
+  <div id="csGear"><div class="cs-col l" id="csL"></div><div class="cs-col r" id="csR"></div><div id="csFan" class="cs-ui" hidden></div><div id="csStats"></div><div class="drag">Drag to turn him</div></div>
+  <div id="csSub" class="cs-panel" hidden></div>
+  <div id="csCru" class="cs-panel" hidden></div>
+  <div id="csCard" class="cs-ui" hidden></div>
+</div>
 <div id="gal" class="off">
   <div class="gpanel" id="galL"></div>
   <div class="gcap" id="galCap"></div>
@@ -2827,7 +2966,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     mark: new V3(), markOk: false, lock: null, inBlast: 0, diveT: 0, diveDur: 0 };
   const JP_RISE = 25, JP_RISE_G = 26, JP_HOVER = 3, JP_RANGE = 30;
   const hasJump = () => T.look.pack === 'jump';
-  const poundR = () => 6 * (T.look.blade === 'hammer' ? 1.2 : 1);
+  const poundR = () => 6 * (T.look.blade === 'hammer' ? 1.2 : 1) * ST.poundR;
   // can you still choose a spot? Not once diving, and not when you've dropped too low to make a dive of it
   const jpAiming = () => JP.air && !JP.pound && JP.phase !== 'none' && (JP.phase !== 'fall' || P.pos.y - GY(P.pos.x, P.pos.z) > 1.5);
   function jumpPack() {
@@ -2836,7 +2975,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     if (JP.air) { if (!JP.pound && JP.phase !== 'fall') dropJump(); return; }
     if (JP.charges < 1 || (C.active && C.mode !== 'combo')) { SYN.deny(); return; }
     if (C.active) endCombo();
-    JP.charges--; Object.assign(JP, { air: true, pound: false, t: 0, jetT: 0.5, phase: 'rise', hoverT: 0, lock: null, markOk: false, pitch0: P.pitch, vy: JP_RISE });
+    JP.charges--; Object.assign(JP, { air: true, pound: false, t: 0, jetT: 0.5, phase: 'rise', hoverT: 0, lock: null, markOk: false, pitch0: P.pitch, vy: JP_RISE * Math.sqrt(ST.jumpUp) });
     const fz = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0), fx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0), sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
     const wx = -sy * fz + cy * fx, wz = -cy * fz - sy * fx, l = Math.hypot(wx, wz);
     if (l > 0) P.vel.set(wx / l * 5, 0, wz / l * 5); else P.vel.set(-sy * 2, 0, -cy * 2);
@@ -2850,7 +2989,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     if (!JP.markOk) aimMark();
     JP.pound = true; JP.phase = 'dive'; JP.jetT = 0.6; SYN.jet(1.4); mouseDown = false;
     const m = JP.mark, dx = m.x - P.pos.x, dz = m.z - P.pos.z;
-    JP.diveT = 0; JP.diveDur = Math.max(0.28, Math.hypot(dx, m.y - P.pos.y, dz) / 38);
+    JP.diveT = 0; JP.diveDur = Math.max(0.2, Math.hypot(dx, m.y - P.pos.y, dz) / (38 * ST.diveK));
     if (Math.hypot(dx, dz) > 0.5) P.yaw = Math.atan2(-dx, -dz);
     C.active = true; C.mode = 'pound'; C.phase = 'w'; C.t = 0; copyPose(fromPose, pose); C.hits = new Set(); C.target = null;
     moveToast('Ground pound');
@@ -2910,7 +3049,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
         JP.hoverT += rdt; JP.jetT = Math.max(JP.jetT, 0.4);
         JP.vy += (-0.35 + Math.sin(JP.hoverT * 4) * 0.25 - JP.vy) * damp(4, dt);        // hanging on the jets, sinking a little
         const k = damp(3, dt); P.vel.x += (ix * 3.5 - P.vel.x) * k; P.vel.z += (iz * 3.5 - P.vel.z) * k;
-        if (JP.hoverT > JP_HOVER) dropJump();
+        if (JP.hoverT > ST.hover) dropJump();
       } else if (JP.phase === 'dive') {
         JP.diveT += dt;
         if (JP.lock && JP.lock.alive) JP.mark.set(JP.lock.pos.x, GY(JP.lock.pos.x, JP.lock.pos.z), JP.lock.pos.z);     // he moves; the dive follows
@@ -2997,91 +3136,328 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     JPM.ag.attributes.position.needsUpdate = true; JPM.ag.computeBoundingSphere();
   }
 
-  // ================================================================ the armoury: every piece you carry, on the Templar as you pick it
-  // Opens with B (or from the Techmarine). The camera swings round to face the Templar; drag to turn him. Clicking a piece shows it on
-  // him; Equip keeps it. The left column lists everything you own by slot, the right one compares it with what you wear.
-  const ARM = { slot: 'blade', sel: null, ang: 0.4, drag: false, lx: 0 };
-  const allOwned = slot => [...(R.eq[slot] ? [{ it: R.eq[slot], src: 'eq' }] : []), ...R.bag.map((it, i) => ({ it, src: 'bag', i })).filter(o => o.it.slot === slot)];
+  // ================================================================ the character screen, Destiny 1's way: the Templar in the middle, weapons on his left, armour and cosmetics on his right
+  // I, Tab or B open it (so does the Techmarine). Drag to turn him. Hover a slot for its card; click it to fan out what else you carry for
+  // that slot; click a piece in the fan to see it on him, then Equip, Infuse or Dismantle from its card. Tabs: Wargear, Subclass, Crusade.
+  const CS = { tab: 'gear', open: null, page: 0, pin: null, hover: null, ang: 0.4, drag: false, lx: 0, sub: null, node: null, armed: null };
   const kindName = it => it.slot === 'blade' ? BLADES[kindOf(it, 'blade')].name : it.slot === 'pistol' ? PISTOLS[kindOf(it, 'pistol')].name : it.slot === 'pack' ? PACKS[kindOf(it, 'pack')].name : it.slot === 'armour' ? ARMOURS[kindOf(it, 'armour')] + ' plate' : 'Relic';
-  function renderArmoury() {
-    const list = allOwned(ARM.slot), s = ARM.sel;
-    const tabs = SLOTS.map(sl => `<button class="tab${sl === ARM.slot ? ' on' : ''}" data-act="aslot" data-slot="${sl}" type="button">${icon(sl, 'width:18px;height:18px')}<span>${SLOTN[sl]}</span><i>${allOwned(sl).length}</i></button>`).join('');
-    const rows = list.length ? list.map((o, k) => `<button class="arow rar${o.it.rar}${s && s.it === o.it ? ' sel' : ''}" data-act="apick" data-k="${k}" type="button"><b>${esc(o.it.name)}</b><small>${kindName(o.it)} · ${RAR[o.it.rar]} · item level ${o.it.lvl}${o.src === 'eq' ? ' · <em>equipped</em>' : ''}</small></button>`).join('')
-      : `<p class="hint">Nothing for this slot yet. Camps, chests, dungeons and the Quartermaster all give wargear.</p>`;
-    $('armL').innerHTML = `<h2>The armoury</h2><div class="tabs">${tabs}</div><div class="alist">${rows}</div>`;
-    let right = '';
-    if (s) {
-      const it = s.it, cur = R.eq[it.slot], keysU = [...new Set([...Object.keys(it.st), ...(cur && cur !== it ? Object.keys(cur.st) : [])])];
-      const lines = keysU.map(k => { const a = it.st[k] || 0, b = cur && cur !== it ? cur.st[k] || 0 : 0, d = a - b; if (!a) return `<li class="dn">−${b}${AFX[k][2]} ${AFX[k][0]}</li>`; return `<li>${fmtStat(k, a)}${cur && cur !== it && d ? ` <span class="${d > 0 ? 'up' : 'dn'}">(${d > 0 ? '+' : ''}${d})</span>` : ''}</li>`; }).join('');
-      right = `<h4 class="rar${it.rar}">${esc(it.name)}</h4><div class="k">${RAR[it.rar]} · ${kindName(it)} · item level ${it.lvl}</div><p class="feel">${feelOf(it)}</p><ul>${lines}</ul>`
-        + `<div class="btnrow" style="margin-top:12px">${s.src === 'eq' ? `<button class="opt" data-act="aunequip" type="button"${R.bag.length >= 24 ? ' disabled' : ''}>Unequip</button>` : `<button class="opt" data-act="aequip" type="button">Equip</button>`}</div>`;
-    } else right = `<p class="hint">Pick a piece on the left to see it on your Templar. Drag to turn him.</p>`;
-    const stats = [['Armour', `${Math.ceil(P.hp)} / ${P.maxHp}`], ['Sword damage', pct(ST.sword * BK().dmg)], ['Bolt damage', pct(ST.bolt * (T.look.pistol === 'plasma' ? 2.1 : 1))], ['Critical', Math.round(ST.crit * 100) + '%'], ['Damage reduction', Math.round(ST.dr * 100) + '%'], ['Jump pack', hasJump() ? `${ST.jumpCd.toFixed(1)} s recharge` : 'none']];
-    $('armR').innerHTML = `<div class="tip">${right}</div><h2 style="margin-top:14px">Your build</h2><div class="statl">${stats.map(([a, b]) => `<span>${a}</span><b>${b}</b>`).join('')}</div>`
-      + `<div class="eqline">${SLOTS.map(sl => `<span>${icon(sl, 'width:16px;height:16px;vertical-align:-3px')} ${R.eq[sl] ? esc(R.eq[sl].name) : '<i>' + (sl === 'blade' ? 'Power sword' : sl === 'pistol' ? 'Heavy bolt pistol' : sl === 'pack' ? 'Power pack' : 'none') + '</i>'}</span>`).join('')}</div>`
-      + `<div class="btnrow" style="margin-top:14px"><button class="opt" data-act="aclose" type="button">Close (Esc)</button></div>`;
-  }
   function feelOf(it) {
     const k = kindOf(it, it.slot);
     return { power: 'Balanced: the field splits armour; the arcs crawl along its edges.', chain: 'Fast and savage: quicker cuts that each bite a little less.', hammer: 'Slow and crushing: every blow lands like a slam and throws foes back.',
       bolt: 'Mass-reactive bolts that burst where they strike.', plasma: 'Slow, heavy plasma bolts: double the damage and a wider burst, fewer shots.',
-      jump: 'C to launch high and hover (two charges). Aim at the ground, then click or F to slam down on the mark.', power_pack: 'The standard power pack.',
-      mk7: 'Aquila-pattern plate, the Chapter’s standard.', mk6: 'Corvus plate, light and quick.', crusader: 'Crusader plate with a white cloak.', mk10: 'Tacticus plate, the newest pattern.' }[it.slot === 'pack' && k === 'power' ? 'power_pack' : k] || (it.slot === 'relic' ? 'A relic of the Chapter. Carried, not worn.' : '');
+      jump: 'C to launch high and hover. Aim at the ground, then click or F to slam down on the mark.', power_pack: 'The standard power pack. No jets.',
+      mk7: 'Aquila-pattern plate, the Chapter’s standard. Even in all things.', mk6: 'Corvus plate: light and quick, less armour.', crusader: 'Crusader plate with a white cloak: heavy, slow, hard to kill.', mk10: 'Tacticus plate, the newest pattern: it mends fastest.' }[it.slot === 'pack' && k === 'power' ? 'power_pack' : k] || (it.slot === 'relic' ? 'A relic of the Chapter. Carried, not worn.' : '');
   }
-  function armouryPick(o) { ARM.sel = o; if (o) { applyLook({ [o.it.slot]: o.it }); if (o.it.slot === 'pistol' || o.it.slot === 'blade') ARM.ang = o.it.slot === 'pistol' ? -0.6 : 0.6; if (o.it.slot === 'pack') ARM.ang = PI; } renderArmoury(); }
-  $('armR').addEventListener('click', armClick); $('armL').addEventListener('click', armClick);
-  function armClick(ev) {
-    const b = ev.target.closest('[data-act]'); if (!b || b.disabled) return; const a = b.dataset.act;
-    if (a === 'aclose') { closeUI(); return; }
-    if (a === 'aslot') { ARM.slot = b.dataset.slot; ARM.sel = null; applyLook(); renderArmoury(); return; }
-    if (a === 'apick') { armouryPick(allOwned(ARM.slot)[+b.dataset.k]); return; }
-    const s = ARM.sel; if (!s) return;
-    if (a === 'aequip' && s.src === 'bag') { const i = R.bag.indexOf(s.it); if (i >= 0) equipBag(i); applyLook(); ARM.sel = { it: s.it, src: 'eq' }; renderArmoury(); }
-    if (a === 'aunequip' && s.src === 'eq' && R.bag.length < 24) { R.bag.push(s.it); R.eq[s.it.slot] = null; calcStats(); applyLook(); ARM.sel = { it: s.it, src: 'bag' }; renderArmoury(); }
+  // Destiny 1's weapon bars, scaled to the strongest kind of each slot
+  function weaponBars(it) {
+    if (it.slot === 'blade') { const B = BLADES[kindOf(it, 'blade')]; return [['Impact', B.dmg / 1.7], ['Speed', 0.8 / B.spd], ['Knockback', B.knock / 1.8]]; }
+    if (it.slot === 'pistol') { const pl = kindOf(it, 'pistol') === 'plasma', ext = it.perks.includes('extmag') ? 3 : 0; return [['Impact', pl ? 1 : 0.48], ['Rate of fire', pl ? 0.55 : 1], ['Magazine', (pl ? Math.round((8 + ext) * 0.6) : 8 + ext) / 11]]; }
+    return null;
   }
-  // drag to turn the Templar
-  $('build').addEventListener('pointerdown', e => { if (e.target.closest('.apanel')) return; ARM.drag = true; ARM.lx = e.clientX; });
-  addEventListener('pointerup', () => { ARM.drag = false; });
-  addEventListener('pointermove', e => { if (ARM.drag && G.ui === 'build') { ARM.ang -= (e.clientX - ARM.lx) * 0.01; ARM.lx = e.clientX; } });
+  const findItem = id => SLOTS.map(k => R.eq[k]).find(it => it && it.id === id) || R.bag.find(it => it.id === id) || null;
+  const owned = slot => R.bag.filter(it => it.slot === slot).sort((a, b) => b.pw - a.pw || b.rar - a.rar);
+  const isEq = it => it && R.eq[it.slot] === it;
+  // the item card: header in the tier's colour, Power and the gap to what you wear, then bars, stats, perks, and what it can do
+  function cardHTML(it, cmp, btns) {
+    const d = cmp && cmp !== it ? it.pw - cmp.pw : 0, X = it.exo && EXO[it.exo];
+    let h = `<div class="cd-h r${it.rar}"><b>${esc(it.name)}</b><small>${RAR[it.rar]} ${esc(kindName(it).toLowerCase())}${isEq(it) ? ' · equipped' : ''}</small></div><div class="cd-b">`;
+    h += `<div class="cd-pw"><span>${it.pw}</span><small>Power${d ? ` <em class="${d > 0 ? 'up' : 'dn'}">${d > 0 ? '+' : '−'}${Math.abs(d)}</em>` : ''}</small></div>`;
+    const wb = weaponBars(it); if (wb) h += `<div class="cd-bars">${wb.map(([n, x]) => `<div><span>${n}</span><i><b style="width:${Math.round(clamp(x, 0.05, 1) * 100)}%"></b></i></div>`).join('')}</div>`;
+    if (it.stats) h += `<div class="cd-bars">${['fai', 'dis', 'wra'].map(k => { const a = it.stats[k] + (it.mw ? 10 : 0), b = cmp && cmp !== it && cmp.stats ? cmp.stats[k] + (cmp.mw ? 10 : 0) : a;
+      return `<div><span>${STATN[k]}</span><i><b style="width:${Math.min(100, Math.round(a / 0.95))}%"></b></i><em${a !== b ? ` class="${a > b ? 'up' : 'dn'}"` : ''}>${a}</em></div>`; }).join('')}</div>`;
+    if (it.af) h += `<ul class="cd-af">${Object.entries(it.af).map(([k, x]) => `<li>${fmtAf(k, x)}</li>`).join('')}</ul>`;
+    if (X) h += `<div class="cd-perk exo"><i></i><div><b>${esc(X.perk[0])}</b><p>${esc(X.perk[1])}</p></div></div>`;
+    for (const p of it.perks) h += `<div class="cd-perk"><i></i><div><b>${esc(PERKS[p][0])}</b><p>${esc(PERKS[p][1])}</p></div></div>`;
+    if (it.rar === 4) h += `<p class="cd-note">Artificer: one weapon and one piece of armour at a time.</p>`;
+    if (it.mw) h += `<div class="cd-mw">Masterworked: ${WEAPON_SLOTS.has(it.slot) ? '+8% damage' : '+10 Faith, Discipline and Wrath'}</div>`;
+    const f = feelOf(it); if (f) h += `<p class="cd-feel">${esc(f)}</p>`;
+    return h + (btns ? `<div class="cd-btns">${btns}</div>` : '') + '</div>';
+  }
+  // what a pinned card offers: equip from the fan; infuse, masterwork and dismantle; a second click confirms anything that can't be undone
+  function cardBtns(it) {
+    const eq = R.eq[it.slot], a = CS.armed, B = (act, label, dis, arm) => `<button class="opt${arm && a === arm ? ' warn' : ''}" data-act="${act}" data-id="${it.id}" type="button"${dis ? ' disabled' : ''}>${label}</button>`;
+    let h = '';
+    if (!isEq(it)) {
+      h += B('cs-equip', 'Equip');
+      if (eq && canInfuse(eq, it)) { const c = infuseCost(eq), arm = 'inf:' + it.id + ':' + eq.id; h += `<button class="opt${a === arm ? ' warn' : ''}" data-act="cs-infuse" data-id="${eq.id}" data-fuel="${it.id}" type="button"${R.gold < c.gold || (R.mat.adam || 0) < c.adam ? ' disabled' : ''}>${a === arm ? 'Confirm: ' : ''}Feed into ${esc(eq.name)} <b>${c.gold}</b> · ${c.adam} adamantium</button>`; }
+      const g = dismantleGives(it); h += B('cs-dis', CS.armed === 'dis:' + it.id ? `Confirm dismantle: +${g.gold}${g.adam ? `, +${g.adam} adamantium` : ''}${g.oil ? `, +${g.oil} oil` : ''}` : 'Dismantle', false, 'dis:' + it.id);
+    } else {
+      const fuel = owned(it.slot).filter(f => canInfuse(it, f)).slice(0, 4), c = infuseCost(it);
+      for (const f of fuel) { const arm = 'inf:' + f.id + ':' + it.id; h += `<button class="opt${a === arm ? ' warn' : ''}" data-act="cs-infuse" data-id="${it.id}" data-fuel="${f.id}" type="button"${R.gold < c.gold || (R.mat.adam || 0) < c.adam ? ' disabled' : ''}>${a === arm ? 'Confirm: ' : ''}Infuse from ${esc(f.name)} (${f.pw}) <b>${c.gold}</b> · ${c.adam} adamantium</button>`; }
+      if (!fuel.length) h += `<p class="cd-note">Infuse: carry a stronger ${SLOTN[it.slot].toLowerCase()} and feed it in to raise this one to its Power.</p>`;
+      if (canMw(it)) h += B('cs-mw', `Masterwork <b>${MW_COST.gold}</b> · ${MW_COST.adam} adamantium · ${MW_COST.oil} oil`, R.gold < MW_COST.gold || (R.mat.adam || 0) < MW_COST.adam || (R.mat.oil || 0) < MW_COST.oil);
+    }
+    return h;
+  }
+  // slot tiles
+  const SUBG = { sword: '<path d="M11 2h2l1 12h-4z M6 14h12v2H6z M11 16h2v6h-2z"/>', crusader: '<path d="M12 2c3 4 6 6 6 11a6 6 0 0 1-12 0c0-3 2-5 3-7 1 2 2 3 3 3-1-3-1-5 0-7z"/>',
+    chaplain: '<path d="M12 3a7 7 0 0 0-7 7c0 3 2 4 2 6h10c0-2 2-3 2-6a7 7 0 0 0-7-7z M9 10h2v2H9z M13 10h2v2h-2z M8 18h8v3H8z"/>' };
+  const tileHTML = (it, slot, cls) => it
+    ? `<button class="tile cs-ui t${it.rar}${it.mw ? ' mw' : ''}${cls || ''}" data-act="cs-slot" data-slot="${slot}" data-it="${it.id}" type="button" aria-label="${SLOTN[slot]}: ${esc(it.name)}, Power ${it.pw}">${icon(slot)}<span class="pw">${it.pw}</span></button>`
+    : `<button class="tile cs-ui empty" data-act="cs-slot" data-slot="${slot}" type="button" aria-label="${SLOTN[slot]}: empty">${icon(slot)}</button>`;
+  const capHTML = (it, slot) => `<div class="cap"><small>${SLOTN[slot]}</small><b class="${it ? 'rar' + it.rar : ''}">${it ? esc(it.name) : 'Nothing'}</b></div>`;
+  // cosmetics: shader, emblem, servo-skull, ornament, Thunderhawk paint (unlocked ones can be worn; the rest turn up as rare finds)
+  const COSS = [['shader', 'Shader', () => COS.SHADERS], ['emblem', 'Emblem', () => COS.EMBLEMS], ['skull', 'Servo-skull', () => COS.SKULLS], ['orn', 'Blade ornament', () => COS.ORNS], ['hawk', 'Thunderhawk', () => COS.HAWKS]];
+  const COSG = { shader: '<path d="M12 3c4 5 7 8 7 12a7 7 0 0 1-14 0c0-4 3-7 7-12z"/>', emblem: '<path d="M3 5h18v10l-9 5-9-5z"/>', skull: '<path d="M12 3a7 7 0 0 0-7 7c0 3 2 4 2 6h10c0-2 2-3 2-6a7 7 0 0 0-7-7z M9 10h2v2H9z M13 10h2v2h-2z M9 18h6v2H9z"/>',
+    orn: '<path d="M11 2h2l1 13h-4z M6 15h12v2H6z M11 17h2v5h-2z M4 6l3 1-1 2z M20 6l-3 1 1 2z"/>', hawk: '<path d="M12 3l3 7 7 3-7 1-3 7-3-7-7-1 7-3z"/>' };
+  function cosList(k) { const L = COSS.find(c => c[0] === k)[2](); return k === 'orn' ? L.filter(o => !o.blade || o.blade === kindOf(R.eq.blade, 'blade')) : L; }
+  const cosName = (k, id) => { const o = COSS.find(c => c[0] === k)[2]().find(x => x.id === id); return o ? o.name : '—'; };
+  const cosOwn = (k, id) => R.cos.un[k] && R.cos.un[k].includes(id);
+  function freshCos() {
+    const un = {};
+    for (const [k, , L] of COSS) { const l = L(); un[k] = l.slice(0, 2).map(o => o.id); if (k === 'orn') for (const o of l) if (!un.orn.some(id => l.find(x => x.id === id).blade === o.blade)) un.orn.push(o.id); }
+    return { shader: COS.SHADERS[0].id, emblem: COS.EMBLEMS[0].id, skull: COS.SKULLS[0].id, orn: COS.ORNS[0].id, hawk: COS.HAWKS[0].id, un };
+  }
+  function applyCos() { if (!R.cos) R.cos = freshCos(); COS.applyShader(R.cos.shader); COS.applyHawk(R.cos.hawk); COS.applyOrn(R.cos.orn); COS.skull.setVariant(R.cos.skull); }
+  // a cosmetic you don't own yet: bosses, warded foes and the better reliquaries sometimes give one
+  function cosDrop(chance) {
+    if (Math.random() > chance) return;
+    const L = []; for (const [k, n] of COSS) for (const o of cosList(k)) if (!cosOwn(k, o.id)) L.push([k, n, o]);
+    if (!L.length) return; const [k, n, o] = pick(L); R.cos.un[k].push(o.id); feed(`${n} found: ${o.name}`, 'rar3'); SYN.horn();
+  }
+  const cosTile = (k, n) => `<button class="tile sm cs-ui cos" data-act="cs-cos" data-k="${k}" type="button" aria-label="${n}: ${esc(cosName(k, R.cos[k]))}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${COSG[k]}</svg></button>`;
+
+  function renderCS() {
+    if (!R.cos) R.cos = freshCos();
+    const S = SUBS[subCur()];
+    $('csBanner').innerHTML = `<div class="emb">${COS.emblemSVG(R.cos.emblem)}</div><div class="who"><b>Brother Templar</b><small style="color:${S.col}">${S.name}</small><small>Level ${R.lvl}${R.lvl < MAXLVL ? ` · ${R.xp} / ${xpNext(R.lvl)}` : ''}</small></div><div class="pwr"><span>${ST.power}</span><small>Power</small></div>`;
+    $('csTabs').innerHTML = [['gear', 'Wargear'], ['sub', 'Subclass'], ['cru', 'Crusade']].map(([k, n]) => `<button class="${CS.tab === k ? 'on' : ''}" data-act="cs-tab" data-k="${k}" type="button">${n}${k === 'sub' && subPts(subCur()) ? ` <i>${subPts(subCur())}</i>` : ''}</button>`).join('');
+    $('csMats').innerHTML = `<span><b>${R.gold}</b> thrones</span><span><b>${R.mat.adam || 0}</b> adamantium</span><span><b>${R.mat.oil || 0}</b> blessed oil</span><span><b>${R.ung}</b> / ${ST.ungMax} unguents</span>`;
+    for (const [id, k] of [['csGear', 'gear'], ['csSub', 'sub'], ['csCru', 'cru']]) $(id).hidden = CS.tab !== k;
+    if (CS.tab === 'gear') renderGear(); else if (CS.tab === 'sub') renderSub(); else renderCru();
+    renderCard();
+  }
+  function renderGear() {
+    const sc = subCur(), S = SUBS[sc];
+    $('csL').innerHTML = `<div class="row"><div class="cap"><small>Subclass</small><b style="color:${S.col}">${S.name}</b></div><button class="tile cs-ui subt" data-act="cs-tab" data-k="sub" type="button" style="--sc:${S.col}" aria-label="Subclass: ${S.name}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${SUBG[sc]}</svg></button></div>`
+      + ['blade', 'pistol'].map(k => `<div class="row">${capHTML(R.eq[k], k)}${tileHTML(R.eq[k], k, CS.open === k ? ' open' : '')}</div>`).join('');
+    $('csR').innerHTML = ['armour', 'pack', 'relic'].map(k => `<div class="row">${tileHTML(R.eq[k], k, CS.open === k ? ' open' : '')}${capHTML(R.eq[k], k)}</div>`).join('')
+      + `<div class="cosrow">${COSS.map(([k, n]) => `<div class="cosc${CS.open === 'cos:' + k ? ' open' : ''}">${cosTile(k, n)}<small>${n}</small></div>`).join('')}</div>`;
+    // the fan: up to nine others for the open slot, best first
+    const fan = $('csFan');
+    if (!CS.open) { fan.hidden = true; } else {
+      let cells = '', title = '';
+      if (CS.open.startsWith('cos:')) {
+        const k = CS.open.slice(4), n = COSS.find(c => c[0] === k)[1]; title = n;
+        cells = cosList(k).map(o => { const own = cosOwn(k, o.id); return `<button class="tile sm cs-ui cos${R.cos[k] === o.id ? ' on' : ''}${own ? '' : ' lockd'}" data-act="cs-cosset" data-k="${k}" data-id="${o.id}" type="button"${own ? '' : ' disabled'} title="${esc(o.name)}${own ? '' : ' (not found yet)'}">${k === 'emblem' ? `<span class="embm">${COS.emblemSVG(o.id)}</span>` : `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${COSG[k]}</svg>`}<span class="nm">${esc(o.name)}</span></button>`; }).join('');
+      } else {
+        const L = owned(CS.open), pages = Math.max(1, Math.ceil(L.length / 9)); CS.page = Math.min(CS.page, pages - 1); title = `${SLOTN[CS.open]} · ${L.length} in your pack`;
+        cells = L.slice(CS.page * 9, CS.page * 9 + 9).map(it => tileHTML(it, CS.open, (CS.pin === it ? ' on' : '') + (it.pw > (R.eq[CS.open] ? R.eq[CS.open].pw : 0) ? ' better' : '')).replace('data-act="cs-slot"', 'data-act="cs-pick"')).join('')
+          || `<p class="hint">Nothing else for this slot. Camps, reliquaries, dungeons and the Quartermaster all give wargear.</p>`;
+        if (pages > 1) cells += `<div class="pager"><button class="opt" data-act="cs-page" data-d="-1" type="button"${CS.page ? '' : ' disabled'}>‹</button><span>${CS.page + 1} / ${pages}</span><button class="opt" data-act="cs-page" data-d="1" type="button"${CS.page < pages - 1 ? '' : ' disabled'}>›</button></div>`;
+      }
+      fan.innerHTML = `<h3>${esc(title)}</h3><div class="grid3">${cells}</div>`; fan.hidden = false;
+      const t = $('build').querySelector(CS.open.startsWith('cos:') ? `[data-act="cs-cos"][data-k="${CS.open.slice(4)}"]` : `#csL [data-slot="${CS.open}"], #csR [data-slot="${CS.open}"]`);
+      if (t) { const r = t.getBoundingClientRect(), left = ['blade', 'pistol'].includes(CS.open), fw = fan.offsetWidth, fh = fan.offsetHeight;
+        fan.style.left = clamp(left ? r.right + 12 : r.left - 12 - fw, 8, innerWidth - fw - 8) + 'px'; fan.style.top = clamp(r.top + r.height / 2 - fh / 2, 70, innerHeight - fh - 8) + 'px'; }
+    }
+    // the six stats along the bottom: Faith, Discipline and Wrath in tiers of 60, then Armour, Agility and Recovery out of ten
+    const mmss = s => { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+    const tiers = x => `<i class="tiers">${[0, 1, 2, 3, 4].map(i => `<b style="width:${clamp((x - i * 60) / 60, 0, 1) * 100}%"></b>`).map(b => `<span>${b}</span>`).join('')}</i>`;
+    const pips = x => `<i class="pips">${Array.from({ length: 10 }, (_, i) => `<span class="${i < x ? 'on' : ''}"></span>`).join('')}</i>`;
+    $('csStats').innerHTML = [['Faith', ST.fai, `Super ${mmss(ST.supCd)}`], ['Discipline', ST.dis, `Grenade ${mmss(ST.grenCd)}`], ['Wrath', ST.wra, `Melee ${mmss(ST.meleeCd)}`]].map(([n, x, c]) => `<div class="st"><div class="lbl">${n} <b>${x}</b></div>${tiers(x)}<small>${c}</small></div>`).join('')
+      + [['Armour', ST.arm, `${Math.round(ST.dr * 100)}% less damage`], ['Agility', ST.agi, `${Math.round((ST.speed - 1) * 100)}% faster, quicker dash`], ['Recovery', ST.rec, `mends after ${ST.regenDelay.toFixed(1)} s`]].map(([n, x, c]) => `<div class="st"><div class="lbl">${n} <b>${x}</b></div>${pips(x)}<small>${c}</small></div>`).join('');
+  }
+  // ---- the subclass tree (Destiny 1): three paths, eight rows of choices, a point per level for every path
+  const ROWG = { gren: '<circle cx="12" cy="14" r="6"/><path d="M10 3h4v4h-4z"/>', melee: '<path d="M3 19l11-11 2 2L5 21z M13 3l8 8-3 1-6-6z"/>', sup: '<path d="M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/>',
+    mods: '<path d="M12 3l7 9-7 9-7-9z"/>', jump: '<path d="M12 4l2 6 7 2-7 2-2 6-2-6-7-2 7-2z"/>', perkA: '<path d="M12 2l8 3v6c0 5-3 9-8 11-5-2-8-6-8-11V5z"/>', perkB: '<path d="M10 2h4v7h7v4h-7v9h-4v-9H3V9h7z"/>', focus: '<path d="M4 16h4v5H4z M10 10h4v11h-4z M16 4h4v17h-4z"/>' };
+  function nodeHTML(k, row, id) {
+    const own = !!(R.sub.un[k] && R.sub.un[k][id]), on = R.sub.pick[k][row] === id, can = !own && subOpen(k) && subPts(k) > 0;
+    return `<button class="node cs-ui${on ? ' on' : own ? ' own' : can ? ' can' : ''}${row === 'sup' ? ' big' : ''}" data-act="cs-node" data-k="${k}" data-row="${row}" data-id="${id}" type="button" aria-label="${esc(NODE[id][0])}${on ? ', chosen' : own ? ', unlocked' : ''}"${subOpen(k) ? '' : ' disabled'}><i><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${ROWG[row]}</svg></i><span>${esc(NODE[id][0])}</span></button>`;
+  }
+  function renderSub() {
+    const k = CS.sub || subCur(), S = SUBS[k], open = subOpen(k), grp = row => `<div class="grp"><h4>${ROWS.find(r => r[0] === row)[1]}</h4><div class="nodes">${rowOpts(k, row).map(id => nodeHTML(k, row, id)).join('')}</div></div>`;
+    const tabs = Object.entries(SUBS).map(([sk, s]) => `<button class="subtab${sk === k ? ' on' : ''}${subOpen(sk) ? '' : ' lockd'}" data-act="cs-subview" data-k="${sk}" type="button" style="--sc:${s.col}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${SUBG[sk]}</svg><b>${s.name}</b><small>${subOpen(sk) ? (sk === subCur() ? 'In use' : `${subPts(sk)} points to spend`) : `Opens at level ${s.lvl}`}</small></button>`).join('');
+    const nd = CS.node && NODE[CS.node];
+    $('csSub').innerHTML = `<div class="subtabs">${tabs}</div><div class="subhead" style="--sc:${S.col}"><h2>${S.name}</h2><p>${esc(S.blurb)}</p>`
+      + `<div class="subact"><span>${open ? `<b>${subPts(k)}</b> point${subPts(k) === 1 ? '' : 's'} to spend · one a level` : `Reach level ${S.lvl} to walk this path`}</span>${open && k !== subCur() ? `<button class="go" data-act="cs-subuse" data-k="${k}" type="button">Take up this path</button>` : ''}</div></div>`
+      + `<div class="tree" style="--sc:${S.col}"><div class="tcol">${grp('gren')}${grp('melee')}${grp('jump')}</div><div class="tcol mid">${grp('sup')}${grp('mods')}</div><div class="tcol">${grp('perkA')}${grp('perkB')}${grp('focus')}</div></div>`
+      + `<div class="ndesc">${nd ? `<b>${esc(nd[0])}</b> ${esc(nd[1])}` : 'Hover a node to read it. A new node costs a point; one you own can be chosen again for free. Keys: G grenade, V melee ability, X super.'}</div>`;
+  }
+  // ---- the crusade: the quest log, this week's tasks and the warded foes
+  function renderCru() {
+    weekCheck();
+    const log = R.quest < 0 ? '<li><b>The Castellan’s summons</b><p>Speak with Brother-Castellan Aldric in the monastery courtyard.</p></li>' : QUESTS.map((q, i) => i > R.quest ? '' : `<li class="${i < R.quest ? 'done' : ''}"><b>${esc(q.name)}</b><p>${esc(q.text)}</p></li>`).join('');
+    const left = Date.UTC(2026, 0, 6, 17) + (weekNo() + 1) * 6048e5 - Date.now(), dd = Math.floor(left / 864e5), hh = Math.floor(left % 864e5 / 36e5);
+    const week = WEEK.map(([k, n, max]) => { const p = Math.min(max, R.week.p[k] || 0), done = R.week.done[k]; return `<li class="${done ? 'done' : ''}"><b>${esc(n)}</b><span>${done ? 'Done' : `${p} / ${max}`}</span><i><b style="width:${p / max * 100}%"></b></i></li>`; }).join('');
+    const wards = WARDS.map(([id, , , , c]) => { const slain = R.wards && R.wards[id], sealed = c.seal && !c.seal(), need = c.pw - 49;
+      const st = slain ? 'Slain. Returns to be fought again' : sealed ? 'Sealed until the Fallen Spire is cleared' : ST.power >= need ? 'The ward is down: you can hurt it' : `Warded until your Power reaches ${need}`;
+      return `<li class="${slain ? 'done' : ST.power >= need && !sealed ? 'near' : ''}"><b>${esc(c.name)}</b><span>Power ${c.pw}</span><p>${st}</p></li>`; }).join('');
+    $('csCru').innerHTML = `<section><h2>The crusade</h2><ul class="qlog">${log}</ul></section>`
+      + `<section><h2>This week <small>renews in ${dd} d ${hh} h</small></h2><ul class="wk">${week}</ul><p class="hint">Each task gives one pinnacle piece, above your Power. A dungeon’s weekly reliquary is its reward.</p>`
+      + `<h2 style="margin-top:16px">Warded foes</h2><ul class="wards">${wards}</ul></section>`
+      + `<section><h2>Power</h2><dl class="pcaps"><dt>Your Power</dt><dd>${ST.power}</dd><dt>World drops reach</dt><dd>${softCap()}</dd><dt>Powerful rewards reach</dt><dd>${powCap()}</dd><dt>Pinnacle rewards reach</dt><dd>${pinCap()}</dd></dl>`
+      + `<p class="hint">Your Power is the average of your five pieces. Below a foe’s Power you deal less and take more; 50 below, it is immune. Each level raises what the Reach drops by 10.</p>`
+      + `<h2 style="margin-top:16px">Record</h2><dl class="pcaps"><dt>Foes slain</dt><dd>${R.kills}</dd><dt>Deaths</dt><dd>${R.deaths}</dd></dl></section>`;
+  }
+  // the floating card: the hovered piece, else the pinned one, beside its tile
+  function renderCard() {
+    if (CS.pin && !findItem(CS.pin.id)) CS.pin = null;
+    const el = $('csCard'), it = CS.tab === 'gear' ? (CS.hover && findItem(CS.hover)) || CS.pin : null;
+    if (!it) { el.hidden = true; return; }
+    const pinned = it === CS.pin && (!CS.hover || CS.hover === it.id);
+    el.innerHTML = cardHTML(it, R.eq[it.slot], pinned ? cardBtns(it) : '') + (pinned ? '' : `<p class="cd-tip">${isEq(it) ? 'Click to see the others' : 'Click to pick'}</p>`);
+    el.className = 'cs-ui' + (it.rar === 4 ? ' exo' : ''); el.hidden = false;
+    const t = $('build').querySelector(`[data-it="${it.id}"]`); if (!t) { el.hidden = true; return; }
+    const r = t.getBoundingClientRect(), left = r.left + r.width / 2 < innerWidth / 2, w = el.offsetWidth, h = el.offsetHeight, fan = $('csFan');
+    let x = left ? r.right + 14 : r.left - 14 - w;
+    if (!fan.hidden && fan.contains(t)) { const f = fan.getBoundingClientRect(); x = left ? f.right + 10 : f.left - 10 - w; }
+    el.style.left = clamp(x, 8, innerWidth - w - 8) + 'px'; el.style.top = clamp(r.top - 20, 64, innerHeight - h - 8) + 'px';
+  }
+  function pickPreview(it) { CS.pin = it; CS.armed = null; if (it) { applyLook({ [it.slot]: it }); CS.ang = it.slot === 'pistol' ? -0.6 : it.slot === 'blade' ? 0.6 : it.slot === 'pack' ? PI : 0.4; } else applyLook(); }
+  // equip from the pack, keeping one Artificer weapon and one Artificer armour piece: the other Artificer steps down for your best plain piece of its slot
+  function equipItem(it) {
+    const clash = exoClash(it);
+    if (clash) { const alt = owned(clash).find(o => o.rar < 4); if (!alt) { feed(`One Artificer ${WEAPON_SLOTS.has(it.slot) ? 'weapon' : 'armour piece'} at a time: carry another ${SLOTN[clash].toLowerCase()} to swap in`); SYN.deny(); return false; }
+      equipBag(R.bag.indexOf(alt)); feed(`${R.bag.find(o => o.slot === clash && o.rar === 4).name} set aside: one Artificer at a time`); }
+    const i = R.bag.indexOf(it); if (i < 0) return false; equipBag(i); return true;
+  }
+  $('build').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-act]'); if (!b || b.disabled) return;
+    const a = b.dataset.act, it = b.dataset.id ? findItem(b.dataset.id) : null;
+    if (a === 'cs-close') { closeUI(); return; }
+    if (a === 'cs-tab') { CS.tab = b.dataset.k; CS.open = null; CS.hover = null; pickPreview(null); CS.sub = null; renderCS(); return; }
+    if (a === 'cs-slot') { const k = b.dataset.slot; CS.open = CS.open === k ? null : k; CS.page = 0; CS.hover = null; pickPreview(CS.open ? R.eq[k] : null); renderCS(); sfx('bdraw', 0.25, 1.5); return; }
+    if (a === 'cs-pick') { pickPreview(findItem(b.dataset.it)); CS.hover = null; renderCS(); sfx('bdraw', 0.25, 1.7); return; }
+    if (a === 'cs-page') { CS.page += +b.dataset.d; renderCS(); return; }
+    if (a === 'cs-cos') { const k = 'cos:' + b.dataset.k; CS.open = CS.open === k ? null : k; pickPreview(null); renderCS(); return; }
+    if (a === 'cs-cosset') { const k = b.dataset.k; if (!cosOwn(k, b.dataset.id)) return; R.cos[k] = b.dataset.id; applyCos(); if (k === 'skull' || k === 'hawk') feed(`${cosName(k, b.dataset.id)}`); renderCS(); return; }
+    if (a === 'cs-equip' && it) { if (equipItem(it)) { pickPreview(it); applyLook(); CS.open = null; } renderCS(); return; }
+    if (a === 'cs-dis' && it) { if (CS.armed !== 'dis:' + it.id) { CS.armed = 'dis:' + it.id; renderCard(); return; } dismantle(it); pickPreview(null); renderCS(); return; }
+    if (a === 'cs-infuse' && it) { const fuel = findItem(b.dataset.fuel), arm = 'inf:' + b.dataset.fuel + ':' + it.id; if (CS.armed !== arm) { CS.armed = arm; renderCard(); return; } if (infuse(it, fuel)) { pickPreview(it); applyLook(); } renderCS(); return; }
+    if (a === 'cs-mw' && it) { masterwork(it); renderCS(); return; }
+    if (a === 'cs-subview') { CS.sub = b.dataset.k; CS.node = null; renderCS(); return; }
+    if (a === 'cs-subuse') { if (subSwitch(b.dataset.k)) { SYN.horn(); feed(`You walk the ${SUBS[b.dataset.k].name}’s path`, 'xp'); } renderCS(); return; }
+    if (a === 'cs-node') { const k = b.dataset.k, was = !!R.sub.un[k][b.dataset.id]; if (subNode(k, b.dataset.row, b.dataset.id)) { if (was) sfx('bdraw', 0.3, 1.6); else SYN.clang(); } renderCS(); return; }
+  });
+  $('build').addEventListener('pointerover', ev => {
+    const n = ev.target.closest('[data-act="cs-node"]'); if (n) { if (CS.node !== n.dataset.id) { CS.node = n.dataset.id; const d = $('csSub').querySelector('.ndesc'); if (d) d.innerHTML = `<b>${esc(NODE[CS.node][0])}</b> ${esc(NODE[CS.node][1])}`; } return; }
+    const t = ev.target.closest('[data-it]'), id = t ? t.dataset.it : null;
+    if (ev.target.closest('#csCard')) return;          // keep the card while the pointer is on it
+    if (id !== CS.hover) { CS.hover = id; renderCard(); }
+  });
+  // drag to turn the Templar (not when the drag starts on a tile, a panel or the card)
+  $('build').addEventListener('pointerdown', e => { if (e.target.closest('.cs-ui, .cs-top, .cs-panel, #csStats')) return; CS.drag = true; CS.lx = e.clientX; });
+  addEventListener('pointerup', () => { CS.drag = false; });
+  addEventListener('pointermove', e => { if (CS.drag && G.ui === 'build') { CS.ang -= (e.clientX - CS.lx) * 0.01; CS.lx = e.clientX; } });
+  addEventListener('resize', () => { if (G.ui === 'build') renderCS(); });
   function armouryCam(dt) {
-    if (!ARM.drag) ARM.ang += dt * 0.15;
-    const a = P.yaw + PI + ARM.ang, d = 3.4;
-    cam.position.set(P.pos.x + Math.sin(a) * d, P.pos.y + 1.55, P.pos.z + Math.cos(a) * d);
-    tmp.set(cam.position.x - P.pos.x, 0, cam.position.z - P.pos.z).normalize();
-    const rx = tmp.z, rz = -tmp.x;        // shift the view so he stands between the two panels
-    cam.lookAt(P.pos.x - rx * 0.0, P.pos.y + 1.15, P.pos.z - rz * 0.0); cam.fov = 40; cam.updateProjectionMatrix();
+    if (!CS.drag) CS.ang += dt * 0.12;
+    const a = P.yaw + PI + CS.ang, d = 4.3;
+    cam.position.set(P.pos.x + Math.sin(a) * d, P.pos.y + 1.5, P.pos.z + Math.cos(a) * d);
+    cam.lookAt(P.pos.x, P.pos.y + 1.12, P.pos.z); cam.fov = 40; cam.updateProjectionMatrix();
     C.cam = 1;
   }
 
-  // ================================================================ the Templar's progress: level, oaths, wargear (everything a save keeps)
-  const freshR = () => ({ lvl: 1, xp: 0, pts: 0, oath: { blade: 0, bolt: 0, bastion: 0 }, gold: 0, ung: 2, eq: { blade: null, pistol: null, armour: null, pack: null, relic: null }, bag: [],
+  // ================================================================ the Templar's progress: level, subclass, wargear (everything a save keeps)
+  // ---- subclasses (Destiny 1's trees). Each row is one choice; nodes cost a point each, and every level gives a point to every subclass.
+  const SUBS = {
+    sword: { name: 'Sword Brother', col: '#8fd0ff', lvl: 1, blurb: 'Blade-sworn. Lightning in the steel, first into the breach.',
+      gren: ['frag', 'krak', 'arcg'], melee: ['stormlunge', 'thunderclap', 'blessed'], sup: ['sigismund'], mods: ['sig_long', 'sig_wave', 'sig_heal'], perkB: ['momentum', 'conduit', 'transfusion'] },
+    crusader: { name: 'Crusader', col: '#ff8a3a', lvl: 5, blurb: 'The burning crusade. Fire in the bolt and the fist.',
+      gren: ['frag', 'incendiary', 'melta'], melee: ['burnfist', 'flamewave', 'searing'], sup: ['judgement'], mods: ['jud_more', 'jud_burn', 'jud_refund'], perkB: ['kindle', 'firebrand', 'phoenix'] },
+    chaplain: { name: 'Chaplain', col: '#b07aff', lvl: 10, blurb: 'Keeper of the litanies. Holds the line where the standard stands.',
+      gren: ['vortex', 'frag', 'purgation'], melee: ['crozius', 'rosarius', 'zeal'], sup: ['litany'], mods: ['lit_heal', 'lit_wide', 'lit_long'], perkB: ['hymn', 'martyr', 'abjure'] },
+  };
+  const SHARED_ROWS = { jump: ['ascent', 'seraph', 'thunderdive'], perkA: ['aof', 'fleet', 'wind'], focus: ['f_fai', 'f_dis', 'f_wra'] };
+  const ROWS = [['gren', 'Grenade'], ['melee', 'Melee ability'], ['sup', 'Super'], ['mods', 'Super focus'], ['jump', 'Jump pack'], ['perkA', 'Armour'], ['perkB', 'Discipline'], ['focus', 'Training']];
+  const rowOpts = (sub, row) => SHARED_ROWS[row] || SUBS[sub][row];
+  const NODE = {
+    frag: ['Frag grenade', 'A blast 4.5 m across.'], krak: ['Krak grenade', 'Sticks to the first foe it touches and bursts for heavy damage.'], arcg: ['Arc grenade', 'A blast whose lightning chains to three more foes.'],
+    incendiary: ['Incendiary grenade', 'A pool of promethium that burns for five seconds.'], melta: ['Melta charge', 'Sticks, then bursts for huge damage in a small space.'],
+    vortex: ['Vortex grenade', 'Drags foes into its heart for three seconds.'], purgation: ['Purgation charge', 'A holy pulse that burns foes and heals you.'],
+    stormlunge: ['Storm Lunge', 'Dash 8 m through foes on a bolt of lightning.'], thunderclap: ['Thunderclap', 'Slam the ground and stun everything near.'], blessed: ['Blessed Blade', 'Your next three sword hits deal double and arc.'],
+    burnfist: ['Burning Fist', 'A blow that sets foes alight.'], flamewave: ['Wave of Fire', 'A wall of fire rolls out ahead of you.'], searing: ['Searing Edge', 'For eight seconds every sword hit burns.'],
+    crozius: ['Crozius Strike', 'A crushing blow that leaves foes weakened.'], rosarius: ['Rosarius Flare', 'A blinding flash that stuns everything near.'], zeal: ['Zealous Rebuke', 'A strike that heals you and refunds itself on a kill.'],
+    sigismund: ['Wrath of Sigismund', 'Fifteen seconds: the sword hits harder and every strike throws a crescent of lightning.'],
+    judgement: ['Ansgar’s Judgement', 'Draw a relic bolter: three shots that burn whole squads.'],
+    litany: ['Litany of Hate', 'Plant a standard: inside its aura you hit harder and take less, and foes are slowed.'],
+    sig_long: ['Undying Oath', 'The super lasts five seconds longer.'], sig_wave: ['Storm Crescents', 'Crescents twice as wide and long.'], sig_heal: ['Blood of Martyrs', 'Kills during the super heal 10% armour.'],
+    jud_more: ['Six Shells', 'Six shots instead of three, each a little weaker.'], jud_burn: ['Purging Flame', 'Each burst leaves the ground burning.'], jud_refund: ['Righteous', 'A kill gives the shot back.'],
+    lit_heal: ['Litany of Mending', 'The aura heals you.'], lit_wide: ['Banner of Ansgar', 'The aura reaches 12 m.'], lit_long: ['Eternal Litany', 'The standard stands eight seconds longer.'],
+    ascent: ['Ascent', 'The jump pack lifts you 30% higher.'], seraph: ['Seraph Hover', 'Hover two seconds longer.'], thunderdive: ['Thunder Dive', 'Dive 40% faster; the slam deals 20% more.'],
+    aof: ['Armour of Faith', '+2 Armour.'], fleet: ['Fleet of Foot', '+2 Agility.'], wind: ['Second Wind', '+2 Recovery.'],
+    momentum: ['Momentum', 'Dashing charges your melee ability.'], conduit: ['Conduit', 'Sword kills charge your grenade.'], transfusion: ['Transfusion', 'Melee ability kills heal 20% armour.'],
+    kindle: ['Kindling', 'Burning foes take 15% more damage.'], firebrand: ['Firebrand', 'Pistol kills charge your grenade.'], phoenix: ['Phoenix', 'Super kills heal 15% armour.'],
+    hymn: ['Hymn of Battle', 'Executions charge your super.'], martyr: ['Martyr’s Resolve', 'Below 30% armour you take 20% less damage.'], abjure: ['Abjuration', 'Grenade kills charge your melee ability.'],
+    f_fai: ['Faith training', '+40 Faith.'], f_dis: ['Discipline training', '+40 Discipline.'], f_wra: ['Wrath training', '+40 Wrath.'],
+  };
+  // the first grenade, melee ability and the super come free; each subclass starts with two points to spend
+  function freshSub() {
+    const s = { cur: 'sword', un: {}, pick: {} };
+    for (const k of Object.keys(SUBS)) { const S = SUBS[k]; s.un[k] = { [S.gren[0]]: 1, [S.melee[0]]: 1, [S.sup[0]]: 1 }; s.pick[k] = { gren: S.gren[0], melee: S.melee[0], sup: S.sup[0], mods: null, jump: null, perkA: null, perkB: null, focus: null }; }
+    return s;
+  }
+  const subOpen = k => R.lvl >= SUBS[k].lvl;
+  const subSpent = k => Object.keys(R.sub.un[k] || {}).length - 3;
+  const subPts = k => Math.max(0, R.lvl - 1 + 2 - subSpent(k));
+  const subPick = row => R.sub && R.sub.pick[R.sub.cur] ? R.sub.pick[R.sub.cur][row] : null;
+  const subCur = () => R.sub ? R.sub.cur : 'sword';
+  // a node: unlock it with a point (if it isn't already), then make it the row's choice
+  function subNode(k, row, id) {
+    if (!subOpen(k) || !rowOpts(k, row).includes(id)) return false;
+    if (!R.sub.un[k][id]) { if (subPts(k) < 1) { SYN.deny(); return false; } R.sub.un[k][id] = 1; }
+    R.sub.pick[k][row] = id; calcStats(); return true;
+  }
+  function subSwitch(k) { if (!subOpen(k) || ABIL.active()) { SYN.deny(); return false; } R.sub.cur = k; calcStats(); return true; }
+
+  const freshR = () => ({ v: 2, lvl: 1, xp: 0, gold: 0, ung: 2, eq: { blade: null, pistol: null, armour: null, pack: null, relic: null }, bag: [], mat: { adam: 0, oil: 0 },
+    sub: freshSub(), cos: null, week: null,
     quest: -1, cleared: {}, opened: {}, found: {}, kills: 0, deaths: 0, stock: [], stockLvl: 0, seen: {} });
   let R = freshR();
   const ST = {};
-  const xpNext = L => Math.round(80 * Math.pow(L, 1.6));
-  const MAXLVL = 20, OATHMAX = 10;
+  // past level 20 the climb keeps going, more gently; the cap is 50 (Power keeps rising past what level alone gives)
+  const xpNext = L => Math.round(60 * Math.pow(L, 1.5));
+  const MAXLVL = 50;
+
+  // ---- ability energy (0..1). It recharges on its own, faster with the matching stat; kills and perks top it up.
+  const AB = { gren: 1, melee: 1, sup: 0 };
+  const statTier = x => Math.min(5, Math.floor(x / 60));
+
   function calcStats() {
-    const o = R.oath, L = R.lvl - 1, a = { sword: 0, bolt: 0, hp: 0, crit: 0, exec: 0, leech: 0, mag: 0, reload: 0, regen: 0, dr: 0, dash: 0, xp: 0, gold: 0, jump: 0, pound: 0 };
-    for (const it of Object.values(R.eq)) if (it) for (const [k, x] of Object.entries(it.st)) a[k] += x;
-    ST.sword = 1 + 0.08 * o.blade + 0.03 * L + a.sword / 100;
-    ST.bolt = 1 + 0.08 * o.bolt + 0.03 * L + a.bolt / 100;
-    ST.crit = Math.min(0.6, 0.05 + a.crit / 100);
-    ST.execHeal = 1 + 0.03 * o.blade + a.exec / 100;
-    ST.leech = a.leech / 100;
-    ST.mag = 8 + Math.floor(o.bolt / 2) + a.mag;
-    ST.reload = Math.min(0.6, 0.04 * o.bolt + a.reload / 100);
-    ST.maxHp = 100 + 10 * L + 15 * o.bastion + a.hp;
-    ST.regen = 1 + 0.1 * o.bastion + a.regen / 100;
-    ST.dr = Math.min(0.6, 0.02 * o.bastion + a.dr / 100);
-    ST.dash = Math.min(0.6, a.dash / 100);
-    ST.xp = 1 + a.xp / 100; ST.gold = 1 + a.gold / 100;
-    ST.jumpCd = 5 * (1 - Math.min(0.5, a.jump / 100)); ST.pound = 1 + a.pound / 100;
-    if (kindOf(R.eq.pistol, 'pistol') === 'plasma') ST.mag = Math.max(4, Math.round(ST.mag * 0.6));      // plasma: fewer, heavier shots
+    const eq = R.eq, has = perkOn;
+    ST.power = charPower();
+    // Faith, Discipline and Wrath (Destiny 1's Intellect, Discipline, Strength): gear, masterwork, the subclass training row
+    let fai = 0, dis = 0, wra = 0;
+    for (const s of SLOTS) { const it = eq[s]; if (it && it.stats) { fai += it.stats.fai; dis += it.stats.dis; wra += it.stats.wra; if (it.mw) { fai += 10; dis += 10; wra += 10; } } }
+    const foc = subPick('focus'); if (foc === 'f_fai') fai += 40; if (foc === 'f_dis') dis += 40; if (foc === 'f_wra') wra += 40;
+    ST.fai = fai; ST.dis = dis; ST.wra = wra;
+    // Armour, Agility and Recovery (1 to 10): the plate's pattern, then the subclass's armour row
+    const base = { mk7: [4, 4, 4], mk6: [3, 6, 3], crusader: [6, 2, 4], mk10: [4, 3, 6] }[kindOf(eq.armour, 'armour')] || [4, 4, 4];
+    let [arm, agi, rec] = base; const pa = subPick('perkA'); if (pa === 'aof') arm += 2; if (pa === 'fleet') agi += 2; if (pa === 'wind') rec += 2;
+    ST.arm = Math.min(10, arm); ST.agi = Math.min(10, agi); ST.rec = Math.min(10, rec);
+    const af = k => SLOTS.reduce((s, sl) => s + (eq[sl] && eq[sl].af && eq[sl].af[k] || 0), 0);
+    ST.sword = 1 + af('sword') / 100 + (eq.blade && eq.blade.mw ? 0.08 : 0);
+    ST.bolt = 1 + af('bolt') / 100 + (eq.pistol && eq.pistol.mw ? 0.08 : 0);
+    ST.crit = Math.min(0.6, 0.05 + af('crit') / 100 + (has('keen') ? 0.08 : 0));
+    ST.execHeal = has('executioner') ? 1.5 : 1;
+    ST.leech = has('bloodthirst') ? 0.03 : 0;
+    ST.mag = 8 + (has('extmag') ? 3 : 0);
+    ST.reload = Math.min(0.6, (has('quickdraw') ? 0.15 : 0) + (has('servo') ? 0.1 : 0));
+    ST.maxHp = 100 + 5 * (R.lvl - 1);
+    ST.dr = Math.min(0.5, 0.025 * ST.arm);
+    ST.regen = (0.6 + 0.1 * ST.rec) * (has('reactor') ? 1.3 : 1); ST.regenDelay = 5 - 0.25 * ST.rec;
+    ST.speed = 1 + 0.02 * Math.max(0, ST.agi - 4); ST.dash = Math.min(0.5, 0.04 * Math.max(0, ST.agi - 2)); ST.sprint = has('sprinter') ? 1.08 : 1;
+    ST.swing = has('swift') ? 1.1 : 1;
+    ST.xp = 1 + af('xp') / 100; ST.gold = 1 + af('gold') / 100;
+    // the jump pack: perks, the Seraph Wings and the subclass's jump row
+    const jr = subPick('jump'), wings = exoOn('wings');
+    ST.jumpCd = 5 * (has('fastjets') ? 0.75 : 1); ST.jumpMax = Math.min(3, 2 + (has('thruster') ? 1 : 0) + (wings ? 1 : 0));
+    ST.hover = Math.max(wings ? 6 : 0, 3 + (has('glide') ? 2 : 0) + (jr === 'seraph' ? 2 : 0)); ST.jumpUp = jr === 'ascent' ? 1.3 : 1; ST.diveK = jr === 'thunderdive' ? 1.4 : 1;
+    ST.pound = 1 + (wings ? 0.3 : 0) + (jr === 'thunderdive' ? 0.2 : 0); ST.poundR = 1 + (has('crater') ? 0.25 : 0) + (exoOn('anvil') ? 0.4 : 0);
+    ST.slamR = 1 + (has('whirlwind') ? 0.4 : 0) + (exoOn('blacksword') ? 0.6 : 0) + (exoOn('anvil') ? 0.4 : 0);
+    ST.ungMax = 6 + (has('apothecary') ? 1 : 0) + (has('servo') ? 1 : 0);
+    // seconds to refill each ability from empty
+    const purity = exoOn('ninth') ? 0.6 : 1;
+    ST.grenCd = 45 * (1 - 0.1 * statTier(dis)) * purity; ST.meleeCd = 35 * (1 - 0.1 * statTier(wra)) * purity;
+    ST.supCd = 300 * (1 - 0.08 * statTier(fai)) / ((exoOn('eadric') ? 1.4 : 1) * (has('faithful') ? 1.1 : 1) * (1 + af('sup') / 100));
+    if (kindOf(eq.pistol, 'pistol') === 'plasma') ST.mag = Math.max(4, Math.round(ST.mag * 0.6));      // plasma: fewer, heavier shots
     const was = P.maxHp; P.maxHp = ST.maxHp; if (P.maxHp > was) P.hp += P.maxHp - was; P.hp = Math.min(P.hp, P.maxHp);
     GUN.mag = ST.mag; GUN.ammo = Math.min(GUN.ammo, GUN.mag); GUN.reloadDur = 1.55 * (1 - ST.reload);
+    JP.max = ST.jumpMax; JP.charges = Math.min(JP.charges, JP.max);
+    for (const e of ENEMIES) if (e.pw) e.dm = e.dm0 * takenMult(ST.power - e.pw);
     applyLook();
   }
-  calcStats();
 
   // ================================================================ collision: the region's colliders and terrain in the world, the arena's pillars and walls in a dungeon
   function collide(p, r) {
@@ -3138,13 +3514,14 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   // o: lvl, pack (the encounter it belongs to), boss (a named foe: more health, a bar), name, sc (size), state
   function spawnEnemy(type, x, z, o = {}) {
     const D = TYPES[type], J = D.build(); scene.add(J.root);
-    const lvl = o.lvl || 1, boss = !!o.boss, sc = o.sc || (boss ? 1.2 : 1);
-    const hpK = type === 'champion' ? 0.06 : D.mass > 1 ? 0.15 : 0.28, hp = Math.round(D.hp * (1 + hpK * (lvl - 1)) * (boss && type !== 'champion' ? (type === 'brute' ? 2.6 : 6) : 1));
+    const lvl = o.lvl || 1, boss = !!o.boss, sc = o.sc || (boss ? 1.2 : 1), pw = o.pw || ePow(lvl);
+    // health grows with Power exactly as the Templar's blows do, so a fair fight (equal Power) takes as long at any level
+    const hp = Math.round(D.hp * pScale(pw) * (o.hpK || 1) * (boss && type !== 'champion' ? (type === 'brute' ? 2.6 : 6) : 1));
     const e = { type, D, J, pos: v(x, GY(x, z), z), vel: v(), vy: 0, yaw: o.yaw !== undefined ? o.yaw : rand(-PI, PI), hp, maxHp: hp, alive: true, state: o.state || 'idle', t: 0, cd: rand(0.5, 1.5), ccd: rand(2, 4), stag: 0, run: rand(0, 6),
-      deadT: 0, fall: v(), side: Math.random() < 0.5 ? -1 : 1, sideT: rand(2, 4), aimP: 0, hitT: 0, struck: false, guard: (D.guard || 0) * (boss ? 1.6 : 1) * (1 + 0.1 * (lvl - 1)), poise: D.poise || 0, brokenT: 0, brokeOnce: false, breakCd: 0,
+      deadT: 0, fall: v(), side: Math.random() < 0.5 ? -1 : 1, sideT: rand(2, 4), aimP: 0, hitT: 0, struck: false, guard: (D.guard || 0) * (boss ? 1.6 : 1) * pScale(pw), poise: D.poise || 0, brokenT: 0, brokeOnce: false, breakCd: 0,
       cdir: v(), swing: 0, sum: 0, lift: 0, sink: 0, lvl, boss, name: o.name || '', pack: o.pack || null, home: { x, z }, wander: null, wT: rand(1, 5), seeT: rand(0, 0.25), aggro: false,
-      dm: 1 + 0.16 * (lvl - 1), sc, r: D.r * sc, ly: D.lockY * sc, xp: Math.round(D.xp * (1 + 0.2 * (lvl - 1)) * (boss ? 3 : 1)) };
-    e.guard0 = e.guard;
+      pw, ward: !!o.ward, dm0: 1 + 0.05 * (lvl - 1), dm: 1, sc, r: D.r * sc, ly: D.lockY * sc, xp: Math.round(D.xp * (1 + 0.5 * (lvl - 1)) * (boss ? 3 : 1)) };
+    e.guard0 = e.guard; e.dm = e.dm0 * takenMult(ST.power - pw);      // their blows land harder when they out-Power you (dm0 keeps pace with your armour's growth)
     if (sc !== 1) J.root.scale.setScalar(sc);
     J.root.position.copy(e.pos); ENEMIES.push(e); return e;
   }
@@ -3174,35 +3551,68 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     return t0 > 0 ? t0 / L : Infinity;
   }
   const shieldCovers = (e, p) => shieldUp(e) && (p.x - e.pos.x) * Math.sin(e.yaw) + (p.z - e.pos.z) * Math.cos(e.yaw) > 0;     // a blast in front lands on the shield
-  // the Templar's own blows: wargear and oaths scale them, and some land as critical hits
-  function strike(e, base, dir, knock, src) {
-    const crit = src !== 'exec' && Math.random() < ST.crit;
-    const k = src === 'bolt' || src === 'finisher' ? ST.bolt : src === 'exec' ? 1 : ST.sword;
-    return damageEnemy(e, base * k * (crit ? 1.8 : 1) * (G.buffT > 0 ? 1.2 : 1), dir, knock, src, crit);
+  // which weapon a blow came from, for the perks that weapon carries
+  const wslot = src => src === 'bolt' || src === 'finisher' ? 'pistol' : BLADE.has(src) ? 'blade' : null;
+  // perks' running state: Rampage stacks, Kill Clip, Feeding Frenzy, the Red Tithe, Wrathful Bolts, the Sunforge, the Rosarius field, Unbreakable
+  const PKS = { ramp: { blade: 0, pistol: 0 }, rampT: { blade: 0, pistol: 0 }, kcArm: false, kcT: 0, feed: false, tithe: 0, wrath: 0, sun: false, ros: 0, rosT: 0, unbrT: 0 };
+  function perkTick(dt) {
+    for (const k of ['blade', 'pistol']) if (PKS.rampT[k] > 0 && (PKS.rampT[k] -= dt) <= 0) PKS.ramp[k] = 0;
+    PKS.kcT = Math.max(0, PKS.kcT - dt); PKS.unbrT = Math.max(0, PKS.unbrT - dt);
+    const rmax = 60 * P.maxHp / 100;
+    if (exoOn('rosarius')) { if (PKS.ros <= 0) { PKS.rosT -= dt; if (PKS.rosT <= 0) { PKS.ros = rmax; if (G.state === 'play') moveToast('Rosarius field'); } } else PKS.ros = Math.min(PKS.ros, rmax); }
+    else PKS.ros = 0;
   }
+  // the Templar's own blows: Power, wargear, perks and abilities scale them, and some land as critical hits
+  function strike(e, base, dir, knock, src) {
+    const crit = src !== 'exec' && Math.random() < ST.crit, ws = wslot(src);
+    let k = ws === 'pistol' ? ST.bolt : ws === 'blade' && src !== 'exec' ? ST.sword : 1;
+    k *= pScale(ST.power);
+    if (ws && PKS.rampT[ws] > 0 && perkIn(ws, 'rampage')) k *= 1 + 0.12 * PKS.ramp[ws];
+    if (ws && perkIn(ws, 'zealot') && P.hp < P.maxHp * 0.5) k *= 1.15;
+    if (ws === 'pistol' && PKS.kcT > 0) k *= 1.25;
+    if (src === 'slam' && exoOn('blacksword')) k *= 1.5;
+    if (ws === 'blade' && src !== 'exec' && exoOn('redtithe') && ++PKS.tithe >= 10) { PKS.tithe = 0; k *= 3; P.hp = Math.min(P.maxHp, P.hp + P.maxHp * 0.1); moveToast('Tithe of Blood'); }
+    k *= ABIL.dmgMult(src, e);
+    if (exoOn('anvil') && src === 'slam' && !e.boss) e.stag = Math.max(e.stag, 1.4);      // Thunderstrike: slams and pounds stun
+    const hit = damageEnemy(e, base * k * (crit ? 1.8 : 1) * (G.buffT > 0 ? 1.2 : 1), dir, knock, src, crit);
+    if (ws === 'blade' && src !== 'exec' && C.active && perkIn('blade', 'relentless')) P.dashCd = Math.max(0, P.dashCd - 0.3);
+    return hit;
+  }
+  // a foe 50 or more Power above you can't be hurt at all, and a sealed one not until its seal is broken: a ward shows round it
+  const immune = e => (e.seal && !e.seal()) || dealtMult(ST.power - e.pw) === 0;
   function damageEnemy(e, dmg, dir, knock, src, crit) {
     if (!e.alive || (e.state === 'execd' && src !== 'exec')) return false;
     if (!e.aggro && ZONE === 'world') alertPack(e);
     const at = eUp(e, e.ly);
+    e.lastSrc = src;
+    if (src !== 'exec' && src !== 'test') {
+      if (immune(e)) { e.wardT = 0.6; if ((e.immT || 0) < G.time) { e.immT = G.time + 0.5; num(at, 'Immune', 'blk'); sparks(at, 10, [0.75, 0.5, 1, 1], 4); SYN.clang(); } hitMarker(false); return false; }
+      dmg *= dealtMult(ST.power - e.pw);
+    }
     // the brute's shield soaks most of a blade from the front, until its guard breaks (bolts are stopped by the shield itself, in fire)
-    if (e.type === 'brute' && e.guard > 0 && e.state !== 'broken' && e.state !== 'execd' && src !== 'bolt') {
+    if (e.type === 'brute' && e.guard > 0 && e.state !== 'broken' && e.state !== 'execd' && src !== 'bolt' && src !== 'hawk') {
       const front = dir.x * Math.sin(e.yaw) + dir.z * Math.cos(e.yaw) < -0.3;
       if (front) {
-        e.guard -= dmg * (src === 'slam' ? 1.6 : src === 'thrust' || src === 'finisher' ? 1.4 : 1);
+        e.guard -= dmg * (src === 'slam' ? 1.6 : src === 'thrust' || src === 'finisher' ? 1.4 : 1) * (BLADE.has(src) && perkIn('blade', 'sunder') ? 1.6 : 1);
         sparks(at, 16, [0.6, 0.85, 1, 1], 6); SYN.clang(); sfxAt('bring', at, 0.7, rand(0.75, 0.9));
         if (e.guard <= 0) { breakEnemy(e, 4.5); banner('Guard broken', 'Execute it'); return false; }
         dmg *= 0.3; knock *= 0.3; num(at, 'Blocked', 'blk');
       }
     }
-    if (e.D.armour && src !== 'exec') dmg *= e.D.armour;
+    if (e.D.armour && src !== 'exec') dmg *= src === 'bolt' && perkIn('pistol', 'piercing') ? 1 - (1 - e.D.armour) * 0.67 : e.D.armour;
     // a named foe can't be finished by one execution while it still has its strength: the blade takes a third of it instead
     if (src === 'exec' && e.boss && e.hp > e.maxHp * 0.34) dmg = e.maxHp * 0.34;
     dmg = Math.round(dmg);
     e.hp -= dmg; e.hitT = 0.12;
     if (src !== 'exec' || e.boss) num(at, dmg, crit ? 'crit' : '');
     if (BLADE.has(src) && src !== 'exec' && ST.leech > 0 && P.alive) P.hp = Math.min(P.maxHp, P.hp + dmg * ST.leech);
-    blood(at, dir, BLADE.has(src) ? 14 : 9, e.type === 'ghoul' || e.type === 'leaper' ? [0.35, 0.42, 0.18, 0.95] : [0.45, 0.04, 0.03, 0.95]);
-    sfxAt('flesh' + Math.floor(Math.random() * 4), at, 0.9, rand(0.8, 1.05) * (e.D.mass > 1 ? 0.8 : 1));
+    ABIL.onHit(e, dmg, src);
+    if (BLADE.has(src) && src !== 'exec' && perkIn('blade', 'arcfield')) {      // Arc Field: a quarter of the blow leaps to the nearest other foe
+      let o2 = null, bd = 4; for (const o of ENEMIES) { if (o === e || !o.alive || o.state === 'execd') continue; const d = o.pos.distanceTo(e.pos); if (d < bd) { bd = d; o2 = o; } }
+      if (o2) { const a2 = eUp(o2, o2.ly); sparks(a2, 8, [0.6, 0.85, 1, 1], 4); tracer(at, a2, 0x8fd0ff); setTimeout(() => damageEnemy(o2, dmg * 0.25, tmp.subVectors(o2.pos, e.pos).setY(0).normalize().clone(), 1, 'arc'), 0); }
+    }
+    if (!ABIL.quiet) blood(at, dir, BLADE.has(src) ? 14 : 9, e.type === 'ghoul' || e.type === 'leaper' ? [0.35, 0.42, 0.18, 0.95] : [0.45, 0.04, 0.03, 0.95]);
+    if (!ABIL.quiet) sfxAt('flesh' + Math.floor(Math.random() * 4), at, 0.9, rand(0.8, 1.05) * (e.D.mass > 1 ? 0.8 : 1));
     if (knock && e.state !== 'execd') {
       e.vel.addScaledVector(dir, knock / e.D.mass / (e.boss ? 2 : 1));
       if (e.D.mass <= 1 && !(e.boss && Math.random() < 0.6)) {
@@ -3230,7 +3640,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
       if (e.type === 'champion' && e.breakCd <= 0 && e.hp <= e.maxHp * 0.12) { breakEnemy(e, 5); banner(e.name || 'The Champion', 'He kneels: execute him'); }
       if (e.type === 'champion' && e.sum < 2 && e.hp < e.maxHp * (e.sum ? 0.33 : 0.66) && e.state !== 'leap') { e.sum++; e.state = 'roar'; e.t = 0; e.vel.set(0, 0, 0); SYN.roar(at, 1.2); }
     }
-    hitMarker(false);
+    if (!ABIL.quiet) hitMarker(false);
     return false;
   }
   // broken: staggered to its knees and open to an execution for a few seconds
@@ -3286,6 +3696,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
       // far from the Templar and asleep: stand still and save the work
       if (e.state === 'idle' && dist > 110) { J.root.visible = dist < 220; continue; }
       J.root.visible = true;
+      const stunned = ABIL.statusTick(e, dt);      // burning, stunned, weakened, pulled (e.ab belongs to ABIL)
       e.t += dt; e.cd -= dt; e.ccd -= dt; e.stag = Math.max(0, e.stag - dt);
       const want = v(), before = _bp.copy(e.pos);
       let steer = true, face = true, faceTo = null;
@@ -3320,6 +3731,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
           e.state = 'recover'; e.t = 0; e.vel.multiplyScalar(0.15);
         }
       }
+      else if (stunned) face = false;      // stunned: no AI, no attacks
       else if (e.type === 'ghoul') aiGhoul(e, dist, dir, want);
       else if (e.type === 'gunner') aiGunner(e, dt, dist, dir, want);
       else if (e.type === 'leaper') aiLeaper(e, dist, dir, want);
@@ -3335,6 +3747,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
         const acc = damp(e.stag > 0 ? 1.5 : (e.state === 'lunge' ? 2 : e.D.mass > 1 ? 5 : 8), dt);
         if (e.state === 'wind' || e.state === 'aim' || e.state === 'recover' || e.state === 'crouch' || e.state === 'smash' || e.state === 'cwind' || e.state === 'roar' || e.state === 'broken') want.multiplyScalar(0.15);
         if (inWater(e.pos.x, e.pos.z)) want.multiplyScalar(0.6);
+        want.multiplyScalar(ABIL.speedMult(e));
         e.vel.x += (want.x - e.vel.x) * acc; e.vel.z += (want.z - e.vel.z) * acc;
         e.pos.x += e.vel.x * dt; e.pos.z += e.vel.z * dt;
       }
@@ -3542,7 +3955,12 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   function hurtPlayer(dmg, from, push) {
     if (!P.alive || G.state !== 'play' || FLY.on) return;
     if (P.iframes > 0) return;
-    dmg *= 1 - ST.dr;
+    dmg *= (1 - ST.dr) * ABIL.takenMult();
+    if (exoOn('vigil') && C.active && (C.mode === 'combo' || C.mode === 'exec' || C.mode === 'thrust')) dmg *= 0.65;
+    if (perkOn('bastionp') && P.hp > P.maxHp * 0.5) dmg *= 0.9;
+    if (subPick('perkB') === 'martyr' && P.hp < P.maxHp * 0.3) dmg *= 0.8;
+    if (PKS.ros > 0) { const soak = Math.min(PKS.ros, dmg); PKS.ros -= soak; dmg -= soak; sparks(v(P.pos.x, P.pos.y + 1.3, P.pos.z), 6, [1, 0.85, 0.4, 1], 3); if (PKS.ros <= 0) { PKS.rosT = 10; moveToast('Rosarius field broken'); } if (dmg <= 0) return; }
+    if (exoOn('bastion') && P.hp - dmg <= 0 && PKS.unbrT <= 0) { PKS.unbrT = 60; P.hp = 1 + dmg; moveToast('Unbreakable'); flash(v(P.pos.x, P.pos.y + 1.2, P.pos.z), 0xf2c03a, 4, 0.3); }
     P.hp -= dmg; P.lastHurt = G.time; G.shake = Math.max(G.shake, 0.25 + (push ? 0.15 : 0));
     if (push && from) { const dx = P.pos.x - from.x, dz = P.pos.z - from.z, d = Math.hypot(dx, dz) || 1; P.push.set(dx / d * push, 0, dz / d * push); }
     vigT = 0.5; sfx('hurt' + Math.floor(Math.random() * 4), 0.9, rand(0.72, 0.82));
@@ -3563,14 +3981,14 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     if (e.code === 'Tab') e.preventDefault();
     // a screen is open (character, map, talk): its own keys close it
     if (G.ui) {
-      if (e.code === 'Escape' || (e.code === 'KeyI' && G.ui === 'inv') || (e.code === 'Tab' && G.ui === 'inv') || (e.code === 'KeyM' && G.ui === 'map') || (e.code === 'KeyB' && G.ui === 'build')) closeUI();
+      if (e.code === 'Escape' || ((e.code === 'KeyI' || e.code === 'Tab' || e.code === 'KeyB') && (G.ui === 'inv' || G.ui === 'build')) || (e.code === 'KeyM' && G.ui === 'map')) closeUI();
       return;
     }
     if (G.state !== 'play') return;
     // with pointer lock the browser takes Esc itself and the lock change opens the pause screen; without it, Esc toggles it here
     if (e.code === 'Escape' && !locked) { if (noLock()) setPaused(!G.paused); return; }
     if (G.paused || G.fading) return;
-    if (e.code === 'KeyI' || e.code === 'Tab') { if (!e.repeat) openUI('inv'); return; }
+    if (e.code === 'KeyI' || e.code === 'Tab') { if (!e.repeat && !FLY.on) openUI('build'); return; }
     if (e.code === 'KeyM') { if (!e.repeat) openUI('map'); return; }
     if (e.code === 'KeyB') { if (!e.repeat && !FLY.on && !C.active) openUI('build'); return; }
     keys.add(e.code);
@@ -3580,6 +3998,9 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     if (e.code === 'KeyF' && !e.repeat) swordInput();
     if (e.code === 'KeyE' && !e.repeat) { if (!tryExecute(true)) interact(); }
     if (e.code === 'KeyQ' && !e.repeat) useUnguent();
+    if (e.code === 'KeyG' && !e.repeat) useAbility('gren');
+    if (e.code === 'KeyV' && !e.repeat) useAbility('melee');
+    if (e.code === 'KeyX' && !e.repeat) useAbility('sup');
     if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) dash(); }
   });
   addEventListener('keyup', e => keys.delete(e.code));
@@ -3609,6 +4030,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
 
   // ================================================================ the heavy bolt pistol
   function fire() {
+    if (ABIL.fireOverride()) return;        // the Crusader's Judgement takes the shot (not in the air: there the click picks the mark)
     if (JP.air && !JP.pound && JP.phase !== 'none') { startPound(); return; }      // in the air the click picks the spot
     if (!P.alive || GUN.reloadT > 0 || GUN.cd > 0) return;
     if (C.active && (C.mode === 'exec' || C.mode === 'finisher')) return;
@@ -3617,6 +4039,10 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     if (C.active) { endCombo(); }         // firing pulls straight back into first person
     if (GUN.ammo <= 0) { sfx('dry_p', 1); GUN.cd = 0.25; reload(); return; }
     const plasma = T.look.pistol === 'plasma', PK = plasma ? 2.1 : 1;
+    // Wrathful Bolts: every fifth round is a heavy one. The Sunforge: a kill overcharges the next shot. Explosive Rounds: a wider, harder burst.
+    const heavy = exoOn('wrath') && ++PKS.wrath >= 5, sun = PKS.sun && exoOn('sunforge'), expl = perkIn('pistol', 'explosive');
+    if (heavy) PKS.wrath = 0; PKS.sun = false;
+    const XK = heavy ? 2.5 : sun ? 2 : 1, splR = sun ? 5 : (plasma ? 2.4 : 1.6) * (heavy ? 2 : 1) * (expl ? 1.3 : 1), splD = (expl ? 15 * PK : 14 * PK) * (heavy || sun ? 4 : 1) * (expl ? 1.3 : 1);
     GUN.ammo--; GUN.cd = plasma ? 0.55 : 0.3; GUN.kick = 1; G.shake = Math.max(G.shake, plasma ? 0.1 : 0.06);
     if (plasma) { SYN.zap(null); sfx('shot_g', 0.6, rand(1.3, 1.4), -0.1, 0, 0.3); SYN.bolt(); }
     else { sfx('shot_g', 1, rand(0.78, 0.86), -0.1, 0, 0.45); sfx('bolt_k', 0.75, rand(0.95, 1.05), -0.1, 0, 0.3); SYN.bolt(); }
@@ -3637,20 +4063,21 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     for (let i = 0; i < 8; i++) glowFX.spawn(_mz, d.clone().multiplyScalar(rand(2, 6)).add(v(rand(-1, 1), rand(-1, 1), rand(-1, 1))), pc, rand(0.04, 0.09), 0.08);
     // mass-reactive round: it detonates where it lands (plasma bursts wider)
     if (best < 139) { sparks(hp, plasma ? 34 : 18, pc, 6, 0.3); flash(hp, plasma ? 0x6ab8ff : 0xff8a30, plasma ? 7 : 4, 0.12); dust(hp, 6, 0.4, [0.3, 0.25, 0.2, 0.6]);
-      SYN.boom(hp); if (plasma) { SYN.zap(hp); shock(hp, 2.4, 0x6ab8ff); } else sfxAt('bimp' + ((Math.random() * 2) | 0), hp, 0.8, rand(0.9, 1.05)); }
+      SYN.boom(hp); if (plasma) { SYN.zap(hp); shock(hp, 2.4, 0x6ab8ff); } else sfxAt('bimp' + ((Math.random() * 2) | 0), hp, 0.8, rand(0.9, 1.05));
+      if (heavy || sun) { shock(hp, splR, sun ? 0x6ab8ff : 0xff8a30); flash(hp, sun ? 0x6ab8ff : 0xff8a30, 9, 0.2); G.shake = Math.max(G.shake, 0.2); } }
     if (hitT) hitTarget(hitT, 50 * PK, 'bolt', hp, d);
-    if (hitE) strike(hitE, (head ? 90 : 50) * PK, d.clone().setY(0).normalize(), 3 * PK, 'bolt');
+    if (hitE) strike(hitE, (head ? 90 : 50) * PK * XK, d.clone().setY(0).normalize(), 3 * PK * XK, 'bolt');
     else if (blockE) { sparks(hp, 16, [1, 0.7, 0.3, 1], 6); SYN.clang(); sfxAt('bring', hp, 0.7, rand(0.75, 0.9)); hitMarker(false); num(hp, 'Blocked', 'blk'); alertPack(blockE); }
     else if (best < 139) sfxAt('imp_con' + Math.floor(Math.random() * 4), hp, 0.9);
     for (const e of ENEMIES) {      // a little splash from the detonation (the shield takes it all for the brute behind it)
       if (!e.alive || e === hitE || e === blockE || shieldCovers(e, hp)) continue;
-      const dd = Math.hypot(e.pos.x - hp.x, e.pos.z - hp.z); if (dd < (plasma ? 2.4 : 1.6) && Math.abs(hp.y - e.pos.y - 1) < 1.5) strike(e, 14 * PK, tmp.set(e.pos.x - hp.x, 0, e.pos.z - hp.z).normalize().clone(), 2, 'bolt');
+      const dd = Math.hypot(e.pos.x - hp.x, e.pos.z - hp.z); if (dd < splR && Math.abs(hp.y - e.pos.y - 1) < 1.5 + splR * 0.3) strike(e, splD, tmp.set(e.pos.x - hp.x, 0, e.pos.z - hp.z).normalize().clone(), 2 * XK, 'bolt');
     }
     if (GUN.ammo === 0) setTimeout(reload, 250);
   }
   function reload() {
     if (GUN.reloadT > 0 || GUN.ammo === GUN.mag || !P.alive) return;
-    GUN.reloadT = GUN.reloadDur; GUN.sfxStage = 0;
+    GUN.reloadT = GUN.reloadDur * (PKS.feed ? 0.6 : 1); PKS.feed = false; GUN.sfxStage = 0;      // Feeding Frenzy: a kill quickens the next reload
   }
   function updateGun(dt) {
     GUN.cd -= dt; GUN.kick = Math.max(0, GUN.kick - dt * 6);
@@ -3659,7 +4086,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
       if (GUN.sfxStage === 0 && p > 0.08) { sfx('p_magout', 1, 0.85); GUN.sfxStage = 1; }
       if (GUN.sfxStage === 1 && p > 0.55) { sfx('p_magin', 1, 0.85); GUN.sfxStage = 2; }
       if (GUN.sfxStage === 2 && p > 0.82) { sfx('p_slide', 1, 0.8); GUN.sfxStage = 3; }
-      GUN.reloadT -= dt; if (GUN.reloadT <= 0) { GUN.reloadT = 0; GUN.ammo = GUN.mag; }
+      GUN.reloadT -= dt; if (GUN.reloadT <= 0) { GUN.reloadT = 0; GUN.ammo = GUN.mag; if (PKS.kcArm && perkIn('pistol', 'killclip')) { PKS.kcT = 5; moveToast('Kill Clip'); } PKS.kcArm = false; }
     }
     if (mouseDown && GUN.cd <= 0 && GUN.ammo > 0 && !C.active) fire();     // hold to keep firing at the pistol's own pace
   }
@@ -3753,12 +4180,12 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     if (C.mode === 'finisher') return updateFinisher(dt);
     if (C.mode === 'pound') return updatePound(dt);
     const S = C.move;
-    C.t += dt / BK().spd;       // a chainsword cuts faster, a thunder hammer slower
+    C.t += dt * ST.swing / BK().spd;       // a chainsword cuts faster, a thunder hammer slower
     // soft lock: turn to face the target the whole time (the thrust holds its line)
     if (C.target && C.target.alive && !S.drive) { const a = Math.atan2(-(C.target.pos.x - P.pos.x), -(C.target.pos.z - P.pos.z)); P.yaw += angDiff(P.yaw, a) * damp(16, dt); }
     if (C.phase === 'w') {
       lerpPose(pose, fromPose, S.k[0], smooth(Math.min(1, C.t / S.w)));
-      if (C.t >= S.w) { C.phase = 's'; C.t = 0; T.bladeBase.getWorldPosition(_pb); T.bladeTip.getWorldPosition(_pt); SYN.swing(T.look.blade === 'hammer' ? 2 : S.snd ?? C.step, S.s * BK().spd); if (T.look.blade === 'chain') SYN.rev(); }
+      if (C.t >= S.w) { C.phase = 's'; C.t = 0; ABIL.onSwing(C.step); T.bladeBase.getWorldPosition(_pb); T.bladeTip.getWorldPosition(_pt); SYN.swing(T.look.blade === 'hammer' ? 2 : S.snd ?? C.step, S.s * BK().spd); if (T.look.blade === 'chain') SYN.rev(); }
     } else if (C.phase === 's') {
       const u = Math.min(1, C.t / S.s);
       swingPose(pose, S.k, 1 - Math.pow(1 - u, 1.6));
@@ -3887,6 +4314,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
         const side = v(Math.cos(P.yaw), 0, -Math.sin(P.yaw)).multiplyScalar(-1);
         SYN.rip(at); blood(at, side, 40, e.type === 'ghoul' || e.type === 'leaper' ? [0.35, 0.42, 0.18, 0.95] : [0.45, 0.04, 0.03, 0.95]); sparks(at, 24, [0.55, 0.85, 1, 1], 8);
         e.lift = 0; damageEnemy(e, 99999, side, 7, 'exec'); G.slowT = 0.3; G.shake = 0.3;
+        if (exoOn('oathkeeper')) holyBlast();
         const heal = Math.round((e.type === 'champion' ? 50 : X.heavy ? 35 : 25) * P.maxHp / 100 * ST.execHeal); P.hp = Math.min(P.maxHp, P.hp + heal); moveToast(`Executed  +${heal}`);
         num(v(P.pos.x, P.pos.y + 2.2, P.pos.z), '+' + heal, 'heal');
         C.pips = 3;
@@ -3904,7 +4332,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     for (const e of ENEMIES) {
       if (!e.alive || e.state === 'execd' || Math.abs(e.pos.y - c.y) > 2.5) continue;
       const dx = e.pos.x - c.x, dz = e.pos.z - c.z, d = Math.max(0, Math.hypot(dx, dz) - (e.r - 0.45));
-      const Rs = T.look.blade === 'hammer' ? 4.6 : 3.4;      // the thunder hammer's slam reaches further
+      const Rs = (T.look.blade === 'hammer' ? 4.6 : 3.4) * ST.slamR;      // the thunder hammer's slam reaches further (and perks and the Black Sword further still)
       if (d < Rs) { const dir = v(dx, 0, dz).normalize(); strike(e, Math.round(lerp(70, 30, d / Rs) * BK().dmg), dir, 10 * (1 - d / (Rs + 0.6)) * BK().knock, 'slam'); C.pips = 3; }
     }
   }
@@ -3916,6 +4344,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
     let wx = -sy * fz + cy * fx, wz = -cy * fz - sy * fx; if (!fx && !fz) { wx = -sy; wz = -cy; }
     const l = Math.hypot(wx, wz); P.dashDir.set(wx / l, 0, wz / l); P.dashT = 0.2; P.dashCd = 0.9 * (1 - ST.dash); P.iframes = 0.25; P.lastDash = G.time;
+    if (subPick('perkB') === 'momentum') AB.melee = Math.min(1, AB.melee + 0.15);
     SYN.dash(); dust(P.pos, 8, 0.6);
   }
   // after anything moves the Templar: out of colliders, then onto the ground, refusing slopes too steep to climb (slide along them instead)
@@ -3939,7 +4368,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     const fz = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0), fx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
     const sprint = (keys.has('ShiftLeft') || keys.has('ShiftRight')) && fz > 0 && !C.active;
     const wet = inWater(P.pos.x, P.pos.z);
-    const speed = (C.active ? (C.mode === 'exec' ? 0 : 0.8) : (sprint ? 7.6 : 5.0)) * (wet ? 0.6 : 1);
+    const speed = (C.active ? (C.mode === 'exec' ? 0 : 0.8) : (sprint ? 7.6 * ST.sprint : 5.0)) * (wet ? 0.6 : 1) * ST.speed * (1);
     const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
     let wx = -sy * fz + cy * fx, wz = -cy * fz - sy * fx; const wl = Math.hypot(wx, wz); if (wl > 0) { wx /= wl; wz /= wl; }
     const acc = damp(JP.air ? 0 : 10, dt);       // in the air the jump pack carries you (updateJump steers a little)
@@ -3954,8 +4383,9 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     const idx = Math.floor(P.bob / PI);
     if (idx !== P.stepIdx && hs > 1 && !JP.air) sfx('st_con' + Math.floor(Math.random() * 6), sprint ? 1.2 : 0.9, rand(0.62, 0.7) * (wet ? 0.8 : 1), idx % 2 ? 0.1 : -0.1, 0, 0.1);
     P.stepIdx = idx;
-    // armour regeneration: after four seconds unhurt, faster once nothing is hunting you; and the unguent's slow heal
-    if (G.time - P.lastHurt > 4 && P.hp < P.maxHp) P.hp = Math.min(P.maxHp, P.hp + 6 * ST.regen * (G.hunted ? 1 : 3) * P.maxHp / 100 * dt);
+    // armour regeneration: after a few seconds unhurt (fewer with Recovery), faster once nothing is hunting you; the Iron Heart never stops it
+    const iron = exoOn('ironheart');
+    if ((G.time - P.lastHurt > ST.regenDelay || iron) && P.hp < P.maxHp) P.hp = Math.min(P.maxHp, P.hp + 6 * ST.regen * (G.hunted ? (iron && G.time - P.lastHurt <= ST.regenDelay ? 0.5 : 1) : 3) * P.maxHp / 100 * dt);
     if (P.healT > 0) { const k = Math.min(dt, P.healT); P.healT -= dt; P.hp = Math.min(P.maxHp, P.hp + P.healR * k); }
   }
   function useUnguent() {
@@ -3966,7 +4396,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     if (live()) { const t = actx.currentTime; for (const [f, d] of [[523, 0], [784, 0.08], [1047, 0.16]]) tone(t + d, 0.7, 'sine', f, f, 0.12, 0.01, 0, 0.5); }
   }
   function die() {
-    P.alive = false; endCombo(); G.state = 'dead'; R.deaths++;
+    P.alive = false; endCombo(); ABIL.reset(); G.state = 'dead'; R.deaths++;
     const lost = Math.floor(R.gold * 0.1); R.gold -= lost;
     const where = ZONE === 'dungeon' ? DUN.def.name : placeName(P.pos.x, P.pos.z);
     setTimeout(() => {
@@ -4134,14 +4564,15 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     if (G.shake > 0) { const s = G.shake * 0.12 * (SET.shake ? 1 : 0); cam.position.x += rand(-s, s); cam.position.y += rand(-s, s); cam.position.z += rand(-s, s); G.shake = Math.max(0, G.shake - dt * 1.6); }
   }
 
-  // ================================================================ wargear: four slots, four rarities. Power p = level x rarity; the main stat and affixes grow with it.
+  // ================================================================ wargear: five tiers and Power, Destiny's way
+  // Every piece has a Power (pw). Your Power is the average over the five slots (an empty slot counts as 0), and every enemy has one too:
+  // the gap between them, not the numbers on the gear, decides how hard you hit and how hard you're hit. Weapons roll perks, armour rolls
+  // Faith / Discipline / Wrath, relics roll bonuses, and an Artificer piece carries one unique perk (one weapon and one armour at a time).
   const SLOTS = ['blade', 'pistol', 'armour', 'pack', 'relic'];
   const SLOTN = { blade: 'Blade', pistol: 'Pistol', armour: 'Armour', pack: 'Pack', relic: 'Relic' };
-  const RAR = ['Standard', 'Blessed', 'Master-crafted', 'Relic'], RHEX = [0xd8cfbc, 0x8fd0ff, 0xe0b24a, 0xff7a4a];
-  const AFX = { sword: ['Sword damage', p => 3 + p * 2, '%'], bolt: ['Bolt damage', p => 3 + p * 2, '%'], hp: ['Armour', p => 5 + p * 4, ''], crit: ['Critical chance', p => 1 + p * 0.45, '%'],
-    exec: ['Execution healing', p => 4 + p * 2, '%'], leech: ['Blade lifesteal', p => 1 + p * 0.25, '%'], mag: ['Magazine', p => 1 + Math.floor(p / 5), ' rounds'], reload: ['Reload speed', p => 4 + p * 1.2, '%'],
-    regen: ['Armour regeneration', p => 8 + p * 3, '%'], jump: ['Jump pack recharge', p => 4 + p * 1.2, '%'], pound: ['Ground pound damage', p => 5 + p * 2, '%'], dr: ['Damage reduction', p => 1 + p * 0.5, '%'], dash: ['Dash recovery', p => 5 + p * 1.2, '%'], xp: ['Experience', p => 5 + p * 1.5, '%'], gold: ['Thrones found', p => 8 + p * 2.5, '%'] };
-  const AFFIXES = { blade: ['crit', 'exec', 'leech'], pistol: ['mag', 'reload', 'crit'], armour: ['regen', 'dr', 'dash'], pack: ['jump', 'pound', 'dash', 'regen'], relic: ['xp', 'gold', 'crit', 'sword', 'bolt', 'hp'] };
+  const RAR = ['Standard', 'Blessed', 'Master-crafted', 'Relic', 'Artificer'], RHEX = [0xd8cfbc, 0x7fcf6a, 0x5aa8ff, 0xb07aff, 0xf2c03a];
+  const WEAPON_SLOTS = new Set(['blade', 'pistol']), ARMOUR_SLOTS = new Set(['armour', 'pack', 'relic']);
+  const randi = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
   // each slot's kinds: how often they drop and what they're called. The kind picks the model and how it fights.
   const KINDS = { blade: [['power', 0.45], ['chain', 0.35], ['hammer', 0.2]], pistol: [['bolt', 0.7], ['plasma', 0.3]], armour: [['mk7', 0.35], ['mk6', 0.25], ['crusader', 0.2], ['mk10', 0.2]], pack: [['jump', 0.6], ['power', 0.4]] };
   const BASES = { blade: { power: ['power sword', 'crusader blade', 'penitent blade', 'Chapter blade'], chain: ['chainsword', 'Mars-pattern chainsword', 'Tigris chainsword', 'Chapter chainsword'], hammer: ['thunder hammer', 'Chapter thunder hammer', 'crusader thunder hammer'] },
@@ -4149,26 +4580,146 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     armour: { mk7: ['Mark VII plate', 'Aquila plate'], mk6: ['Mark VI plate', 'Corvus plate'], crusader: ['crusader plate'], mk10: ['Mark X plate', 'Tacticus plate'] },
     pack: { jump: ['jump pack', 'Raven-pattern jump pack', 'Mk X jump pack'], power: ['power pack', 'Chapter power pack'] },
     relic: { '': ['purity seal', 'reliquary skull', 'litany scroll', 'Chapter icon', 'bone rosary'] } };
-  const ADJ = [[''], ['Blessed', 'Hallowed', 'Sanctified'], ['Master-crafted', 'Artificer', 'Ancient']];
-  const UNIQ = { power: ['Oathkeeper', 'The Crusader\u2019s Edge'], chain: ['Penitence', 'The Red Tithe'], hammer: ['The Anvil of Ansgar', 'Judgement'], bolt: ['Ansgar’s Wrath', 'The Castellan’s Mercy'], plasma: ['Litany of Fire', 'The Sunforge'],
-    mk7: ['The Iron Vigil'], mk6: ['The Iron Vigil'], crusader: ['Mantle of the Castellan', 'Shroud of the Reach'], mk10: ['The Bastion of the Reach'], jump: ['Wings of Saint Ansgar'], power_pack: ['The Iron Heart'],
-    '': ['Rosarius of the Reach', 'Skull of Brother Eadric', 'The Ninth Purity Seal'] };
+  const ADJ = [[''], ['Blessed', 'Hallowed', 'Sanctified'], ['Master-crafted', 'Forge-blessed', 'Ancient']];
+  // Relic tier (Destiny's legendaries): named pieces with full perk rolls
+  const LEG = { blade: ['Vow of Sigismund', 'Penitent Oath', 'Grief of Helsreach', 'The Long Vigil', 'Mercy Unasked', 'Last Rite', 'The Ninth Litany', 'The Crusader’s Edge', 'Penitence', 'Judgement'],
+    pistol: ['Hymn of Wrath', 'Dorn’s Answer', 'Litany of Ash', 'The Heretic’s End', 'Sanctus Ferrum', 'Final Absolution', 'The Castellan’s Mercy', 'Litany of Fire'],
+    armour: ['Aegis of Varro', 'The Iron Penance', 'Plate of the Ninth Crusade', 'Mantle of Ash', 'Vigil Unbroken', 'Shroud of the Reach'],
+    jump: ['Wings of the Penitent', 'Ascension Engine', 'The Burning Descent'], power: ['Heart of the Forge', 'The Tireless Engine'],
+    relic: ['Bone of Saint Tessaly', 'The Weeping Seal', 'Oath-scroll of Hadrin', 'Reliquary of the Lost', 'The Martyr’s Rosary'] };
+  // Artificer tier (Destiny's exotics): fixed pieces, each with one perk nothing else has
+  const EXO = {
+    oathkeeper: { name: 'Oathkeeper', slot: 'blade', kind: 'power', perk: ['Vow of Sigismund', 'Executions release a blast of holy fire around you.'] },
+    blacksword: { name: 'The Black Sword of Saint Ansgar', slot: 'blade', kind: 'power', perk: ['Black Blade', 'The overhead slam deals +50% and reaches 60% further.'] },
+    redtithe: { name: 'The Red Tithe', slot: 'blade', kind: 'chain', perk: ['Tithe of Blood', 'Hits build Tithe. At ten, the next hit deals triple damage and heals you.'] },
+    anvil: { name: 'The Anvil of Ansgar', slot: 'blade', kind: 'hammer', perk: ['Thunderstrike', 'Slams and ground pounds stun what they hit and reach 40% further.'] },
+    wrath: { name: 'Ansgar’s Wrath', slot: 'pistol', kind: 'bolt', perk: ['Wrathful Bolts', 'Every fifth shot is a heavy explosive round.'] },
+    sunforge: { name: 'The Sunforge', slot: 'pistol', kind: 'plasma', perk: ['Sun’s Heart', 'Kills overcharge the next shot into a 5 m blast.'] },
+    castellan: { name: 'Mantle of the Castellan', slot: 'armour', kind: 'crusader', perk: ['Castellan’s Resolve', 'Kills restore 8% armour.'] },
+    vigil: { name: 'The Iron Vigil', slot: 'armour', kind: 'mk7', perk: ['Iron Vigil', 'Take 35% less damage in a combo or an execution.'] },
+    bastion: { name: 'The Bastion of the Reach', slot: 'armour', kind: 'mk10', perk: ['Unbreakable', 'Once a minute, a killing blow leaves you on 1 armour instead.'] },
+    wings: { name: 'Wings of Saint Ansgar', slot: 'pack', kind: 'jump', perk: ['Seraph Wings', 'Three charges, a six-second hover and +30% slam damage.'] },
+    ironheart: { name: 'The Iron Heart', slot: 'pack', kind: 'power', perk: ['Iron Heart', 'Armour keeps regenerating while you fight.'] },
+    eadric: { name: 'Skull of Brother Eadric', slot: 'relic', kind: '', perk: ['Eadric’s Watch', 'Your super charges 40% faster.'] },
+    rosarius: { name: 'Rosarius of the Reach', slot: 'relic', kind: '', perk: ['Rosarius Field', 'A field soaks 60 damage and renews 10 s after it breaks.'] },
+    ninth: { name: 'The Ninth Purity Seal', slot: 'relic', kind: '', perk: ['Purity', 'Grenades and melee abilities recharge 40% faster.'] },
+  };
+  // rolled perks: [name, what it does, which kinds roll it]
+  const PERKS = {
+    rampage: ['Rampage', 'Kills grant +12% damage for 6 s, stacking three times.', 'blade pistol'],
+    bloodthirst: ['Blood-drinker', 'Blade hits heal 3% of the damage dealt.', 'blade'],
+    whirlwind: ['Whirlwind', 'The overhead slam reaches 40% further.', 'blade'],
+    executioner: ['Executioner', 'Executions heal 50% more and refill your melee ability.', 'blade'],
+    relentless: ['Relentless', 'Each combo hit takes 0.3 s off your dash.', 'blade'],
+    sunder: ['Sundering', '+60% damage to guard and shields.', 'blade'],
+    arcfield: ['Arc Field', 'Hits arc a quarter of their damage to another foe within 4 m.', 'blade'],
+    zealot: ['Zealot', '+15% damage while below half armour.', 'blade pistol'],
+    swift: ['Swift Blade', 'Strikes come 10% faster.', 'blade'],
+    keen: ['Keen Edge', '+8% critical chance.', 'blade pistol'],
+    explosive: ['Explosive Rounds', 'Bolts burst for 30% of their damage within 2 m.', 'pistol'],
+    killclip: ['Kill Clip', 'Reloading after a kill gives +25% damage for 5 s.', 'pistol'],
+    feeding: ['Feeding Frenzy', 'A kill makes the next reload 40% faster.', 'pistol'],
+    piercing: ['Armour-piercing', 'Bolts ignore a third of a foe’s armour.', 'pistol'],
+    extmag: ['Extended Magazine', '+3 rounds.', 'pistol'],
+    quickdraw: ['Quickdraw', 'Reloads 15% faster.', 'pistol'],
+    subsist: ['Subsistence', 'Kills put two rounds back in the magazine.', 'pistol'],
+    glide: ['Long Hover', 'Hover two seconds longer.', 'jump'],
+    thruster: ['Extra Thruster', 'One more charge.', 'jump'],
+    crater: ['Cratermaker', 'The slam reaches 25% further.', 'jump'],
+    fastjets: ['Quick Recharge', 'Charges return 25% faster.', 'jump'],
+    reactor: ['Overcharged Reactor', 'Armour regenerates 30% faster.', 'power'],
+    servo: ['Servo-arms', 'Reloads 10% faster and you carry one more unguent.', 'power'],
+    bastionp: ['Bastion', 'Take 10% less damage above half armour.', 'armour'],
+    grenadier: ['Grenadier', 'Grenade kills return 30% grenade energy.', 'armour'],
+    brawler: ['Brawler', 'Melee ability kills restore 20% armour.', 'armour'],
+    apothecary: ['Apothecary’s Gift', 'Carry one more unguent.', 'armour'],
+    sprinter: ['Sprinter', 'Sprint 8% faster.', 'armour'],
+    faithful: ['Faithful', 'Your super charges 10% faster.', 'armour'],
+  };
+  const RELIC_AF = { xp: ['Experience', '%', [3, 5, 7, 9, 12]], gold: ['Thrones found', '%', [5, 8, 12, 16, 20]], crit: ['Critical chance', '%', [1, 2, 3, 4, 5]],
+    sword: ['Sword damage', '%', [2, 4, 6, 8, 10]], bolt: ['Bolt damage', '%', [2, 4, 6, 8, 10]], sup: ['Super charge', '%', [4, 7, 10, 14, 18]] };
+  const STATN = { fai: 'Faith', dis: 'Discipline', wra: 'Wrath' };
   function rollKind(slot) { const L = KINDS[slot]; if (!L) return ''; let r = Math.random(); for (const [k, w] of L) { if ((r -= w) <= 0) return k; } return L[0][0]; }
   const cap = s => s[0].toUpperCase() + s.slice(1);
   let itemSeq = 1;
-  function makeItem(slot, lvl, rar, name, kind) {
-    lvl = clamp(Math.round(lvl), 1, MAXLVL);
-    kind = kind || rollKind(slot);
-    const p = lvl * (1 + rar * 0.35), st = {};
-    if (slot === 'blade') st.sword = Math.round(4 + 3 * p); else if (slot === 'pistol') st.bolt = Math.round(4 + 3 * p); else if (slot === 'armour') st.hp = Math.round(6 + 5 * p);
-    else if (slot === 'pack') { if (kind === 'jump') st.pound = Math.round(5 + 3 * p); else st.regen = Math.round(8 + 3 * p); }
-    const pool = AFFIXES[slot].slice(), n = slot === 'relic' ? 1 + rar : rar;
-    for (let i = 0; i < n && pool.length; i++) { const k = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]; st[k] = (st[k] || 0) + Math.max(1, Math.round(AFX[k][1](p) * rand(0.8, 1.15))); }
-    if (!name) { const base = pick(BASES[slot][kind]); name = rar === 3 ? pick(UNIQ[slot === 'pack' && kind === 'power' ? 'power_pack' : kind]) : rar ? pick(ADJ[rar]) + ' ' + base : cap(base); }
-    return { id: Date.now().toString(36) + (itemSeq++), slot, kind, rar, lvl, name, st, val: Math.round(8 * p * (1 + rar)) };
+  // pw: Power; rar: 0..4; exo: an EXO id (an Artificer piece). Anything left out is rolled.
+  function makeItem(slot, pw, rar, name, kind, exo) {
+    pw = Math.max(1, Math.round(pw)); rar = clamp(rar | 0, 0, 4);
+    if (rar === 4 && !exo) exo = pick(Object.keys(EXO).filter(k => EXO[k].slot === slot));
+    if (exo) { const X = EXO[exo]; slot = X.slot; kind = X.kind; name = X.name; rar = 4; }
+    if (kind === undefined || kind === null || (slot !== 'relic' && !kind)) kind = rollKind(slot);
+    const it = { id: Date.now().toString(36) + (itemSeq++), slot, kind, rar, pw, name: '', perks: [], exo: exo || null, stats: null, af: null, mw: 0 };
+    const tag = slot === 'pack' ? kind : slot;
+    const np = (WEAPON_SLOTS.has(slot) ? [0, 1, 2, 2, 1] : slot === 'pack' ? [0, 1, 1, 2, 0] : slot === 'armour' ? [0, 0, 1, 1, 0] : [0, 0, 0, 0, 0])[rar];
+    const pool = Object.keys(PERKS).filter(k => PERKS[k][2].split(' ').includes(tag));
+    for (let i = 0; i < np && pool.length; i++) it.perks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    if (ARMOUR_SLOTS.has(slot)) {      // Destiny 1 armour: one or two of the three ability stats
+      const tot = { armour: [30, 45, 60, 75, 85], pack: [15, 25, 35, 45, 50], relic: [10, 15, 20, 25, 30] }[slot][rar] * rand(0.85, 1.1), ks = ['fai', 'dis', 'wra'];
+      const a = ks.splice(randi(0, 2), 1)[0], b = Math.random() < 0.7 ? ks[randi(0, 1)] : null, f = b ? rand(0.5, 0.7) : 1;
+      it.stats = { fai: 0, dis: 0, wra: 0 }; it.stats[a] = Math.round(tot * f); if (b) it.stats[b] = Math.round(tot * (1 - f));
+    }
+    if (slot === 'relic') { const ks = Object.keys(RELIC_AF); it.af = {}; for (let i = 0; i < (rar >= 2 ? 2 : 1); i++) { const k = ks.splice(randi(0, ks.length - 1), 1)[0]; it.af[k] = RELIC_AF[k][2][rar]; } }
+    it.name = name || (rar === 3 ? pick(LEG[tag] || LEG.relic) : rar ? pick(ADJ[rar]) + ' ' + pick(BASES[slot][kind]) : cap(pick(BASES[slot][kind])));
+    it.val = Math.round(6 + pw * 0.4 * (1 + rar)); it.lvl = Math.max(1, Math.round(pw / 10));
+    return it;
   }
-  function rollRar(min = 0) { const r = Math.random(); return Math.max(min, r < 0.03 ? 3 : r < 0.16 ? 2 : r < 0.46 ? 1 : 0); }
-  const fmtStat = (k, x) => `+${x}${AFX[k][2]} ${AFX[k][0]}`;
+  function rollRar(min = 0) { const r = Math.random(); return Math.max(min, r < 0.006 ? 4 : r < 0.05 ? 3 : r < 0.2 ? 2 : r < 0.5 ? 1 : 0); }
+  // ---- Power. Level caps what the world drops (the soft cap); powerful and pinnacle rewards climb past it, up to their own caps.
+  const charPower = () => Math.round(SLOTS.reduce((s, k) => s + (R.eq[k] ? R.eq[k].pw : 0), 0) / SLOTS.length);
+  const softCap = () => 10 * R.lvl + 20, powCap = () => softCap() + 30, pinCap = () => softCap() + 50;
+  function dropPw(kind) {          // 'world' | 'powerful' | 'pinnacle'
+    const cp = charPower(), base = Math.max(cp, 10 * R.lvl);
+    if (kind === 'pinnacle') return Math.min(pinCap(), Math.max(base - 2, cp + randi(5, 8)));
+    if (kind === 'powerful') return Math.min(powCap(), Math.max(base - 4, cp + randi(3, 5)));
+    return clamp(base + randi(-8, 3), 1, softCap());
+  }
+  const ePow = lvl => 10 * lvl;
+  const pScale = p => 1 + 0.012 * Math.max(0, p - 10);         // both sides' numbers grow with Power; at equal Power a fight takes as long at 500 as at 50
+  // the gap: a little help above them, a steep fall below, and nothing at all 50 or more below (Immune)
+  const dealtMult = d => d >= 0 ? 1 + Math.min(d, 20) * 0.005 : d <= -50 ? 0 : Math.max(0.15, 1 + d * 0.017);
+  const takenMult = d => d >= 0 ? Math.max(0.8, 1 - d * 0.01) : Math.min(3, 1 - d * 0.025);
+  const fmtAf = (k, x) => `+${x}${RELIC_AF[k][1]} ${RELIC_AF[k][0]}`;
+  // perks and Artificer pieces in what you wear
+  const perkOn = id => SLOTS.some(s => R.eq[s] && R.eq[s].perks && R.eq[s].perks.includes(id));
+  const perkIn = (slot, id) => !!(R.eq[slot] && R.eq[slot].perks && R.eq[slot].perks.includes(id));
+  const exoOn = id => SLOTS.some(s => R.eq[s] && R.eq[s].exo === id);
+  // one Artificer weapon and one Artificer armour piece: equipping another takes the first off
+  const exoGroup = slot => WEAPON_SLOTS.has(slot) ? WEAPON_SLOTS : ARMOUR_SLOTS;
+  function exoClash(it) { if (!it || it.rar !== 4) return null; for (const s of exoGroup(it.slot)) if (s !== it.slot && R.eq[s] && R.eq[s].rar === 4) return s; return null; }
+  // materials: adamantium from dismantling and chests, blessed oil from Relic and Artificer pieces and the hardest foes
+  const MATN = { adam: 'adamantium', oil: 'blessed oil' };
+  function gainMat(k, n, quiet) { if (!n) return; R.mat[k] = (R.mat[k] || 0) + n; if (!quiet) feed(`+${n} ${MATN[k]}`, k === 'oil' ? 'rar3' : 'rar2'); }
+  const dismantleGives = it => ({ adam: [0, 1, 2, 3, 4][it.rar], oil: it.rar >= 3 ? it.rar - 2 : 0, gold: Math.round(it.val * 0.3) });
+  function dismantle(it) {
+    const i = R.bag.indexOf(it); if (i < 0) return false;
+    const g = dismantleGives(it); R.bag.splice(i, 1); R.gold += g.gold; gainMat('adam', g.adam, true); gainMat('oil', g.oil, true);
+    feed(`Dismantled: +${g.gold} thrones${g.adam ? `, +${g.adam} adamantium` : ''}${g.oil ? `, +${g.oil} blessed oil` : ''}`); sfx('bring', 0.3, 0.8); return true;
+  }
+  // infusion: a stronger piece of the same slot is consumed and the one you like takes its Power
+  const infuseCost = it => ({ gold: Math.round(20 + it.pw * 0.5), adam: 1 + (it.rar >= 3 ? 1 : 0) + (it.rar === 4 ? 1 : 0) });
+  const canInfuse = (it, fuel) => fuel && it && fuel !== it && fuel.slot === it.slot && fuel.pw > it.pw && R.bag.includes(fuel);
+  function infuse(it, fuel) {
+    const c = infuseCost(it); if (!canInfuse(it, fuel) || R.gold < c.gold || (R.mat.adam || 0) < c.adam) { SYN.deny(); return false; }
+    R.gold -= c.gold; R.mat.adam -= c.adam; R.bag.splice(R.bag.indexOf(fuel), 1);
+    const was = it.pw; it.pw = fuel.pw; it.lvl = Math.max(1, Math.round(it.pw / 10)); it.val = Math.round(6 + it.pw * 0.4 * (1 + it.rar));
+    calcStats(); SYN.clang(); feed(`${it.name}: Power ${was} → ${it.pw}`, 'xp'); saveGame(); return true;
+  }
+  // masterwork: Relic and Artificer pieces only. Weapons +8% damage, armour +10 to all three ability stats.
+  const MW_COST = { gold: 250, adam: 6, oil: 3 };
+  const canMw = it => it && it.rar >= 3 && !it.mw;
+  function masterwork(it) {
+    if (!canMw(it) || R.gold < MW_COST.gold || (R.mat.adam || 0) < MW_COST.adam || (R.mat.oil || 0) < MW_COST.oil) { SYN.deny(); return false; }
+    R.gold -= MW_COST.gold; R.mat.adam -= MW_COST.adam; R.mat.oil -= MW_COST.oil; it.mw = 1;
+    calcStats(); SYN.horn(); feed(`${it.name} is masterworked`, 'rar4'); saveGame(); return true;
+  }
+  // an old save's piece (item level, four tiers, flat affixes) becomes a new one of about the same strength
+  function migrateItem(it) {
+    if (!it || it.pw) return it;
+    const exo = Object.keys(EXO).find(k => EXO[k].name === it.name);
+    const n = makeItem(it.slot, (it.lvl || 1) * 10 + (it.rar || 0) * 3, exo ? 4 : it.rar || 0, exo ? null : it.name, it.kind !== undefined ? it.kind : kindOf(it, it.slot), exo || null);
+    n.id = it.id || n.id; if (it.price) n.price = it.price; return n;
+  }
+  calcStats();
 
   // ================================================================ things on the ground: thrones, wargear (a beam in its rarity's colour), unguents
   const DROPS = [];
@@ -4178,7 +4729,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   const dbeamM = RHEX.map(c => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   function drop(kind, at, o) {
     const g = new THREE.Group(); g.position.copy(at); scene.add(g);
-    if (kind === 'item') { g.add(new THREE.Mesh(gemGeo, gemM[o.item.rar])); const b = new THREE.Mesh(dbeamGeo, dbeamM[o.item.rar]); b.position.y = -0.3; g.add(b); if (o.item.rar >= 2) { const L = new THREE.PointLight(RHEX[o.item.rar], 0.6, 4, 2); g.add(L); } }
+    if (kind === 'item') { g.add(new THREE.Mesh(gemGeo, gemM[o.item.rar])); const b = new THREE.Mesh(dbeamGeo, dbeamM[o.item.rar]); b.position.y = -0.3; if (o.item.rar >= 3) b.scale.set(2.2, 1.6, 2.2); g.add(b); if (o.item.rar >= 3) flash(at, RHEX[o.item.rar], 4, 0.6); }
     else if (kind === 'gold') for (let i = 0; i < 3; i++) { const m = new THREE.Mesh(coinGeo, coinM); m.position.set(rand(-0.15, 0.15), i * 0.06, rand(-0.15, 0.15)); g.add(m); }
     else g.add(new THREE.Mesh(vialGeo, vialM));
     const d = Object.assign({ kind, g, vel: v(rand(-2.2, 2.2), rand(3, 5), rand(-2.2, 2.2)), rest: false, t: 0, zone: ZONE }, o);
@@ -4193,8 +4744,8 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
       const dx = p.x - P.pos.x, dz = p.z - P.pos.z, dd = Math.hypot(dx, dz);
       if (P.alive && d.t > 0.5 && Math.abs(p.y - P.pos.y) < 2.5 && dd < (d.kind === 'item' ? 2.6 : 4)) {
         if (d.kind === 'gold') { R.gold += d.amt; feed(`+${d.amt} thrones`); sfx('bring', 0.25, 2.2); d.gone = true; }
-        else if (d.kind === 'ung') { if (R.ung < 6) { R.ung++; feed('Sacred unguent', 'rar1'); d.gone = true; } }
-        else if (R.bag.length < 24) { R.bag.push(d.item); feed(d.item.name, 'rar' + d.item.rar); sfx('bdraw', 0.5, 1.3); d.gone = true; }
+        else if (d.kind === 'ung') { if (R.ung < ST.ungMax) { R.ung++; feed('Sacred unguent', 'rar1'); d.gone = true; } }
+        else if (R.bag.length < BAGMAX) { R.bag.push(d.item); feed(`${d.item.name} · ${d.item.pw}${d.item.pw > (R.eq[d.item.slot] ? R.eq[d.item.slot].pw : 0) ? ' ▲' : ''}`, 'rar' + d.item.rar); sfx('bdraw', 0.5, 1.3); if (d.item.rar === 4) { banner(d.item.name, 'Artificer wargear'); SYN.horn(); } d.gone = true; }
         else if (!d.warned) { d.warned = true; feed('Your pack is full (I to make room)'); }
       }
       if (d.t > 300) d.gone = true;
@@ -4203,32 +4754,67 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     for (let i = DROPS.length - 1; i >= 0; i--) if (DROPS[i].gone) DROPS.splice(i, 1);
   }
   function clearDrops() { for (const d of DROPS) scene.remove(d.g); DROPS.length = 0; }
-  function lootBurst(at, lvl, items, minRar, gold) {
-    for (let i = 0; i < items; i++) dropItem(at, makeItem(pick(SLOTS), lvl, rollRar(i === 0 ? minRar : Math.max(0, minRar - 1))));
+  const BAGMAX = 30;
+  // drops lean toward your weakest slot, so your Power doesn't stall on one piece that never drops
+  function dropSlot() { if (Math.random() < 0.45) { let lo = SLOTS[0]; for (const k of SLOTS) if ((R.eq[k] ? R.eq[k].pw : 0) < (R.eq[lo] ? R.eq[lo].pw : 0)) lo = k; return lo; } return pick(SLOTS); }
+  // kind: 'world' (up to the soft cap), 'powerful' or 'pinnacle' (past it); the first piece is at least minRar
+  function lootBurst(at, kind, items, minRar, gold) {
+    for (let i = 0; i < items; i++) dropItem(at, makeItem(dropSlot(), dropPw(i === 0 ? kind : 'world'), rollRar(i === 0 ? minRar : Math.max(0, minRar - 1))));
     if (gold) drop('gold', at, { amt: Math.round(gold * ST.gold) });
   }
-  const areaLvl = (x, z) => { if (ZONE === 'dungeon') return DUN.def.lvl; const [s, f, h] = W.zones(x, z); return Math.round(1.5 * s + 4 * f + 6.5 * h); };
-  // kills: experience, a chance of loot, and the encounter's tally
+  // the Reach rises with you: no foe out there falls more than four levels behind, so every part of it still pays
+  const riseLvl = base => Math.max(base, R.lvl - 4);
+  const areaLvl = (x, z) => { if (ZONE === 'dungeon') return DUN.lvl; const [s, f, h] = W.zones(x, z); return riseLvl(Math.round(2 * s + 9 * f + 16 * h)); };
+  // kills: experience, a chance of loot and materials, perk and ability triggers, and the encounter's tally
   function onKill(e, at) {
     R.kills++;
     gainXP(e.xp, at);
-    const L = e.lvl;
+    const L = e.lvl, src = e.lastSrc;
     if (Math.random() < (e.boss ? 1 : e.D.mass > 1 ? 0.8 : 0.45)) drop('gold', at, { amt: Math.round(rand(2, 5) * L * (e.boss ? 6 : e.D.mass > 1 ? 3 : 1) * ST.gold) });
     const ic = e.boss ? 1 : { ghoul: 0.06, leaper: 0.08, gunner: 0.12, brute: 0.4, champion: 1 }[e.type];
-    if (Math.random() < ic) dropItem(at, makeItem(pick(SLOTS), L, rollRar(e.boss ? 2 : 0)));
-    if (e.boss) dropItem(at, makeItem(pick(SLOTS), L, rollRar(1)));
+    if (Math.random() < ic) dropItem(at, makeItem(dropSlot(), dropPw('world'), rollRar(e.boss ? 2 : 0)));
+    if (e.boss) dropItem(at, makeItem(dropSlot(), dropPw('powerful'), rollRar(1)));
+    if (e.boss || (e.D.mass > 1 && Math.random() < 0.3)) gainMat('adam', e.boss ? 2 : 1);
+    if (e.boss && Math.random() < 0.35) gainMat('oil', 1);
+    if (e.boss) cosDrop(e.wardFoe ? 0.6 : 0.12);
+    if (e.wardFoe) wardSlain(e, at);
     if (Math.random() < 0.08) drop('ung', at, {});
+    perkKill(e, src);
+    ABIL.onKill(e, src);
+    AB.sup = Math.min(1, AB.sup + (e.boss ? 0.12 : e.D.mass > 1 ? 0.04 : 0.015) * (exoOn('eadric') ? 1.4 : 1));
     const E = e.pack;
     if (E && E.left) { const i = E.left.indexOf(e.slot); if (i >= 0) E.left.splice(i, 1); if (!E.left.length && E.state === 'active') clearEnc(E); }
   }
+  // what kills set off in the perks you wear and the subclass's discipline row
+  function perkKill(e, src) {
+    const ws = wslot(src), pb = subPick('perkB');
+    if (ws && perkIn(ws, 'rampage')) { PKS.ramp[ws] = Math.min(3, PKS.ramp[ws] + 1); PKS.rampT[ws] = 6; }
+    if (ws === 'pistol') {
+      if (perkIn('pistol', 'killclip')) PKS.kcArm = true;
+      if (perkIn('pistol', 'feeding')) PKS.feed = true;
+      if (perkIn('pistol', 'subsist')) GUN.ammo = Math.min(GUN.mag, GUN.ammo + 2);
+      if (exoOn('sunforge')) PKS.sun = true;
+      if (pb === 'firebrand') AB.gren = Math.min(1, AB.gren + 0.1);
+    }
+    if (ws === 'blade' && pb === 'conduit') AB.gren = Math.min(1, AB.gren + 0.1);
+    if (src === 'exec') { if (perkIn('blade', 'executioner')) AB.melee = 1; if (pb === 'hymn') AB.sup = Math.min(1, AB.sup + 0.1); }
+    if (src === 'grenade') { if (perkOn('grenadier')) AB.gren = Math.min(1, AB.gren + 0.3); if (pb === 'abjure') AB.melee = Math.min(1, AB.melee + 0.25); }
+    if (src === 'ability') { if (perkOn('brawler')) heal(0.2); if (pb === 'transfusion') heal(0.2); }
+    if (src === 'super' && pb === 'phoenix') heal(0.15);
+    if (exoOn('castellan')) heal(0.08);
+  }
+  const heal = f => { if (P.alive) P.hp = Math.min(P.maxHp, P.hp + P.maxHp * f); };
   function gainXP(n, at) {
     if (R.lvl >= MAXLVL) return;
     n = Math.round(n * ST.xp); R.xp += n;
     if (at) num(at.clone().setY(at.y + 0.6), `+${n} xp`, 'xp');
     while (R.lvl < MAXLVL && R.xp >= xpNext(R.lvl)) {
-      R.xp -= xpNext(R.lvl); R.lvl++; R.pts++;
+      R.xp -= xpNext(R.lvl); R.lvl++;
       calcStats(); P.hp = P.maxHp;
-      banner(`Level ${R.lvl}`, 'An oath to swear: press I'); SYN.horn(); feed(`Level ${R.lvl}: +1 oath point`, 'xp');
+      const opened = Object.keys(SUBS).find(k => SUBS[k].lvl === R.lvl);
+      if (opened) { banner(`Level ${R.lvl}`, `The ${SUBS[opened].name} path is open: press I`); feed(`${SUBS[opened].name} unlocked`, 'rar3'); }
+      else banner(`Level ${R.lvl}`, 'A subclass point to spend: press I');
+      SYN.horn(); feed(`Level ${R.lvl}: Power cap ${softCap()}, +1 subclass point`, 'xp');
       genStock(); saveGame();
     }
   }
@@ -4248,9 +4834,10 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     R.opened[c.id] = true; c.beam.visible = false; c.mesh.rotation.z = 0.04;
     const lvl = Math.max(areaLvl(c.x, c.z), R.lvl), at = v(c.x, c.y + 1.2, c.z);
     SYN.clang(); sfx('bdraw', 0.8, 0.8); flash(at, 0xe0b24a, 3, 0.4);
-    if (c.tier >= 3) lootBurst(at, lvl + 1, 2, 2, 60 * lvl);
-    else if (c.tier === 2) lootBurst(at, lvl, 2, 1, 35 * lvl);
-    else lootBurst(at, lvl, 1, 1, 20 * lvl);
+    // dungeon reliquaries the first time each week hold a pinnacle piece; war chests a powerful one
+    if (c.tier >= 3) { lootBurst(at, 'pinnacle', 2, 3, 60 * lvl); gainMat('adam', 3); gainMat('oil', 1); cosDrop(0.3); }
+    else if (c.tier === 2) { lootBurst(at, 'powerful', 2, 1, 35 * lvl); gainMat('adam', 2); cosDrop(0.12); }
+    else { lootBurst(at, 'world', 1, 1, 20 * lvl); gainMat('adam', 1); }
     if (Math.random() < 0.5) drop('ung', at, {});
     if (c.unique) dropItem(at, c.unique);
     gainXP(15 + 5 * lvl); feed('Reliquary opened', 'xp');
@@ -4761,26 +5348,20 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     for (const [label, fn, dis] of opts) box.appendChild(btn(label, fn, dis));
     if (G.ui !== 'talk') openUI('talk');
   }
-  // the forge: the Techmarine raises a piece of wargear to a higher item level for thrones
-  const reforgeCost = it => Math.round(40 + it.val * 0.7);
-  function reforge(it) {
-    const cost = reforgeCost(it); if (R.gold < cost || it.lvl >= Math.min(MAXLVL, R.lvl + 2)) { SYN.deny(); return; }
-    R.gold -= cost; const old = it.lvl, nl = Math.min(MAXLVL, R.lvl + 2, it.lvl + 2), k = (nl * (1 + it.rar * 0.35)) / (old * (1 + it.rar * 0.35));
-    for (const key of Object.keys(it.st)) it.st[key] = Math.max(it.st[key] + 1, Math.round(it.st[key] * k));
-    it.lvl = nl; it.val = Math.round(it.val * k); calcStats(); SYN.clang(); sparks(v(P.pos.x, P.pos.y + 1.2, P.pos.z), 20, [1, 0.7, 0.3, 1], 4);
-    feed(`${it.name} reforged to item level ${nl}`, 'xp'); saveGame();
-  }
+  // the forge: the Techmarine masterworks Relic and Artificer pieces and trades adamantium; infusion is done on the character screen
+  const ADAM_PRICE = 60;
   const STATION_TALK = {
     tech(n) {
-      const list = SLOTS.map(s => R.eq[s]).filter(Boolean), cap_ = Math.min(MAXLVL, R.lvl + 2);
-      talkBox(n, list.length ? `Your wargear, brother. I can raise any piece to item level ${cap_} at most, two levels at a time. The machine spirits ask a tithe in thrones.` : 'Bring me wargear worth the reforging, brother. Equip it first.',
-        [...list.map(it => [`Reforge ${esc(it.name)} <b>${it.lvl} → ${Math.min(cap_, it.lvl + 2)}</b> · ${reforgeCost(it)}`, () => { reforge(it); STATION_TALK.tech(n); }, it.lvl >= cap_ || R.gold < reforgeCost(it)]),
-         ['Open the armoury', () => { closeUI(true); openUI('build'); }], ['Leave', () => closeUI()]]);
+      const list = SLOTS.map(s => R.eq[s]).filter(it => it && canMw(it)), cost = `${MW_COST.gold} thrones, ${MW_COST.adam} adamantium, ${MW_COST.oil} blessed oil`;
+      talkBox(n, `The forge is lit, brother. Feed a stronger piece into one you favour and it takes the stronger's Power: do that from your wargear screen. Relic and Artificer pieces I can masterwork, for ${cost}. You carry ${R.mat.adam || 0} adamantium and ${R.mat.oil || 0} blessed oil.`,
+        [...list.map(it => [`Masterwork ${esc(it.name)}`, () => { masterwork(it); STATION_TALK.tech(n); }, R.gold < MW_COST.gold || (R.mat.adam || 0) < MW_COST.adam || (R.mat.oil || 0) < MW_COST.oil]),
+         [`Buy adamantium <b>${ADAM_PRICE}</b>`, () => { R.gold -= ADAM_PRICE; gainMat('adam', 1); STATION_TALK.tech(n); }, R.gold < ADAM_PRICE],
+         ['Open your wargear', () => { closeUI(true); openUI('build'); }], ['Leave', () => closeUI()]]);
     },
     apoth(n) {
       talkBox(n, P.hp < P.maxHp ? 'You bleed on my floor, brother. Sit. This will not take long.' : 'Whole and hale. Carry unguents, brother: the Reach will open you again.',
         [['Tend my wounds', () => { P.hp = P.maxHp; P.healT = 0; num(v(P.pos.x, P.pos.y + 2.2, P.pos.z), 'Healed', 'heal'); STATION_TALK.apoth(n); }, P.hp >= P.maxHp],
-         [`Sacred unguent <b>25</b> (you carry ${R.ung} of 6)`, () => { R.gold -= 25; R.ung++; STATION_TALK.apoth(n); }, R.gold < 25 || R.ung >= 6], ['Leave', () => closeUI()]]);
+         [`Sacred unguent <b>25</b> (you carry ${R.ung} of ${ST.ungMax})`, () => { R.gold -= 25; R.ung++; STATION_TALK.apoth(n); }, R.gold < 25 || R.ung >= ST.ungMax], ['Leave', () => closeUI()]]);
     },
     chaplain(n) {
       talkBox(n, G.buffT > 0 ? 'The Litany still burns in you, brother. Go and use it.' : 'Kneel, brother. Hear the Litany of Hate, and carry it into the Reach. Their blood will answer it.',
@@ -5070,8 +5651,8 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     tracer(mz, hp); flash(mz, 0xffa040, 2, 0.04);
     if (FLY.gunI % 2) sfx('shot_g', 0.5, rand(0.95, 1.1), 0, 0, 0.3);
     if (a.hit) { sparks(hp, 6, [1, 0.6, 0.25, 1], 5, 0.25); if (FLY.gunI % 3 === 0) dust(hp, 3, 0.6, [0.3, 0.25, 0.2, 0.6]); }
-    if (a.e) strike(a.e, 22, d.clone().setY(0).normalize(), 1.5, 'bolt');
-    for (const e of ENEMIES) if (e.alive && e !== a.e && e.state !== 'execd' && Math.hypot(e.pos.x - hp.x, e.pos.z - hp.z) < 1.4 && Math.abs(e.pos.y + 1 - hp.y) < 2) strike(e, 8, d.clone().setY(0).normalize(), 1, 'bolt');
+    if (a.e) strike(a.e, 22, d.clone().setY(0).normalize(), 1.5, 'hawk');
+    for (const e of ENEMIES) if (e.alive && e !== a.e && e.state !== 'execd' && Math.hypot(e.pos.x - hp.x, e.pos.z - hp.z) < 1.4 && Math.abs(e.pos.y + 1 - hp.y) < 2) strike(e, 8, d.clone().setY(0).normalize(), 1, 'hawk');
   }
   function hawkCannon() {
     if (!FLY.on || FLY.landed || FLY.canCd > 0) return;
@@ -5082,7 +5663,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     const hp = a.at;
     if (a.hit) {
       sparks(hp, 50, [1, 0.6, 0.25, 1], 12, 0.6); dust(hp, 40, 3, [0.3, 0.25, 0.2, 0.7]); flash(hp, 0xff8a30, 14, 0.3); shock(hp, 9, 0xff8a30); SYN.boom(hp); SYN.slam(hp, 1);
-      for (const e of ENEMIES) { if (!e.alive || e.state === 'execd') continue; const dd = Math.hypot(e.pos.x - hp.x, e.pos.z - hp.z); if (dd < 7 && Math.abs(e.pos.y - hp.y) < 5) strike(e, Math.round(lerp(260, 60, dd / 7)), v(e.pos.x - hp.x, 0, e.pos.z - hp.z).normalize(), 12 * (1 - dd / 8), 'bolt'); }
+      for (const e of ENEMIES) { if (!e.alive || e.state === 'execd') continue; const dd = Math.hypot(e.pos.x - hp.x, e.pos.z - hp.z); if (dd < 7 && Math.abs(e.pos.y - hp.y) < 5) strike(e, Math.round(lerp(260, 60, dd / 7)), v(e.pos.x - hp.x, 0, e.pos.z - hp.z).normalize(), 12 * (1 - dd / 8), 'hawk'); }
     }
   }
   function hawkLand() {
@@ -5113,16 +5694,16 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   // ================================================================ the crusade: five quests, given by the Castellan, then by vox as each is done
   const VOX = 'Brother-Castellan Aldric';
   const QUESTS = [
-    { name: 'The Pilgrims’ Plea', text: 'Clear the dead from the pilgrim camp on the western fields.', xp: 120, gold: 60, done: () => R.cleared.pilgrim, target: () => encAt('pilgrim'),
+    { name: 'The Pilgrims’ Plea', text: 'Clear the dead from the pilgrim camp on the western fields.', xp: 300, gold: 60, done: () => R.cleared.pilgrim, target: () => encAt('pilgrim'),
       talk: 'The pilgrims’ camp lies west of here, on the fields below the chapels. The dead from the chapel yards overran it in the night. Put them back in the ground.' },
-    { name: 'The Broken Line', text: 'Retake three of the Imperial camps behind the southern trenches.', xp: 400, gold: 150, prog: () => [ENC.filter(E => E.kind === 'imperial' && R.cleared[E.id]).length, campsNeeded()], done: () => ENC.filter(E => E.kind === 'imperial' && R.cleared[E.id]).length >= campsNeeded(),
+    { name: 'The Broken Line', text: 'Retake three of the Imperial camps behind the southern trenches.', xp: 1200, gold: 150, prog: () => [ENC.filter(E => E.kind === 'imperial' && R.cleared[E.id]).length, campsNeeded()], done: () => ENC.filter(E => E.kind === 'imperial' && R.cleared[E.id]).length >= campsNeeded(),
       target: () => nearestEnc(E => E.kind === 'imperial' && !R.cleared[E.id]),
       talk: 'The heretics hold our camps along the southern trenches. Take back three of them and the Guard can hold the line again. Each one you free becomes a shrine you can return to.' },
-    { name: 'The Ash Pit', text: 'Enter the Ash Pit north of the trenches and kill the Pit-Master.', xp: 600, gold: 250, done: () => R.cleared['dun:pit'], target: () => W.GATES.pit,
+    { name: 'The Ash Pit', text: 'Enter the Ash Pit north of the trenches and kill the Pit-Master.', xp: 2000, gold: 250, done: () => R.cleared['dun:pit'], target: () => W.GATES.pit,
       talk: 'The raiders feed their prisoners to a fighting pit beyond the northern trenches. Its master keeps the war-bands in thrall. Go down into the Ash Pit and end him.' },
-    { name: 'The Burning Street', text: 'Enter the Burning Street in the dead hive and kill Hask the Burner.', xp: 900, gold: 350, done: () => R.cleared['dun:hive'], target: () => W.GATES.hive,
+    { name: 'The Burning Street', text: 'Enter the Burning Street in the dead hive and kill Hask the Burner.', xp: 3500, gold: 350, done: () => R.cleared['dun:hive'], target: () => W.GATES.hive,
       talk: 'Hask the Burner has fortified a street in the dead hive and sets the hab-blocks alight to hold it. Take the street from him.' },
-    { name: 'The Fallen Spire', text: 'Enter the Fallen Spire and slay Vorgath, Champion of Ruin.', xp: 1500, gold: 600, done: () => R.cleared['dun:nave'], target: () => W.GATES.nave,
+    { name: 'The Fallen Spire', text: 'Enter the Fallen Spire and slay Vorgath, Champion of Ruin.', xp: 6000, gold: 600, done: () => R.cleared['dun:nave'], target: () => W.GATES.nave,
       talk: 'The war-bands answer to one master: Vorgath, a Champion of Ruin, who has made the nave of the Fallen Spire his throne room. Go into the Spire, brother, and bring me his head.' }
   ];
   const VOXLINES = ['The pilgrims are safe, brother. Now the front: the heretics hold our camps behind the southern trenches. Take back three.',
@@ -5142,7 +5723,8 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     let q;
     while ((q = curQuest()) && q.done()) {
       gainXP(q.xp); R.gold += q.gold; feed(`${q.name}: complete  +${q.gold} thrones`, 'xp');
-      if (R.quest === 4) dropItem(v(P.pos.x, P.pos.y + 1.5, P.pos.z), makeItem('relic', Math.max(R.lvl, 8), 3, 'Rosarius of the Reach'));
+      if (R.quest === 4) dropItem(v(P.pos.x, P.pos.y + 1.5, P.pos.z), makeItem('relic', dropPw('pinnacle'), 4, null, null, 'rosarius'));
+      else dropItem(v(P.pos.x, P.pos.y + 1.5, P.pos.z), makeItem(dropSlot(), dropPw('powerful'), 2));
       vox(VOX, VOXLINES[R.quest]); R.quest++;
       saveGame();
     }
@@ -5156,18 +5738,22 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   function buildEncounters() {
     let k = 0; const NAMES = ['Camp Varro', 'Camp Tessaly', 'Camp Orsk', 'Camp Hadrin'];
     for (const c of W.CAMPS) {
-      if (c.kind === 'pilgrim') ENC.push({ id: 'pilgrim', kind: 'pilgrim', name: 'The pilgrim camp', x: c.x, z: c.z, r: 13, lvl: 1, comp: comp(['ghoul', 5]), chest: 1, wp: true, bonus: 40 });
-      else if (c.kind === 'imperial') { const lvl = [2, 3, 3, 4][k] || 3; ENC.push({ id: 'imp' + k, kind: 'imperial', name: NAMES[k] || 'Imperial camp', x: c.x, z: c.z, r: 14, lvl, comp: comp(['ghoul', 3], ['gunner', 2], ['leaper', lvl >= 3 ? 1 : 0], ['brute', lvl >= 4 ? 1 : 0]), chest: 1, wp: true, bonus: 60 + 20 * lvl }); k++; }
-      else ENC.push({ id: 'raid' + ENC.filter(E => E.kind === 'raider').length, kind: 'raider', name: 'The raider camp', x: c.x, z: c.z, r: 14, lvl: 6, comp: comp(['ghoul', 3], ['gunner', 2], ['leaper', 2], ['brute', 1]), chest: 2, bonus: 200 });
+      if (c.kind === 'pilgrim') ENC.push({ id: 'pilgrim', kind: 'pilgrim', name: 'The pilgrim camp', x: c.x, z: c.z, r: 13, lvl: 1, comp: comp(['ghoul', 5]), chest: 1, wp: true, bonus: 60 });
+      else if (c.kind === 'imperial') { const lvl = [3, 5, 6, 8][k] || 5; ENC.push({ id: 'imp' + k, kind: 'imperial', name: NAMES[k] || 'Imperial camp', x: c.x, z: c.z, r: 14, lvl, comp: comp(['ghoul', 3], ['gunner', 2], ['leaper', lvl >= 5 ? 1 : 0], ['brute', lvl >= 6 ? 1 : 0]), chest: lvl >= 6 ? 2 : 1, wp: true, bonus: 60 + 40 * lvl }); k++; }
+      else ENC.push({ id: 'raid' + ENC.filter(E => E.kind === 'raider').length, kind: 'raider', name: 'The raider camp', x: c.x, z: c.z, r: 14, lvl: 14, comp: comp(['ghoul', 3], ['gunner', 2], ['leaper', 2], ['brute', 1]), chest: 2, bonus: 600 });
     }
-    W.GRAVES.forEach((g, i) => ENC.push({ id: 'grave' + i, kind: 'grave', name: 'The restless dead', x: g.x, z: g.z, r: 9, lvl: i === 0 ? 1 : 2, comp: comp(['ghoul', i === 0 ? 3 : 4]), respawn: true }));
-    for (const [li, i] of [[2, 8], [2, 34], [3, 18], [3, 46]]) { const L = W.TRENCH[li]; if (!L || !L[i]) continue; ENC.push({ id: `post${li}_${i}`, kind: 'post', name: 'A heretic trench post', x: L[i][0], z: L[i][1], r: 8, lvl: 4, comp: comp(['gunner', 2], ['ghoul', 2]), respawn: true }); }
-    for (const [i, a] of [[4, 0.5], [6, 0.5], [8, 0.5]]) { const [ax, az] = W.ROAD[i], [bx, bz] = W.ROAD[i + 1]; ENC.push({ id: 'amb' + i, kind: 'ambush', name: 'An ambush', x: lerp(ax, bx, a) + 14, z: lerp(az, bz, a), r: 9, lvl: 3, comp: comp(['ghoul', 3], ['leaper', 1]), respawn: true }); }
+    W.GRAVES.forEach((g, i) => ENC.push({ id: 'grave' + i, kind: 'grave', name: 'The restless dead', x: g.x, z: g.z, r: 9, lvl: i === 0 ? 1 : 3, comp: comp(['ghoul', i === 0 ? 3 : 4]), respawn: true }));
+    for (const [li, i] of [[2, 8], [2, 34], [3, 18], [3, 46]]) { const L = W.TRENCH[li]; if (!L || !L[i]) continue; ENC.push({ id: `post${li}_${i}`, kind: 'post', name: 'A heretic trench post', x: L[i][0], z: L[i][1], r: 8, lvl: 9, comp: comp(['gunner', 2], ['ghoul', 2]), respawn: true }); }
+    for (const [i, a] of [[4, 0.5], [6, 0.5], [8, 0.5]]) { const [ax, az] = W.ROAD[i], [bx, bz] = W.ROAD[i + 1]; ENC.push({ id: 'amb' + i, kind: 'ambush', name: 'An ambush', x: lerp(ax, bx, a) + 14, z: lerp(az, bz, a), r: 9, lvl: 6, comp: comp(['ghoul', 3], ['leaper', 1]), respawn: true }); }
     [[-120, -380], [130, -450], [-60, -560], [220, -320], [40, -660]].forEach(([tx, tz], i) => {
       const s = W.site(tx, tz, 8, (x, z) => W.zones(x, z)[2] > 0.5 && W.cityF(x, z) < 0.7 && W.H(x, z) > W.WATER_Y + 1) || { x: tx, z: tz };
-      ENC.push({ id: 'hive' + i, kind: 'hive', name: 'A hive pack', x: s.x, z: s.z, r: 10, lvl: 6 + (i % 2), comp: comp(['leaper', 2], ['ghoul', 3], ['gunner', 1]), respawn: true }); });
+      ENC.push({ id: 'hive' + i, kind: 'hive', name: 'A hive pack', x: s.x, z: s.z, r: 10, lvl: [12, 13, 16, 12, 18][i], comp: comp(['leaper', 2], ['ghoul', 3], ['gunner', 1]), respawn: true }); });
     { const s = W.site(420, -10, 12, (x, z) => W.zones(x, z)[1] > 0.6 && W.H(x, z) > W.WATER_Y + 1) || { x: 420, z: -10 };
-      ENC.push({ id: 'skarn', kind: 'warband', name: 'Skarn’s warband', x: s.x, z: s.z, r: 10, lvl: 5, comp: [{ type: 'brute', boss: true, name: 'Skarn the Flayer' }, 'ghoul', 'ghoul', 'gunner'], bonus: 250 }); }
+      ENC.push({ id: 'skarn', kind: 'warband', name: 'Skarn’s warband', x: s.x, z: s.z, r: 10, lvl: 11, comp: [{ type: 'brute', boss: true, name: 'Skarn the Flayer' }, 'ghoul', 'ghoul', 'gunner'], bonus: 900 }); }
+    for (const [id, tx, tz, zi, c] of WARDS) {
+      const s = W.site(tx, tz, 10, (x, z) => W.zones(x, z)[zi] > 0.7 && W.H(x, z) > W.WATER_Y + 1) || { x: tx, z: tz };
+      ENC.push({ id, kind: 'ward', ward: true, name: c.name, x: s.x, z: s.z, r: 8, lvl: c.pw / 10, comp: [Object.assign({ boss: true, ward: true }, c)], respawn: true, bonus: c.pw * 8 });
+    }
     for (const E of ENC) Object.assign(E, { state: R.cleared[E.id] ? 'cleared' : 'dormant', left: null, t: -1e9 });
   }
   const SPQ = [];         // spawns waiting their turn (building a body takes a moment: two a frame)
@@ -5189,8 +5775,9 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   function clearEnc(E) {
     E.state = 'cleared'; E.t = G.time;
     if (!E.respawn) R.cleared[E.id] = true;
-    if (E.bonus) { gainXP(E.bonus); banner(E.name, E.kind === 'imperial' ? 'Retaken for the Emperor' : 'Cleared'); }
+    if (E.bonus) { gainXP(E.ward ? E.bonus : E.bonus * Math.max(1, (riseLvl(E.lvl) / E.lvl))); banner(E.name, E.kind === 'imperial' ? 'Retaken for the Emperor' : 'Cleared'); }
     else feed(`${E.name}: cleared`);
+    if (!E.ward) weekStep('enc');
     if (E.chest) spawnWarChest(E);
     if (E.wp) feed(`${E.name} is now a shrine you can travel to (M)`, 'xp');
     checkQuests(); saveGame();
@@ -5203,17 +5790,62 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   function updateEncounters(dt) {
     for (let n = 0; n < 2 && SPQ.length; n++) {
       const s = SPQ.shift(), c = s.c;
-      const e = spawnEnemy(c.type, s.x, s.z, { lvl: s.E.lvl, pack: s.E, boss: c.boss, name: c.name });
+      const e = spawnEnemy(c.type, s.x, s.z, { lvl: s.E.ward ? s.E.lvl : riseLvl(s.E.lvl), pack: s.E, boss: c.boss, name: c.name, pw: c.pw, sc: c.sc, hpK: c.hpK, ward: c.ward });
+      if (c.ward) { e.wardFoe = s.E; e.seal = c.seal || null; addWard(e); }
       e.slot = c;
       if (s.E.left !== null && G.hunted && s.E.state === 'active' && ENEMIES.some(o => o.pack === s.E && o.aggro)) { e.aggro = true; e.state = 'chase'; }
     }
     G.encT = (G.encT || 0) - dt; if (G.encT > 0) return; G.encT = 0.5;
     for (const E of ENC) {
       const d = Math.hypot(E.x - P.pos.x, E.z - P.pos.z);
-      if (E.state === 'cleared') { if (E.respawn && G.time - E.t > 240 && d > 150) { E.state = 'dormant'; E.left = null; } continue; }
+      if (E.state === 'cleared') { if (E.respawn && G.time - E.t > (E.ward ? 900 : 240) && d > 150) { E.state = 'dormant'; E.left = null; } continue; }
       if (E.state === 'dormant' && d < 130) activate(E);
       else if (E.state === 'active' && d > 240 && !ENEMIES.some(e => e.pack === E && e.aggro)) deactivate(E);
     }
+  }
+
+  // ================================================================ warded foes: named champions far above the Reach, behind a ward that holds until your Power is within 50 of theirs
+  // (Vorlakh's also holds until the Fallen Spire is cleared). The first kill of each drops an Artificer piece; every kill a pinnacle one.
+  const WARDS = [
+    ['saint', -470, 640, 0, { type: 'champion', name: 'The Hollow Saint', pw: 250, sc: 1.1, hpK: 1.4 }],
+    ['skarr', -540, 30, 1, { type: 'brute', name: 'Warlord Skarr the Unbroken', pw: 350, sc: 1.5, hpK: 1.6 }],
+    ['vorlakh', 260, -690, 2, { type: 'champion', name: 'Vorlakh the Daemon Prince', pw: 500, sc: 1.7, hpK: 1.6, seal: () => !!R.cleared['dun:nave'] }],
+  ];
+  const wardGeo = new THREE.SphereGeometry(1, 24, 14);
+  function addWard(e) {
+    const m = new THREE.Mesh(wardGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(0x9a6cff).convertSRGBToLinear(), transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    m.scale.setScalar(e.D.lockY * 1.35); m.position.y = e.D.lockY * 0.85; m.renderOrder = 5; e.J.root.add(m); e.wardM = m; e.wardWas = true;
+  }
+  function wardTick(dt) {
+    for (const e of ENEMIES) {
+      if (!e.wardM) continue;
+      const on = e.alive && immune(e); e.wardM.visible = on;
+      if (on) { e.wardT = Math.max(0, (e.wardT || 0) - dt); e.wardM.material.opacity = 0.16 + 0.05 * Math.sin(G.time * 3) + e.wardT * 0.5; e.wardM.rotation.y += dt * 0.4; }
+      if (e.alive && e.wardWas && !on) { feed(`${e.name}: the ward falters`, 'rar3'); flash(eUp(e, e.ly), 0x9a6cff, 6, 0.4); }
+      e.wardWas = on;
+    }
+  }
+  // an Artificer piece you don't own yet, if there is one
+  function newExo() { const own = new Set([...SLOTS.map(k => R.eq[k]), ...R.bag].filter(Boolean).map(it => it.exo)); const L = Object.keys(EXO).filter(k => !own.has(k)); return pick(L.length ? L : Object.keys(EXO)); }
+  function wardSlain(e, at) {
+    const id = e.wardFoe.id; R.wards = R.wards || {};
+    if (!R.wards[id]) { R.wards[id] = 1; dropItem(at, makeItem(null, dropPw('pinnacle'), 4, null, null, newExo())); banner(e.name, 'Slain. Artificer wargear falls'); }
+    dropItem(at, makeItem(dropSlot(), dropPw('pinnacle'), rollRar(3)));
+    gainMat('adam', 4); gainMat('oil', 2); weekStep('ward');
+  }
+
+  // ================================================================ the weekly crusade: three tasks, each worth a pinnacle piece, renewed every Tuesday at 17:00 UTC (Destiny's reset)
+  const WEEK = [['ward', 'Slay a warded foe', 1], ['dun', 'Clear a dungeon', 1], ['enc', 'Clear five camps, posts or packs', 5]];
+  const weekNo = () => Math.floor((Date.now() - Date.UTC(2026, 0, 6, 17)) / 6048e5);
+  function weekCheck() { if (!R.week || R.week.n !== weekNo()) R.week = { n: weekNo(), p: {}, done: {} }; }
+  const weekDone = k => { weekCheck(); return !!R.week.done[k]; };
+  // quiet: the reward came another way (a dungeon's weekly reliquary)
+  function weekStep(k, quiet) {
+    weekCheck(); if (R.week.done[k]) return;
+    const t = WEEK.find(w => w[0] === k); R.week.p[k] = (R.week.p[k] || 0) + 1;
+    if (R.week.p[k] < t[2]) { feed(`Weekly crusade: ${t[1]} ${R.week.p[k]} / ${t[2]}`); return; }
+    R.week.done[k] = 1; feed(`Weekly crusade done: ${t[1]}`, 'rar3');
+    if (!quiet) { dropItem(v(P.pos.x, P.pos.y + 1.5, P.pos.z), makeItem(dropSlot(), dropPw('pinnacle'), rollRar(2))); SYN.horn(); }
   }
 
   // ================================================================ waypoints: the monastery, freed camps and every dungeon gate found; travel from the map
@@ -5238,14 +5870,15 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
 
   // ================================================================ dungeons: the arenas, entered through gates in the region, four waves and a named master
   const DUNS = {
-    pit: { name: 'The Ash Pit', arena: 'pit', lvl: 3, waves: [comp(['ghoul', 6]), comp(['ghoul', 5], ['gunner', 2]), comp(['ghoul', 4], ['leaper', 2], ['gunner', 1]), [{ type: 'brute', boss: true, name: 'The Pit-Master' }, ...comp(['ghoul', 3])]] },
-    hive: { name: 'The Burning Street', arena: 'hive', lvl: 5, waves: [comp(['ghoul', 6], ['gunner', 1]), comp(['gunner', 3], ['leaper', 2]), comp(['brute', 1], ['ghoul', 4]), [{ type: 'gunner', boss: true, name: 'Hask the Burner' }, ...comp(['gunner', 2], ['ghoul', 2])]] },
-    nave: { name: 'The Fallen Spire', arena: 'nave', lvl: 7, waves: [comp(['ghoul', 8], ['leaper', 2]), comp(['gunner', 3], ['brute', 1], ['ghoul', 3]), comp(['brute', 2], ['leaper', 3]), [{ type: 'champion', boss: true, name: 'Vorgath, Champion of Ruin' }]] }
+    pit: { name: 'The Ash Pit', arena: 'pit', lvl: 5, waves: [comp(['ghoul', 6]), comp(['ghoul', 5], ['gunner', 2]), comp(['ghoul', 4], ['leaper', 2], ['gunner', 1]), [{ type: 'brute', boss: true, name: 'The Pit-Master' }, ...comp(['ghoul', 3])]] },
+    hive: { name: 'The Burning Street', arena: 'hive', lvl: 11, waves: [comp(['ghoul', 6], ['gunner', 1]), comp(['gunner', 3], ['leaper', 2]), comp(['brute', 1], ['ghoul', 4]), [{ type: 'gunner', boss: true, name: 'Hask the Burner' }, ...comp(['gunner', 2], ['ghoul', 2])]] },
+    nave: { name: 'The Fallen Spire', arena: 'nave', lvl: 17, waves: [comp(['ghoul', 8], ['leaper', 2]), comp(['gunner', 3], ['brute', 1], ['ghoul', 3]), comp(['brute', 2], ['leaper', 3]), [{ type: 'champion', boss: true, name: 'Vorgath, Champion of Ruin' }]] }
   };
+  const dunLvl = id => Math.max(DUNS[id].lvl, R.lvl - 2);
   function clearEnemies() {
     for (const e of ENEMIES) removeEnemy(e); ENEMIES = []; SPQ.length = 0;
     for (const b of BOLTS) scene.remove(b.m); BOLTS.length = 0;
-    clearDrops(); endCombo(); C.cam = 0;
+    clearDrops(); endCombo(); C.cam = 0; ABIL.reset();
   }
   function fadeTo(fn) {
     G.fading = true; $('fade').classList.add('on');
@@ -5257,9 +5890,9 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
       clearEnemies();
       ZONE = 'dungeon'; W.root.visible = false; DG.visible = true; buildArena(def.arena);
       cam.near = 0.05; cam.far = 900; cam.updateProjectionMatrix();
-      DUN = { id, def, wave: 0, toSpawn: [], spawnT: 0, breakT: 2.5, done: false, chest: null, first: !R.cleared['dun:' + id] };
+      DUN = { id, def, lvl: dunLvl(id), wave: 0, toSpawn: [], spawnT: 0, breakT: 2.5, done: false, chest: null, first: !R.cleared['dun:' + id], weekly: !weekDone('dun') };
       P.pos.set(ARENA.start[0], 0, ARENA.start[1]); P.vel.set(0, 0, 0); P.yaw = 0; P.pitch = 0; jpReset();
-      banner(def.name, `Level ${def.lvl}`); SYN.horn();
+      banner(def.name, `Level ${DUN.lvl} · Power ${ePow(DUN.lvl)}`); SYN.horn();
     });
   }
   function exitDungeon(dead) {
@@ -5289,7 +5922,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
         const order = SPAWNS.map((g, i) => ({ i, s: ((g.x - P.pos.x) * fx + (g.z - P.pos.z) * fz) / g.distanceTo(P.pos) + Math.random() * 0.9 })).sort((a, b) => a.s - b.s);
         const g = SPAWNS[order[0].i], c = DUN.toSpawn.shift();
         const side = rand(-1.5, 1.5), a = Math.atan2(g.z, g.x);
-        const e = spawnEnemy(c.type, g.x - Math.sin(a) * side, g.z + Math.cos(a) * side, { lvl: DUN.def.lvl, boss: c.boss, name: c.name, state: 'enter', yaw: Math.atan2(-g.x, -g.z) });
+        const e = spawnEnemy(c.type, g.x - Math.sin(a) * side, g.z + Math.cos(a) * side, { lvl: DUN.lvl, boss: c.boss, name: c.name, state: 'enter', yaw: Math.atan2(-g.x, -g.z) });
         e.aggro = true;
         DUN.spawnT = c.type === 'champion' ? 3 : c.type === 'brute' ? 1.6 : c.type === 'gunner' || c.type === 'leaper' ? 1.0 : rand(0.35, 0.8);
       }
@@ -5302,23 +5935,37 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     DUN.done = true; R.cleared['dun:' + DUN.id] = true;
     banner(DUN.def.name, 'Cleared. A reliquary waits'); SYN.horn();
     const [sx, sz] = ARENA.start, k = Math.hypot(sx, sz) || 1;
-    const c = addChest('dun:' + DUN.id + ':' + G.time.toFixed(1), sx - sx / k * 7, sz - sz / k * 7, DUN.first ? 3 : 1, arenaRoot, 0);
-    if (DUN.first && DUN.id === 'nave') c.unique = makeItem('blade', 9, 3, 'The Black Sword of Saint Ansgar');
-    DUN.chest = c; gainXP(100 * DUN.def.lvl);
+    const c = addChest('dun:' + DUN.id + ':' + G.time.toFixed(1), sx - sx / k * 7, sz - sz / k * 7, DUN.first || DUN.weekly ? 3 : 2, arenaRoot, 0);
+    if (DUN.first && DUN.id === 'nave') c.unique = makeItem('blade', dropPw('pinnacle'), 4, null, null, 'blacksword');
+    DUN.chest = c; gainXP(200 * DUN.lvl); weekStep('dun', DUN.weekly);
     checkQuests(); saveGame();
   }
 
   // ================================================================ saving: one crusade, kept in this browser
-  const SAVE_KEY = 'templar-reach-save-v1';
+  const SAVE_KEY = 'templar-reach-save-v1';     // the key stays; the record inside is v 2 now (Power), and a v 1 record is carried over
   function saveGame() {
     if (G.state === 'menu' || !W) return;
     const at = ZONE === 'dungeon' && DUN ? (() => { const g = W.GATES[DUN.id]; return [g.at.x, g.at.z, g.ry + PI]; })() : [P.pos.x, P.pos.z, P.yaw];
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, R, at, hp: P.alive ? P.hp : P.maxHp, ammo: GUN.ammo, when: Date.now() })); G.saveT = 0; } catch (_) {}
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 2, R, at, hp: P.alive ? P.hp : P.maxHp, ammo: GUN.ammo, when: Date.now() })); G.saveT = 0; } catch (_) {}
   }
-  function readSave() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return s && s.v === 1 && s.R ? s : null; } catch (_) { return null; } }
+  function readSave() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return s && (s.v === 1 || s.v === 2) && s.R ? migrateSave(s) : null; } catch (_) { return null; } }
+  // a level 1-20 crusade from before Power: its pieces become Power pieces of about the same strength, oath points become subclass points
+  function migrateSave(s) {
+    const r = s.R; if (s.v === 2 && r.v === 2) return s;
+    const f = freshR();
+    for (const k of Object.keys(f)) if (r[k] === undefined) r[k] = f[k];
+    for (const k of SLOTS) r.eq[k] = r.eq[k] ? migrateItem(r.eq[k]) : null;
+    // worn pieces come up to the crusade's level, so an old level 1 jump pack doesn't drag the new Power down
+    for (const it of SLOTS.map(k => r.eq[k])) if (it && it.pw < 10 * r.lvl) { it.pw = 10 * r.lvl; it.lvl = r.lvl; it.val = Math.round(6 + it.pw * 0.4 * (1 + it.rar)); }
+    r.bag = (r.bag || []).map(migrateItem); r.stock = (r.stock || []).map(migrateItem);
+    delete r.oath; delete r.pts; r.v = 2; s.v = 2; s.migrated = true; return s;
+  }
+  // the Templar never walks out with an empty slot: anything missing is issued as a Standard piece at the current soft cap
+  const STARTER = { blade: ['Power sword', 'power'], pistol: ['Heavy bolt pistol', 'bolt'], armour: ['Mark VII plate', 'mk7'], relic: ['Purity seal', ''] };
+  function issueStarters() { for (const [k, [n, kind]] of Object.entries(STARTER)) if (!R.eq[k]) R.eq[k] = makeItem(k, Math.max(10, 10 * R.lvl), 0, n, kind); }
   function genStock() {
     R.stock = []; R.stockLvl = R.lvl;
-    for (let i = 0; i < 6; i++) { const r = Math.random(), it = makeItem(SLOTS[i % 5], R.lvl, r < 0.4 ? 0 : r < 0.82 ? 1 : 2); it.price = it.val * 3; R.stock.push(it); }
+    for (let i = 0; i < 6; i++) { const r = Math.random(), it = makeItem(SLOTS[i % 5], dropPw('world') + randi(0, 4), r < 0.4 ? 1 : r < 0.85 ? 2 : 3); it.price = it.val * 3; R.stock.push(it); }
   }
 
   // ================================================================ HUD
@@ -5352,7 +5999,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
       const e = show[i], s = e && toScreen(tmp.set(e.pos.x, e.pos.y + e.ly + 0.95 * e.sc, e.pos.z));
       if (!s) { el.style.display = 'none'; return; }
       el.style.display = 'block'; el.style.left = s[0] + 'px'; el.style.top = s[1] + 'px';
-      el.firstChild.textContent = e.lvl; el.classList.toggle('hi', e.lvl > R.lvl + 2); el.lastChild.style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
+      const im = immune(e); el.firstChild.textContent = im ? '\u2298 ' + e.pw : e.pw; el.classList.toggle('imm', im); el.classList.toggle('hi', !im && e.pw > ST.power + 15); el.lastChild.style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
     });
     const named = ZONE === 'world' && !FLY.on ? NPCS.filter(n => Math.hypot(n.x - P.pos.x, n.z - P.pos.z) < 24).sort((a, b) => Math.hypot(a.x - P.pos.x, a.z - P.pos.z) - Math.hypot(b.x - P.pos.x, b.z - P.pos.z)) : [];
     LABELS.forEach((el, i) => {
@@ -5407,7 +6054,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
       for (const n of NPCS) consider(n.x, n.z, 3.6, n.id === 'qm' ? `Trade with ${n.name}` : `Speak with ${n.name}`, () => openTalk(n));
       if (nearHawk(16)) consider(FLY.pos.x, FLY.pos.z, 16, 'Board the Thunderhawk', boardHawk);
       for (const c of CHESTS) if (!R.opened[c.id] && Math.abs(c.y - P.pos.y) < 3) consider(c.x, c.z, 3, 'Open the reliquary', () => openChest(c));
-      for (const [id, g] of Object.entries(W.GATES)) consider(g.at.x, g.at.z, 4.5, `Enter ${DUNS[id].name}  ·  level ${DUNS[id].lvl}`, () => enterDungeon(id));
+      for (const [id, g] of Object.entries(W.GATES)) consider(g.at.x, g.at.z, 4.5, `Enter ${DUNS[id].name}  ·  Power ${ePow(dunLvl(id))}`, () => enterDungeon(id));
       // the unnamed brothers and serfs only when nothing else is in reach (the wounded lie beside the Apothecary)
       if (!best) for (const n of KEEPERS) if (!n.named && Math.abs(n.y - P.pos.y) < 3) consider(n.x, n.z, 2.4, `Speak with ${n.name}`, () => bark(n));
     } else if (DUN && DUN.done) {
@@ -5419,6 +6066,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   function interact() { const a = nearestAct(); if (a && P.alive && !C.active) a.go(); }
   let actHTML = '', questHTML = '';
   const pips = [...document.querySelectorAll('#combo i')], jpEl = $('jp'), jpPips = [...document.querySelectorAll('#jp i')];
+  const abilEl = $('abil'), abG = $('abG'), abV = $('abV'), abX = $('abX');
   const jpAimEl = $('jpaim'), jpAimBar = jpAimEl.querySelector('.jpbar i'), jpAimN = jpAimEl.querySelector('.n');
   const lockEl = $('lock'), emark = $('emark');
   function updateHUD(dt) {
@@ -5426,7 +6074,16 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     $('hpfill').style.width = (P.hp / P.maxHp * 100) + '%'; $('hpnum').textContent = Math.ceil(P.hp);
     $('lvl').textContent = R.lvl; $('xptxt').textContent = R.lvl >= MAXLVL ? 'max' : `${R.xp} / ${xpNext(R.lvl)}`; $('xpfill').style.width = (R.lvl >= MAXLVL ? 100 : R.xp / xpNext(R.lvl) * 100) + '%';
     $('ung').textContent = R.ung; $('gold').textContent = R.gold;
-    { const on = hasJump(); jpEl.style.display = on ? '' : 'none'; if (on) jpPips.forEach((p, i) => p.classList.toggle('on', i < JP.charges)); }
+    { const on = hasJump(); jpEl.style.display = on ? '' : 'none'; if (on) jpPips.forEach((p, i) => { p.classList.toggle('on', i < JP.charges); p.style.display = i < JP.max ? '' : 'none'; }); }
+    $('pwrn').textContent = ST.power;
+    if (frameN % 3 === 0) {       // abilities: charge, the chosen ability's name, the super's timer while it runs
+      const sh = ABIL.hud(), S = SUBS[subCur()];
+      abilEl.style.setProperty('--sc', S.col);
+      for (const [k, el] of [['gren', abG], ['melee', abV], ['sup', abX]]) {
+        const p = k === 'sup' && sh ? sh.left / sh.max : AB[k]; el.firstChild.style.setProperty('--p', p.toFixed(3)); el.classList.toggle('full', p >= 1 && !(k === 'sup' && sh));
+        const n = k === 'sup' && sh ? sh.name : NODE[subPick(k)][0]; if (el.lastChild.textContent !== n) el.lastChild.textContent = n;
+      }
+    }
     $('ammo').innerHTML = `${GUN.ammo} <small>/ ${GUN.mag}</small>`;
     $('reload').textContent = GUN.reloadT > 0 ? 'Reloading' : (GUN.ammo === 0 ? 'Press R' : '');
     $('wavebox').classList.toggle('on', ZONE === 'dungeon' && !!DUN);
@@ -5434,7 +6091,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     pips.forEach((p, i) => p.classList.toggle('on', C.active && i < C.pips));
     $('cross').style.opacity = C.cam > 0.3 && !jpAiming() ? 0 : 1;
     { const on = jpAiming(); jpAimEl.hidden = !on;
-      if (on) { jpAimBar.style.width = (JP.phase === 'hover' ? Math.max(0, 1 - JP.hoverT / JP_HOVER) * 100 : JP.phase === 'rise' ? 100 : 0) + '%'; jpAimN.textContent = JP.inBlast ? `${JP.inBlast} in the blast` : ''; } }
+      if (on) { jpAimBar.style.width = (JP.phase === 'hover' ? Math.max(0, 1 - JP.hoverT / ST.hover) * 100 : JP.phase === 'rise' ? 100 : 0) + '%'; jpAimN.textContent = JP.inBlast ? `${JP.inBlast} in the blast` : ''; } }
     vigT = Math.max(0, vigT - dt); $('vig').style.opacity = Math.max(vigT * 1.6, P.hp < P.maxHp * 0.35 ? (P.maxHp * 0.35 - P.hp) / (P.maxHp * 0.6) : 0);
     bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('on');
     hitmT = Math.max(0, hitmT - dt); $('hitm').style.opacity = hitmT > 0 ? 1 : 0;
@@ -5453,7 +6110,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     if (frameN % 4 === 0) { const a = !canExec && P.alive && !C.active && !FLY.on ? nearestAct() : null, h = a ? `<kbd>E</kbd>${esc(a.text)}` : ''; if (h !== actHTML) { actHTML = h; $('act').innerHTML = h; } $('act').classList.toggle('on', !!a); }
     let boss = null; for (const e of ENEMIES) if (e.alive && e.boss && e.aggro && e.pos.distanceTo(P.pos) < 80) { boss = e; break; }
     $('bossbox').classList.toggle('on', !!boss);
-    if (boss) { const f = Math.max(0, boss.hp / boss.maxHp); $('bossname').textContent = `${boss.name}  ·  level ${boss.lvl}`; $('bossfill').style.width = (f * 100) + '%'; $('bossfill').classList.toggle('low', f <= 0.12); }
+    if (boss) { const f = Math.max(0, boss.hp / boss.maxHp); $('bossname').textContent = `${boss.name}  ·  Power ${boss.pw}${immune(boss) ? '  ·  warded' : ''}`; $('bossfill').style.width = (f * 100) + '%'; $('bossfill').classList.toggle('low', f <= 0.12); }
     moveT -= dt; if (moveT <= 0) $('move').classList.remove('on');
     if (voxT > 0) { voxT -= dt; if (voxT <= 0) $('vox').classList.remove('on'); }
     if (frameN % 10 === 0) {
@@ -5487,10 +6144,11 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     G.ui = name; keys.clear(); mouseDown = false;
     if (document.pointerLockElement) document.exitPointerLock();
     $('hud').style.visibility = name === 'talk' ? '' : 'hidden';
-    if (name === 'inv' || name === 'shop') { SEL = null; if (name === 'shop' && R.stockLvl !== R.lvl) genStock(); renderSheet(); $('inv').classList.remove('off'); }
+    if (name === 'inv') { closeUI(true); openUI('build'); return; }
+    if (name === 'shop') { SEL = null; if (R.stockLvl !== R.lvl) genStock(); renderSheet(); $('inv').classList.remove('off'); }
     if (name === 'map') { drawMap(); $('mapscr').classList.remove('off'); }
     if (name === 'talk') $('talk').classList.remove('off');
-    if (name === 'build') { if (C.active) endCombo(); ARM.sel = null; ARM.ang = 0.4; renderArmoury(); $('build').classList.remove('off'); }
+    if (name === 'build') { if (C.active) endCombo(); Object.assign(CS, { tab: 'gear', open: null, pin: null, hover: null, armed: null, sub: null, ang: 0.4 }); $('build').classList.remove('off'); renderCS(); }
   }
   function closeUI(silent) {
     if (!G.ui) return;
@@ -5508,37 +6166,24 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     armour: '<path d="M5 4l4-1q3 3 6 0l4 1 2 5-3 1-1 11H7L6 10 3 9z"/>', pack: '<path d="M8 3h8v10H8z M4 6h3v9l-1 5H4z M17 6h3v14h-2l-1-5z M9 15h6v3H9z"/>', relic: '<path d="M9 2h6l-1 7 7-1v6l-7-1 1 9H9l1-9-7 1V8l7 1z"/>' };
   const icon = (slot, st) => `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"${st ? ` style="${st}"` : ''}>${ICON[slot]}</svg>`;
   const pct = x => { const n = Math.round((x - 1) * 100); return (n >= 0 ? '+' : '') + n + '%'; };
-  const OATHS = [['blade', 'Oath of the Blade', '+8% sword damage, +3% healing from executions'], ['bolt', 'Oath of the Bolt', '+8% bolt damage, faster reloads, a round every second rank'], ['bastion', 'Oath of the Bastion', '+15 armour, +10% regeneration, +2% damage reduction']];
   function selItem() { if (!SEL) return null; return SEL.src === 'bag' ? R.bag[SEL.i] : SEL.src === 'eq' ? R.eq[SEL.slot] : R.stock[SEL.i]; }
+  // the Quartermaster's counter: what you wear, your pack, the card, and his stock
   function tipHTML() {
-    const it = selItem(), shop = G.ui === 'shop';
-    if (!it) return `<div class="tip"><p class="hint">Select wargear to inspect it. Double-click a piece in your pack to equip it.${shop ? ' Sell what you don’t need here for its full worth.' : ' Salvage gives back part of its worth; the Quartermaster pays in full.'}</p></div>`;
-    const cur = SEL.src !== 'eq' ? R.eq[it.slot] : null, keysU = [...new Set([...Object.keys(it.st), ...(cur ? Object.keys(cur.st) : [])])];
-    const rows = keysU.map(k => { const a = it.st[k] || 0, b = cur ? cur.st[k] || 0 : 0, d = a - b;
-      if (!a) return `<li class="dn">−${b}${AFX[k][2]} ${AFX[k][0]}</li>`;
-      return `<li>${fmtStat(k, a)}${cur && d ? ` <span class="${d > 0 ? 'up' : 'dn'}">(${d > 0 ? '+' : ''}${d})</span>` : ''}</li>`; }).join('');
+    const it = selItem();
+    if (!it) return `<div class="tip"><p class="hint">Pick a piece to see its card. The Quartermaster pays in full for what you sell; dismantling it on your wargear screen (I) gives adamantium instead.</p></div>`;
     let btns = '';
-    if (SEL.src === 'bag') btns = `<button class="opt" data-act="equip" type="button">Equip</button>` + (shop ? `<button class="opt" data-act="sell" type="button">Sell <b>+${it.val}</b></button>` : `<button class="opt" data-act="sell" type="button">Salvage <b>+${Math.round(it.val * 0.4)}</b></button>`);
-    else if (SEL.src === 'eq') btns = `<button class="opt" data-act="unequip" type="button"${R.bag.length >= 24 ? ' disabled' : ''}>Unequip</button>`;
-    else btns = `<button class="opt" data-act="buy" type="button"${R.gold < it.price || R.bag.length >= 24 ? ' disabled' : ''}>Buy for <b>${it.price}</b></button>`;
-    return `<div class="tip"><h4 class="rar${it.rar}">${esc(it.name)}</h4><div class="k">${RAR[it.rar]} ${kindName(it).toLowerCase()} · item level ${it.lvl}</div><ul>${rows}</ul>`
-      + (cur ? `<p class="hint">Compared with your ${esc(cur.name)}.</p>` : '') + `<div class="btnrow" style="margin-top:10px">${btns}</div></div>`;
+    if (SEL.src === 'bag') btns = `<button class="opt" data-act="equip" type="button">Equip</button><button class="opt" data-act="sell" type="button">Sell <b>+${it.val}</b></button>`;
+    else if (SEL.src === 'stock') btns = `<button class="opt" data-act="buy" type="button"${R.gold < it.price || R.bag.length >= BAGMAX ? ' disabled' : ''}>Buy for <b>${it.price}</b></button>`;
+    return `<div class="tip qcard">${cardHTML(it, SEL.src !== 'eq' ? R.eq[it.slot] : null, '')}${btns ? `<div class="btnrow" style="margin-top:10px">${btns}</div>` : ''}</div>`;
   }
   function renderSheet() {
-    const shop = G.ui === 'shop', sel = (src, k) => SEL && SEL.src === src && (SEL.i === k || SEL.slot === k) ? ' sel' : '';
-    const stats = [['Armour', `${Math.ceil(P.hp)} / ${P.maxHp}`], ['Sword damage', pct(ST.sword)], ['Bolt damage', pct(ST.bolt)], ['Critical chance', Math.round(ST.crit * 100) + '%'],
-      ['Magazine', ST.mag + ' rounds'], ['Reload', GUN.reloadDur.toFixed(2) + ' s'], ['Damage reduction', Math.round(ST.dr * 100) + '%'], ['Regeneration', pct(ST.regen)],
-      ['Execution healing', pct(ST.execHeal)], ['Blade lifesteal', Math.round(ST.leech * 100) + '%'], ['Experience', pct(ST.xp)], ['Thrones found', pct(ST.gold)]];
-    const col1 = `<section><h2>Oaths <small>${R.pts} to swear</small></h2><div class="statl">${stats.map(([a, b]) => `<span>${a}</span><b>${b}</b>`).join('')}</div>
-      <div class="oath">${OATHS.map(([k, n, d]) => `<div><b>${n}</b><em>${R.oath[k]} / ${OATHMAX}</em><button data-act="oath" data-k="${k}" type="button" aria-label="Swear the ${n}"${R.pts && R.oath[k] < OATHMAX ? '' : ' disabled'}>+</button><p>${d}</p></div>`).join('')}</div></section>`;
-    const col2 = `<section><h2>Wargear</h2><div class="slots">${SLOTS.map(s => { const it = R.eq[s]; return it ? `<button class="slot rar${it.rar}${sel('eq', s)}" data-act="sel-eq" data-slot="${s}" type="button"><small>${SLOTN[s]}</small><b>${esc(it.name)}</b></button>` : `<div class="slot empty"><small>${SLOTN[s]}</small><b>Empty</b></div>`; }).join('')}</div>
-      <h2 style="margin-top:14px">Pack <small>${R.bag.length} / 24</small></h2><div class="grid">${Array.from({ length: 24 }, (_, i) => { const it = R.bag[i]; return it ? `<button class="slot rar${it.rar}${sel('bag', i)}" data-act="sel-bag" data-i="${i}" type="button" title="${esc(it.name)}" aria-label="${esc(it.name)}">${icon(it.slot)}</button>` : '<div class="slot empty"></div>'; }).join('')}</div></section>`;
-    const log = R.quest < 0 ? '<div><b>The Castellan’s summons</b><p>Speak with Brother-Castellan Aldric in the monastery courtyard.</p></div>' : QUESTS.map((q, i) => i > R.quest ? '' : `<div class="${i < R.quest ? 'done' : ''}"><b>${esc(q.name)}</b><p>${esc(q.text)}</p></div>`).join('');
-    const col3 = `<section>${tipHTML()}` + (shop
-      ? `<h2 style="margin-top:14px">The Quartermaster’s stock</h2><div class="stock">${R.stock.map((it, i) => `<button class="slot rar${it.rar}${sel('stock', i)}" data-act="sel-stock" data-i="${i}" type="button"><span>${icon(it.slot, 'width:18px;height:18px;vertical-align:-4px;margin-right:6px')}${esc(it.name)}</span><i>${it.price}</i></button>`).join('')}
-         <button class="slot" data-act="buyung" type="button"${R.gold < 30 || R.ung >= 6 ? ' disabled' : ''}><span>Sacred unguent (you carry ${R.ung} of 6)</span><i>30</i></button></div>`
-      : `<h2 style="margin-top:14px">The crusade</h2><div class="qlog">${log}</div>`) + '</section>';
-    $('sheet').innerHTML = `<div class="shead"><h1>${shop ? 'The Quartermaster' : 'Brother Templar'}</h1><span class="goldl">Level ${R.lvl} · ${R.lvl >= MAXLVL ? 'max' : `${R.xp} / ${xpNext(R.lvl)} xp`} · ${R.gold} thrones · ${R.ung} unguents</span><button class="opt" data-act="close" type="button">Close (Esc)</button></div>${col1}${col2}${col3}`;
+    const sel = (src, k) => SEL && SEL.src === src && (SEL.i === k || SEL.slot === k) ? ' sel' : '';
+    const col1 = `<section><h2>Your wargear <small>Power ${ST.power}</small></h2><div class="slots">${SLOTS.map(s => { const it = R.eq[s]; return it ? `<button class="slot rar${it.rar}${sel('eq', s)}" data-act="sel-eq" data-slot="${s}" type="button"><small>${SLOTN[s]} · ${it.pw}</small><b>${esc(it.name)}</b></button>` : `<div class="slot empty"><small>${SLOTN[s]}</small><b>Empty</b></div>`; }).join('')}</div></section>`;
+    const col2 = `<section><h2>Pack <small>${R.bag.length} / ${BAGMAX}</small></h2><div class="grid">${Array.from({ length: BAGMAX }, (_, i) => { const it = R.bag[i]; return it ? `<button class="slot rar${it.rar}${sel('bag', i)}" data-act="sel-bag" data-i="${i}" type="button" title="${esc(it.name)} · ${it.pw}" aria-label="${esc(it.name)}, Power ${it.pw}">${icon(it.slot)}<i class="pwn">${it.pw}</i></button>` : '<div class="slot empty"></div>'; }).join('')}</div></section>`;
+    const col3 = `<section>${tipHTML()}<h2 style="margin-top:14px">The Quartermaster’s stock</h2><div class="stock">${R.stock.map((it, i) => `<button class="slot rar${it.rar}${sel('stock', i)}" data-act="sel-stock" data-i="${i}" type="button"><span>${icon(it.slot, 'width:18px;height:18px;vertical-align:-4px;margin-right:6px')}${esc(it.name)} · ${it.pw}</span><i>${it.price}</i></button>`).join('')}
+         <button class="slot" data-act="buyung" type="button"${R.gold < 30 || R.ung >= ST.ungMax ? ' disabled' : ''}><span>Sacred unguent (you carry ${R.ung} of ${ST.ungMax})</span><i>30</i></button>
+         <button class="slot" data-act="buyadam" type="button"${R.gold < ADAM_PRICE ? ' disabled' : ''}><span>Adamantium (you have ${R.mat.adam || 0})</span><i>${ADAM_PRICE}</i></button></div></section>`;
+    $('sheet').innerHTML = `<div class="shead"><h1>The Quartermaster</h1><span class="goldl">Level ${R.lvl} · Power ${ST.power} · ${R.gold} thrones</span><button class="opt" data-act="close" type="button">Close (Esc)</button></div>${col1}${col2}${col3}`;
   }
   function equipBag(i) { const it = R.bag[i]; if (!it) return; R.bag.splice(i, 1); const old = R.eq[it.slot]; R.eq[it.slot] = it; if (old) R.bag.splice(i, 0, old); calcStats(); SEL = { src: 'eq', slot: it.slot }; sfx('bdraw', 0.6, 1.1); }
   $('sheet').addEventListener('click', ev => {
@@ -5548,15 +6193,14 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     if (a === 'sel-bag') SEL = { src: 'bag', i: +b.dataset.i };
     else if (a === 'sel-eq') SEL = { src: 'eq', slot: b.dataset.slot };
     else if (a === 'sel-stock') SEL = { src: 'stock', i: +b.dataset.i };
-    else if (a === 'equip' && SEL && SEL.src === 'bag') equipBag(SEL.i);
-    else if (a === 'unequip' && it && R.bag.length < 24) { R.bag.push(it); R.eq[it.slot] = null; calcStats(); SEL = null; }
-    else if (a === 'sell' && SEL && SEL.src === 'bag') { const g = G.ui === 'shop' ? it.val : Math.round(it.val * 0.4); R.gold += g; R.bag.splice(SEL.i, 1); SEL = null; feed(`+${g} thrones`); }
-    else if (a === 'buy' && it && R.gold >= it.price && R.bag.length < 24) { R.gold -= it.price; R.stock.splice(SEL.i, 1); delete it.price; R.bag.push(it); SEL = { src: 'bag', i: R.bag.length - 1 }; SYN.clang(); }
-    else if (a === 'buyung' && R.gold >= 30 && R.ung < 6) { R.gold -= 30; R.ung++; }
-    else if (a === 'oath' && R.pts > 0 && R.oath[b.dataset.k] < OATHMAX) { R.oath[b.dataset.k]++; R.pts--; calcStats(); SYN.horn(); }
+    else if (a === 'equip' && SEL && SEL.src === 'bag') { if (!exoClash(it)) equipBag(SEL.i); else { feed('One Artificer weapon and one Artificer armour piece at a time: swap them on your wargear screen (I)'); SYN.deny(); } }
+    else if (a === 'sell' && SEL && SEL.src === 'bag') { R.gold += it.val; R.bag.splice(SEL.i, 1); SEL = null; feed(`+${it.val} thrones`); }
+    else if (a === 'buy' && it && R.gold >= it.price && R.bag.length < BAGMAX) { R.gold -= it.price; R.stock.splice(SEL.i, 1); delete it.price; R.bag.push(it); SEL = { src: 'bag', i: R.bag.length - 1 }; SYN.clang(); }
+    else if (a === 'buyung' && R.gold >= 30 && R.ung < ST.ungMax) { R.gold -= 30; R.ung++; }
+    else if (a === 'buyadam' && R.gold >= ADAM_PRICE) { R.gold -= ADAM_PRICE; gainMat('adam', 1); }
     renderSheet();
   });
-  $('sheet').addEventListener('dblclick', ev => { const b = ev.target.closest('[data-act="sel-bag"]'); if (b) { equipBag(+b.dataset.i); renderSheet(); } });
+  $('sheet').addEventListener('dblclick', ev => { const b = ev.target.closest('[data-act="sel-bag"]'); if (b && !exoClash(R.bag[+b.dataset.i])) { equipBag(+b.dataset.i); renderSheet(); } });
   $('inv').addEventListener('click', ev => { if (ev.target === $('inv')) closeUI(); });
   // ---- the map
   function drawMap() {
@@ -5656,12 +6300,14 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   function startGame(s) {
     initAudio(); clearEnemies(); toWorld();
     R = Object.assign(freshR(), s ? s.R : {});
-    for (const k of ['oath', 'eq']) R[k] = Object.assign(freshR()[k], R[k]);
+    for (const k of ['eq', 'mat', 'sub']) R[k] = Object.assign(freshR()[k], R[k]);
+    issueStarters(); weekCheck(); applyCos(); Object.assign(AB, { gren: 1, melee: 1, sup: 0 }); ABIL.reset();
+    Object.assign(PKS, { tithe: 0, wrath: 0, sun: false, kcT: 0, kcArm: false, feed: false, unbrT: 0, ros: 0, rosT: 0 });
     P.maxHp = 100; Object.assign(P, { alive: true, lastHurt: -99, dashT: 0, dashCd: 0, iframes: 0, healT: 0, pitch: 0 }); P.push.set(0, 0, 0); P.vel.set(0, 0, 0);
     calcStats(); P.hp = s ? clamp(s.hp || P.maxHp, 1, P.maxHp) : P.maxHp;
     parkHawk(); jpReset(); JP.charges = JP.max; G.buffT = 0; TRIAL.on = false;
     const issueJump = !R.gotJump; R.gotJump = true;
-    if (issueJump) { const jp = makeItem('pack', Math.max(1, R.lvl), 1, 'Mk X jump pack', 'jump'); if (!R.eq.pack) R.eq.pack = jp; else R.bag.push(jp); calcStats(); }
+    if (issueJump) { const jp = makeItem('pack', Math.max(10, 10 * R.lvl), 1, 'Mk X jump pack', 'jump'); if (!R.eq.pack) R.eq.pack = jp; else R.bag.push(jp); calcStats(); }
     Object.assign(GUN, { ammo: GUN.mag, cd: 0, reloadT: 0, kick: 0 });
     if (!R.stock.length) genStock();
     for (const E of ENC) Object.assign(E, { state: R.cleared[E.id] ? 'cleared' : 'dormant', left: null, t: -1e9 });
@@ -5679,7 +6325,8 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     lockMouse();
     if (!s) { vox(VOX, 'Brother! To me, in the courtyard. The Reach needs its Templar.'); saveGame(); }
     else feed('Crusade resumed');
-    if (issueJump) setTimeout(() => feed('The forge has issued you a Mk X jump pack: press C to leap, B for the armoury', 'xp'), s ? 600 : 3500);
+    if (issueJump) setTimeout(() => feed('The forge has issued you a Mk X jump pack: press C to leap, I for your wargear', 'xp'), s ? 600 : 3500);
+    if (s && s.migrated) setTimeout(() => { banner('The Chapter’s new ways', 'Your wargear now carries Power. Press I'); feed(`Your Power is ${ST.power}. Spend subclass points on the I screen.`, 'xp'); }, 900);
   }
   $('again').addEventListener('click', () => {
     $('over').classList.add('off');
@@ -5842,6 +6489,32 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
   addEventListener('keydown', e => { if (!GAL.on) return; if (e.code === 'ArrowRight') galShow(GAL.i + 1); if (e.code === 'ArrowLeft') galShow(GAL.i - 1); if (e.code === 'Escape' && !GALLERY_ONLY) closeGallery(); });
   $('openGal').addEventListener('click', () => openGallery());
 
+  const COS = { SHADERS: [{ id: 'templar', name: 'Templar' }, { id: 'battleworn', name: 'Battle-worn' }], EMBLEMS: [{ id: 'cross', name: 'Templar cross' }, { id: 'skull', name: 'Skull' }], SKULLS: [{ id: 'bone', name: 'Bone' }, { id: 'gilded', name: 'Gilded' }],
+    HAWKS: [{ id: 'chapter', name: 'Chapter' }, { id: 'ash', name: 'Ash' }], ORNS: [{ id: 'field', name: 'Field', blade: 'power' }, { id: 'steel', name: 'Steel', blade: 'chain' }],
+    applyShader() {}, applyHawk() {}, applyOrn() {}, skull: { setVariant() {}, setVisible() {}, update() {} }, emblemSVG: () => '<svg viewBox="0 0 120 40"><rect width="120" height="40" fill="#2a0d0b"/></svg>' };      // STUB
+  const ABIL = { grenade() {}, melee() {}, super() {}, active: () => false, update() {}, statusTick: () => false, speedMult: () => 1, dmgMult: () => 1, takenMult: () => 1,
+    onSwing() {}, onHit() {}, onKill() {}, fireOverride: () => false, reset() {}, hud: () => null, quiet: false, state: () => ({}) };      // STUB
+  // ================================================================ abilities: grenade (G), melee ability (V) and super (X), from the subclass you've chosen
+  function useAbility(k) {
+    if (!P.alive || FLY.on || G.ui || (C.active && C.mode === 'exec')) return;
+    const id = subPick(k);
+    if (k === 'sup') {
+      if (AB.sup < 1 || ABIL.active()) { SYN.deny(); if (AB.sup < 1) moveToast(`Super ${Math.floor(AB.sup * 100)}%`); return; }
+      if (ABIL.super(id, subPick('mods'))) { AB.sup = 0; banner(NODE[id][0], SUBS[subCur()].name); } return;
+    }
+    if (AB[k] < 1) { SYN.deny(); return; }
+    if (k === 'gren' ? ABIL.grenade(id) : ABIL.melee(id)) AB[k] = 0;
+  }
+  function abilityTick(dt) {
+    if (P.alive) { AB.gren = Math.min(1, AB.gren + dt / ST.grenCd); AB.melee = Math.min(1, AB.melee + dt / ST.meleeCd); if (!ABIL.active()) AB.sup = Math.min(1, AB.sup + dt / ST.supCd); }
+    ABIL.update(dt);
+  }
+  // Vow of Sigismund (Oathkeeper): an execution throws holy fire round the Templar
+  function holyBlast() {
+    const c = v(P.pos.x, P.pos.y + 0.1, P.pos.z); shock(c, 6, 0xf2c03a); flash(v(c.x, c.y + 1.5, c.z), 0xffc860, 8, 0.4); sparks(v(c.x, c.y + 1, c.z), 30, [1, 0.8, 0.35, 1], 7);
+    for (const e of ENEMIES) { if (!e.alive || e.state === 'execd') continue; const dx = e.pos.x - c.x, dz = e.pos.z - c.z, d = Math.hypot(dx, dz); if (d < 6) strike(e, lerp(140, 60, d / 6), v(dx, 0, dz).normalize(), 9, 'ability'); }
+  }
+
   // ================================================================ main loop
   function resize() {
     const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); if (GAL.cam) { GAL.cam.aspect = w / h; GAL.cam.updateProjectionMatrix(); }
@@ -5865,7 +6538,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
         const ox = P.pos.x, oz = P.pos.z; updateCombo(dt); if (P.pos.x !== ox || P.pos.z !== oz) groundPlayer(ox, oz);
         updateGun(dt);
       }
-      updateEnemies(dt); updateBolts(dt); updateDrops(dt);
+      updateEnemies(dt); updateBolts(dt); updateDrops(dt); perkTick(dt); wardTick(dt); abilityTick(dt);
       if (ZONE === 'world') { updateEncounters(dt); discover(dt); } else updateDungeon(dt);
       if (G.buffT > 0) G.buffT -= dt;
       G.saveT += dt; if (G.saveT > 30 && ZONE === 'world' && !G.hunted && P.alive && G.state === 'play' && !FLY.on) saveGame();
@@ -5942,8 +6615,11 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     key(code, on) { if (on) keys.add(code); else keys.delete(code); },
     act() { const a = nearestAct(); if (a) { a.go(); return a.text; } return null; },
     enter(id) { enterDungeon(id); }, exit() { exitDungeon(); }, wave(n) { if (DUN) { for (const e of ENEMIES) removeEnemy(e); ENEMIES = []; DUN.toSpawn = []; startDunWave(n); } },
-    killAll() { for (const e of ENEMIES) if (e.alive) damageEnemy(e, 1e6, v(0, 0, 1), 0, 'exec'); },
-    xp(n) { gainXP(n); }, give(slot, rar, lvl) { const it = makeItem(slot, lvl || R.lvl, rar || 0); R.bag.push(it); return it; },
+    killAll() { for (const e of ENEMIES) if (e.alive) damageEnemy(e, 1e6, v(0, 0, 1), 0, 'test'); },
+    xp(n) { gainXP(n); }, give(slot, rar, pw, exo) { const it = makeItem(slot, pw || 10 * R.lvl, rar || 0, null, null, exo); R.bag.push(it); return it; },
+    equip(id) { const it = findItem(id); return it ? equipItem(it) : false; }, power() { return { power: ST.power, soft: softCap(), pow: powCap(), pin: pinCap(), eq: SLOTS.map(k => R.eq[k] && R.eq[k].pw) }; },
+    ab(k) { useAbility(k); return Object.assign({}, AB); }, fill() { AB.gren = AB.melee = AB.sup = 1; }, node(k, row, id) { return subNode(k, row, id); }, subUse(k) { return subSwitch(k); },
+    cs(o) { Object.assign(CS, o); renderCS(); return { tab: CS.tab, open: CS.open, pin: CS.pin && CS.pin.id }; }, week() { weekCheck(); return R.week; },
     ui(name) { if (name) openUI(name); else closeUI(true); return G.ui; }, talk(id) { openTalk(NPCS.find(n => n.id === id)); }, travel(id) { travel(id); },
     // a fixed camera for screenshots: the loop stops until unview()
     view(px, py, pz, tx, ty, tz, fov = 60) { frozen = true; cam.position.set(px, py, pz); cam.lookAt(tx, ty, tz); cam.fov = fov; cam.updateProjectionMatrix(); if (W) W.update(0.016, G.time, tx, tz); renderer.render(scene, cam); },
@@ -5956,9 +6632,9 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     save() { saveGame(); return readSave(); }, quest() { checkQuests(); return R.quest; }, norender(on) { noRender = on; }, render() { renderer.render(scene, cam); },
     state() {
       return { state: G.state, zone: ZONE, ui: G.ui, dun: DUN && { id: DUN.id, wave: DUN.wave, done: DUN.done, toSpawn: DUN.toSpawn.length }, hp: Math.round(P.hp), maxHp: P.maxHp, alive: P.alive, pos: P.pos.toArray().map(x => +x.toFixed(2)), yaw: +P.yaw.toFixed(3),
-        lvl: R.lvl, xp: R.xp, pts: R.pts, gold: R.gold, ung: R.ung, quest: R.quest, bag: R.bag.length, eq: Object.fromEntries(SLOTS.map(s => [s, R.eq[s] && R.eq[s].name])), look: Object.assign({}, T.look), hunted: G.hunted, ammo: GUN.ammo, mag: GUN.mag,
+        lvl: R.lvl, xp: R.xp, power: ST.power, mat: R.mat, sub: subCur(), ab: Object.assign({}, AB), gold: R.gold, ung: R.ung, quest: R.quest, bag: R.bag.length, eq: Object.fromEntries(SLOTS.map(s => [s, R.eq[s] && R.eq[s].name])), look: Object.assign({}, T.look), hunted: G.hunted, ammo: GUN.ammo, mag: GUN.mag,
         combo: { active: C.active, step: C.step, phase: C.phase, mode: C.mode }, drops: DROPS.length, act: (nearestAct() || {}).text || null,
-        enemies: ENEMIES.map(e => ({ type: e.type, lvl: e.lvl, hp: Math.round(e.hp), alive: e.alive, state: e.state, aggro: e.aggro, boss: e.boss, name: e.name, pos: e.pos.toArray().map(x => +x.toFixed(1)) })),
+        enemies: ENEMIES.map(e => ({ type: e.type, lvl: e.lvl, pw: e.pw, imm: immune(e), dm: +e.dm.toFixed(2), hp: Math.round(e.hp), maxHp: e.maxHp, alive: e.alive, state: e.state, aggro: e.aggro, boss: e.boss, name: e.name, pos: e.pos.toArray().map(x => +x.toFixed(1)) })),
         enc: ENC.filter(E => E.state !== 'dormant').map(E => `${E.id}:${E.state}`), cam: cam.position.toArray().map(x => +x.toFixed(1)) };
     },
     W: () => W, R: () => R, P, G, C, ST, ENC, NPCS, KEEPERS, DUNS, FLY, JP, T, en: i => ENEMIES[i]

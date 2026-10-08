@@ -1,0 +1,102 @@
+<title>Vigil</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Cinzel:wght@500;700&display=swap">
+<style>
+/* One look: thin bone-white lines over the world, Feyr red for danger and for what the player is pressing. */
+:root { --ink: #ece5d6; --dim: rgba(236, 229, 214, .62); --red: #ff4a36; --gold: #e8c26a; --panel: rgba(10, 9, 9, .72); --line: rgba(236, 229, 214, .2);
+  --hud: 'Rajdhani', 'Segoe UI', system-ui, sans-serif; --title: 'Cinzel', 'Iowan Old Style', Georgia, serif; color-scheme: dark; }
+html, body { height: 100%; }
+body { margin: 0; background: #070606; color: var(--ink); font: 600 16px/1.3 var(--hud); overflow: hidden; user-select: none; -webkit-user-select: none; }
+#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.hud { position: fixed; pointer-events: none; text-shadow: 0 1px 3px rgba(0, 0, 0, .7); }
+#hud { inset: 0; transition: opacity .3s; }
+#hud.off { opacity: 0; }
+/* the reticle: four ticks that open with spread, a dot, and a hit marker that flashes over it (red-gold on a crit) */
+#ret { left: 50%; top: 50%; width: 0; height: 0; }
+#ret i { position: absolute; background: var(--ink); opacity: .85; }
+#ret .t, #ret .b { width: 2px; height: 9px; left: -1px; } #ret .l, #ret .r { height: 2px; width: 9px; top: -1px; }
+#ret .d { width: 3px; height: 3px; left: -1.5px; top: -1.5px; border-radius: 50%; }
+#hit { left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px; opacity: 0; transform: rotate(45deg); }
+#hit::before, #hit::after { content: ''; position: absolute; background: var(--ink); }
+#hit::before { left: 12px; top: 0; width: 2px; height: 26px; clip-path: polygon(0 0, 100% 0, 100% 35%, 0 35%, 0 65%, 100% 65%, 100% 100%, 0 100%); }
+#hit::after { top: 12px; left: 0; height: 2px; width: 26px; clip-path: polygon(0 0, 35% 0, 35% 100%, 0 100%, 65% 0, 100% 0, 100% 100%, 65% 100%); }
+#hit.crit::before, #hit.crit::after { background: var(--gold); }
+#hit.kill::before, #hit.kill::after { background: var(--red); }
+/* bottom: shield over health in the middle, the grenade on the left, the rifle's rounds on the right */
+#vit { left: 50%; bottom: calc(26px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(360px, 60vw); display: grid; gap: 4px; }
+.bar { height: 7px; background: rgba(0, 0, 0, .45); outline: 1px solid var(--line); position: relative; overflow: hidden; }
+.bar b { position: absolute; inset: 0; transform-origin: left; background: var(--ink); }
+.bar.sh b { background: #9fd8ff; } .bar.hp b { background: var(--ink); } .bar.low b { background: var(--red); }
+.bar s { position: absolute; inset: 0; transform-origin: left; background: rgba(255, 255, 255, .35); }
+#ammo { right: calc(28px + env(safe-area-inset-right, 0px)); bottom: calc(22px + env(safe-area-inset-bottom, 0px)); text-align: right; }
+#ammo .n { font-size: 44px; line-height: 1; letter-spacing: .02em; } #ammo .r { color: var(--dim); font-size: 18px; } #ammo .w { color: var(--dim); font-size: 14px; letter-spacing: .12em; text-transform: uppercase; }
+#ammo.empty .n { color: var(--red); }
+#abil { left: calc(28px + env(safe-area-inset-left, 0px)); bottom: calc(22px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 10px; align-items: end; }
+.ab { width: 46px; height: 46px; border: 1px solid var(--line); position: relative; display: grid; place-items: center; background: rgba(0, 0, 0, .3); }
+.ab svg { width: 26px; height: 26px; fill: none; stroke: var(--ink); stroke-width: 1.6; }
+.ab .fill { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255, 74, 54, .28); }
+.ab.ready { border-color: var(--red); box-shadow: 0 0 12px rgba(255, 74, 54, .45); } .ab.ready .fill { background: rgba(255, 74, 54, .12); }
+.ab kbd { position: absolute; top: -9px; right: -7px; font: 700 11px var(--hud); background: #000; border: 1px solid var(--line); padding: 0 4px; color: var(--dim); }
+#obj { left: calc(28px + env(safe-area-inset-left, 0px)); top: calc(22px + env(safe-area-inset-top, 0px)); max-width: min(420px, calc(100vw - 56px)); }
+#obj .h { font: 700 13px var(--hud); letter-spacing: .2em; color: var(--red); text-transform: uppercase; } #obj .t { font-size: 20px; } #obj .s { color: var(--dim); font-size: 15px; }
+#boss { left: 50%; top: calc(26px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); width: min(520px, 70vw); text-align: center; display: none; }
+#boss .nm { font: 700 15px var(--hud); letter-spacing: .18em; text-transform: uppercase; margin-bottom: 4px; } #boss .bar b { background: var(--red); }
+#nums { inset: 0; overflow: hidden; }
+#nums span { position: absolute; font: 700 18px var(--hud); color: var(--ink); transform: translate(-50%, -50%); white-space: nowrap; }
+#nums span.c { color: var(--gold); font-size: 22px; }
+#dmg { inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(170, 10, 0, .55)); }
+#toast { left: 50%; top: 30%; transform: translateX(-50%); font: 700 22px var(--hud); letter-spacing: .25em; text-transform: uppercase; opacity: 0; transition: opacity .4s; text-align: center; }
+/* the menu: the title over the zone, three choices, the controls */
+#menu { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 60%, rgba(20, 6, 4, .25), rgba(4, 3, 3, .82)); padding: 16px; overflow: auto; }
+#menu.off { display: none; }
+.card { width: min(440px, 100%); display: grid; gap: 14px; }
+.card h1 { margin: 0; font: 700 clamp(44px, 9vw, 72px)/1 var(--title); letter-spacing: .22em; text-align: center; text-shadow: 0 0 24px rgba(255, 60, 40, .35); }
+.card .sub { margin: -6px 0 6px; text-align: center; color: var(--dim); font-size: 17px; letter-spacing: .08em; }
+.card button { font: 700 18px var(--hud); letter-spacing: .14em; text-transform: uppercase; color: var(--ink); background: rgba(10, 9, 9, .6); border: 1px solid var(--line); padding: 12px; cursor: pointer; }
+.card button:hover, .card button:focus-visible { border-color: var(--red); outline: none; box-shadow: 0 0 14px rgba(255, 74, 54, .3); }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin: 0; font-weight: 500; font-size: 15px; background: var(--panel); border: 1px solid var(--line); padding: 12px 14px; }
+.keys dt { color: var(--gold); font-weight: 700; white-space: nowrap; } .keys dd { margin: 0; color: var(--dim); }
+.set { display: grid; grid-template-columns: auto 1fr auto; gap: 8px 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); padding: 12px 14px; font-weight: 500; }
+.set label { color: var(--dim); } .set output { min-width: 3ch; text-align: right; } .set input { width: 100%; accent-color: var(--red); }
+.set select { font: 600 15px var(--hud); background: #111; color: var(--ink); border: 1px solid var(--line); grid-column: 2 / 4; }
+#err { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; font-size: 18px; background: #070606; }
+@media (prefers-reduced-motion: reduce) { #toast, #hud { transition: none; } }
+</style>
+<canvas id="c"></canvas>
+<div id="hud" class="hud off">
+  <div id="ret" class="hud"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="d"></i></div>
+  <div id="hit" class="hud"></div>
+  <div id="dmg" class="hud"></div>
+  <div id="nums" class="hud"></div>
+  <div id="obj" class="hud"><div class="h">Vigil</div><div class="t">The Cinder Cloister</div><div class="s"></div></div>
+  <div id="boss" class="hud"><div class="nm"></div><div class="bar"><s></s><b></b></div></div>
+  <div id="vit" class="hud"><div class="bar sh"><s></s><b></b></div><div class="bar hp"><s></s><b></b></div></div>
+  <div id="abil" class="hud">
+    <div class="ab" id="ab-g"><div class="fill"></div><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="6.5"/><path d="M12 6.5V3M9 4h6M8 13h8M12 9v8"/></svg><kbd>Q</kbd></div>
+    <div class="ab" id="ab-m"><div class="fill"></div><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19l9-9M14 4l6 6-3 1-4-4zM4 20l2-5 3 3z"/></svg><kbd>F</kbd></div>
+  </div>
+  <div id="ammo" class="hud"><div class="w">Vigil auto rifle</div><span class="n">36</span> <span class="r">/ 288</span></div>
+  <div id="toast" class="hud"></div>
+</div>
+<section id="menu" aria-label="Menu">
+  <div class="card">
+    <h1>VIGIL</h1>
+    <p class="sub" id="sub">The Cinder Cloister</p>
+    <button id="play" type="button">Enter the cloister</button>
+    <dl class="keys" id="keys"><dt>W A S D</dt><dd>Move (Shift to sprint)</dd><dt>Space</dt><dd>Jump</dd><dt>Mouse</dt><dd>Aim; left fires, right aims down the sights</dd>
+      <dt>R</dt><dd>Reload</dd><dt>Q</dt><dd>Cinder grenade (charges over time)</dd><dt>F</dt><dd>Melee: a strike with the rifle's stock</dd><dt>Esc</dt><dd>Pause</dd></dl>
+    <div class="set">
+      <label for="sens">Look speed</label><input id="sens" type="range" min="0.3" max="3" step="0.05" value="1"><output id="sensV">1.00</output>
+      <label for="fov">Field of view</label><input id="fov" type="range" min="60" max="100" step="1" value="78"><output id="fovV">78</output>
+      <label for="vol">Volume</label><input id="vol" type="range" min="0" max="1" step="0.05" value="0.8"><output id="volV">80</output>
+      <label for="qual">Picture</label><select id="qual"><option value="high">High</option><option value="medium">Medium</option><option value="low">Low (faster)</option></select>
+    </div>
+  </div>
+</section>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const ASSETS = /*__ASSETS__*/null;
+(() => {
+  /*__JS__*/
+})();
+</script>

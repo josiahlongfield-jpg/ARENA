@@ -1,0 +1,139 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vigil Render Test</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0a09; overflow: hidden; }
+  #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 12px; top: 12px; font: 13px/1.4 ui-monospace, Menlo, monospace; color: #e8dfcc; background: rgba(10, 9, 8, .7); padding: 6px 10px; white-space: pre; pointer-events: none; }
+</style>
+<canvas id="c"></canvas>
+<div id="hud"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="../src/js/render.js"></script>
+<script>
+// A test yard for the pipeline: stone ground and walls, a metalness x roughness grid, a red glow, a low sun, a fog bank,
+// a swinging lamp so shadows move, and a first-person rifle on layer 1. Keys: 1 SSAO, 2 bloom, 3 fog, 4 IBL, Q quality, V debug view.
+(() => {
+  const T = THREE, PI = Math.PI;
+  const rnd = makeRenderer(document.getElementById('c'), { quality: 'high' });
+  const scene = new T.Scene(), cam = new T.PerspectiveCamera(70, 1, 0.05, 600); cam.rotation.order = 'YXZ'; scene.add(cam);
+
+  // ---- a stone texture drawn once: noisy slabs with dark joints, and a normal map from the same height
+  function stoneMaps(n, tiles) {
+    const hgt = new Float32Array(n * n), col = document.createElement('canvas'); col.width = col.height = n;
+    let s = 11; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    const oct = []; for (let o = 0; o < 5; o++) { const g = 4 << o, v = new Float32Array((g + 1) * (g + 1)); for (let i = 0; i < v.length; i++) v[i] = r(); oct.push([g, v]); }
+    const noise = (x, y) => { let a = 0, w = 0.5; for (const [g, v] of oct) { const fx = x * g, fy = y * g, ix = Math.floor(fx) % g, iy = Math.floor(fy) % g, tx = fx % 1, ty = fy % 1;
+      const at = (i, j) => v[((j % g) * (g + 1)) + (i % g)]; const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+      a += w * ((at(ix, iy) * (1 - sx) + at(ix + 1, iy) * sx) * (1 - sy) + (at(ix, iy + 1) * (1 - sx) + at(ix + 1, iy + 1) * sx) * sy); w *= 0.5; } return a; };
+    const g = col.getContext('2d'), img = g.createImageData(n, n), tint = [];
+    for (let i = 0; i < tiles * tiles * 2; i++) tint.push(0.82 + r() * 0.3);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const u = x / n * tiles, v = y / n * tiles, row = Math.floor(v), uu = u + (row % 2) * 0.5, cx = uu % 1, cy = v % 1;
+      const edge = Math.min(cx, 1 - cx, cy, 1 - cy), joint = Math.min(1, edge / 0.035), nz = noise(x / n, y / n);
+      const tid = (Math.floor(uu) % tiles) + row * tiles, k = tint[tid % tint.length] * (0.75 + 0.5 * nz) * (0.35 + 0.65 * joint);
+      hgt[y * n + x] = joint * (0.8 + 0.4 * nz);
+      const i = (y * n + x) * 4; img.data[i] = 150 * k; img.data[i + 1] = 140 * k; img.data[i + 2] = 126 * k; img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    const nc = document.createElement('canvas'); nc.width = nc.height = n; const ng = nc.getContext('2d'), ni = ng.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const hx = hgt[y * n + (x + 1) % n] - hgt[y * n + (x + n - 1) % n], hy = hgt[((y + 1) % n) * n + x] - hgt[((y + n - 1) % n) * n + x];
+      const vx = -hx * 3, vy = hy * 3, l = Math.hypot(vx, vy, 1), i = (y * n + x) * 4;
+      ni.data[i] = (vx / l * 0.5 + 0.5) * 255; ni.data[i + 1] = (vy / l * 0.5 + 0.5) * 255; ni.data[i + 2] = (1 / l * 0.5 + 0.5) * 255; ni.data[i + 3] = 255;
+    }
+    ng.putImageData(ni, 0, 0);
+    const mk = (c, srgb) => { const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 8; if (srgb) t.encoding = T.sRGBEncoding; return t; };
+    return { map: mk(col, true), normal: mk(nc, false) };
+  }
+  const SM = stoneMaps(512, 4);
+  const stone = (rx, ry, tint) => { const m = new T.MeshStandardMaterial({ map: SM.map.clone(), normalMap: SM.normal.clone(), roughness: 0.88, metalness: 0, color: tint || 0xffffff });
+    m.map.repeat.set(rx, ry); m.normalMap.repeat.set(rx, ry); m.map.needsUpdate = m.normalMap.needsUpdate = true; return m; };
+  const add = (geo, mat, x, y, z, o) => { const m = new T.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; Object.assign(m, o || {}); scene.add(m); return m; };
+
+  const ground = add(new T.PlaneGeometry(160, 160), stone(40, 40), 0, 0, 0); ground.rotation.x = -PI / 2; ground.castShadow = false;
+  const wallM = stone(6, 1.2, 0xbfb6a8);
+  add(new T.BoxGeometry(18, 4, 0.8), wallM, -2, 2, -14);
+  add(new T.BoxGeometry(0.8, 4, 12), wallM, -11, 2, -8);
+  add(new T.BoxGeometry(0.8, 2.2, 6), wallM, 7, 1.1, -10);
+  const pillarM = stone(2, 3, 0xd8cfc0);
+  for (const [x, z] of [[-6, -6], [-6, 0], [6, -4], [10, 2], [-14, 6]]) { add(new T.CylinderGeometry(0.45, 0.55, 5, 24), pillarM, x, 2.5, z); add(new T.BoxGeometry(1.4, 0.4, 1.4), pillarM, x, 0.2, z); add(new T.BoxGeometry(1.3, 0.3, 1.3), pillarM, x, 5.1, z); }
+  // a far row of pillars into the fog bank
+  for (let i = 0; i < 8; i++) add(new T.CylinderGeometry(0.5, 0.6, 7, 16), pillarM, -30 + i * 9, 3.5, -40 - (i % 2) * 6);
+  add(new T.BoxGeometry(30, 10, 2), wallM, 10, 5, -70);
+
+  // ---- spheres on a frame: metalness rises to the right, roughness rises upward
+  const sg = new T.SphereGeometry(0.4, 48, 24);
+  for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++)
+    add(sg, new T.MeshStandardMaterial({ color: 0xdcc8a0, metalness: i / 4, roughness: 0.05 + j / 4 * 0.95 }), -4.4 + i * 0.95, 0.55 + j * 0.92, -4.6);
+  add(new T.BoxGeometry(5.0, 0.15, 0.6), pillarM, -2.5, 0.075, -4.6);
+
+  // ---- the red glow: a rune ring, plus a white-hot core
+  const glow = add(new T.TorusGeometry(0.7, 0.07, 16, 96), new T.MeshStandardMaterial({ color: 0x1a0505, emissive: 0xff2a1a, emissiveIntensity: 6, roughness: 0.4 }), 3.6, 1.4, -3.2);
+  const core = add(new T.SphereGeometry(0.12, 24, 12), new T.MeshStandardMaterial({ color: 0x111111, emissive: 0xfff2e0, emissiveIntensity: 12 }), 3.6, 1.4, -3.2);
+  const plinth = add(new T.BoxGeometry(1.0, 0.6, 1.0), pillarM, 3.6, 0.3, -3.2);
+
+  // ---- the moving piece: a swinging iron lantern on a chain, so its shadow sweeps the floor
+  const pivot = new T.Group(); pivot.position.set(1.2, 3.6, -0.8); scene.add(pivot);
+  const iron = new T.MeshStandardMaterial({ color: 0x3a3632, metalness: 0.85, roughness: 0.45 });
+  const chain = new T.Mesh(new T.CylinderGeometry(0.02, 0.02, 1.6, 8), iron); chain.position.y = -0.8; chain.castShadow = true; pivot.add(chain);
+  const lantern = new T.Mesh(new T.BoxGeometry(0.45, 0.6, 0.45), iron); lantern.position.y = -1.9; lantern.castShadow = lantern.receiveShadow = true; pivot.add(lantern);
+  const spin = add(new T.TorusKnotGeometry(0.35, 0.12, 128, 16), new T.MeshStandardMaterial({ color: 0x8a96a8, metalness: 1, roughness: 0.25 }), -1.8, 1.3, 0.6);
+
+  // ---- the viewmodel: a rifle and the forearm holding it, on layer 1 in front of the camera, with a red sight
+  const vm = new T.Group(); cam.add(vm); vm.position.set(0.15, -0.16, -0.3); vm.rotation.set(0.03, 0.07, -0.04);
+  const gunM = new T.MeshStandardMaterial({ color: 0x2b2d30, metalness: 0.75, roughness: 0.35 }), polyM = new T.MeshStandardMaterial({ color: 0x3d3a33, roughness: 0.7 });
+  const part = (geo, m, x, y, z, rx) => { const p = new T.Mesh(geo, m); p.position.set(x, y, z); if (rx) p.rotation.x = rx; p.receiveShadow = true; vm.add(p); return p; };
+  part(new T.BoxGeometry(0.04, 0.055, 0.34), gunM, 0, 0, -0.06);                         // receiver
+  part(new T.CylinderGeometry(0.009, 0.009, 0.26, 12), gunM, 0, 0.008, -0.36, Math.PI / 2);   // barrel
+  part(new T.BoxGeometry(0.046, 0.05, 0.16), polyM, 0, -0.004, -0.2);                     // handguard
+  part(new T.BoxGeometry(0.036, 0.075, 0.16), polyM, 0, -0.015, 0.19);                    // stock
+  part(new T.BoxGeometry(0.026, 0.08, 0.035), polyM, 0, -0.065, 0.03, -0.3);              // grip
+  part(new T.BoxGeometry(0.03, 0.09, 0.05), gunM, 0, -0.07, -0.08, 0.15);                 // magazine
+  part(new T.CylinderGeometry(0.016, 0.016, 0.12, 16), gunM, 0, 0.05, -0.04, Math.PI / 2);  // sight
+  part(new T.SphereGeometry(0.004, 8, 6), new T.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2010, emissiveIntensity: 30 }), 0, 0.05, 0.022);
+  const arm = part(new T.CylinderGeometry(0.03, 0.04, 0.3, 16), new T.MeshStandardMaterial({ color: 0x4b4f45, roughness: 0.85 }), 0.045, -0.12, 0.13);
+  arm.rotation.set(1.05, 0, -0.45);
+  rnd.viewmodel(vm);
+
+  // ---- light: a low sun behind and left of the view, a fog bank on the ground
+  rnd.sun.color.setHex(0xffd2a8); rnd.sun.intensity = 3.2;
+  const hemi = new T.HemisphereLight(0x8fa4c8, 0x3a2e24, 0.35); scene.add(hemi);
+  rnd.updateSky({ sunDir: [0.55, 0.2, -0.81], top: 0x284a82, horizon: 0xe8a878, glowColor: 0xff9050, sunColor: 0xfff0dc, spread: 1, curve: 0.5 });
+  Object.assign(rnd.settings, { fogDensity: 0.035, fogFalloff: 0.38, fogBase: 0, fogStart: 2, exposure: 1.0, shadowRange: 26 });
+
+  // ---- view, loop and hooks
+  const ME = { pos: new T.Vector3(4.2, 1.7, 5.4), yaw: 0.42, pitch: -0.12 };
+  let t = 0, paused = false, last = performance.now();
+  function place() { cam.position.copy(ME.pos); cam.rotation.set(ME.pitch, ME.yaw, 0); cam.updateMatrixWorld(); rnd.setFocus(ME.pos); }
+  function step(dt) {
+    t += dt;
+    pivot.rotation.z = 0.55 * Math.sin(t * 1.6); pivot.rotation.x = 0.2 * Math.sin(t * 1.1);
+    spin.rotation.set(t * 0.7, t * 0.9, 0); glow.rotation.y = t * 0.8; glow.position.y = 1.4 + 0.08 * Math.sin(t * 2);
+  }
+  function resize() { rnd.setSize(innerWidth, innerHeight, Math.min(devicePixelRatio, 2)); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); }
+  addEventListener('resize', resize); resize();
+  const hud = document.getElementById('hud');
+  function frame(dt) {
+    place(); rnd.render(scene, cam, dt);
+    const s = rnd.stats(), S = rnd.settings;
+    hud.textContent = `${rnd.quality}  ssao ${S.ssao && rnd.quality !== 'low' ? 'on' : 'off'}  bloom ${S.bloom ? 'on' : 'off'}  fog ${S.fog ? 'on' : 'off'}  ibl ${S.ibl ? 'on' : 'off'}${S.debug ? '  view ' + S.debug : ''}\n` +
+      `calls ${s.calls} (world ${s.worldCalls}, vm ${s.vmCalls}, post ${s.postCalls})  tris ${(s.triangles / 1000).toFixed(0)}k  cpu ${s.ms.toFixed(1)} ms`;
+  }
+  function loop(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; if (!paused) { step(dt); frame(dt); } requestAnimationFrame(loop); }
+  addEventListener('keydown', e => {
+    const S = rnd.settings;
+    if (e.code === 'Digit1') S.ssao = !S.ssao; if (e.code === 'Digit2') S.bloom = !S.bloom; if (e.code === 'Digit3') S.fog = !S.fog; if (e.code === 'Digit4') S.ibl = !S.ibl;
+    if (e.code === 'KeyQ') rnd.setQuality({ high: 'medium', medium: 'low', low: 'high' }[rnd.quality]);
+    if (e.code === 'KeyV') S.debug = { '': 'ao', ao: 'ambient', ambient: 'bloom', bloom: '' }[S.debug];
+  });
+  window.__t = { rnd, scene, cam, me: ME,
+    set(o) { Object.assign(rnd.settings, o); }, quality: q => rnd.setQuality(q), sky: p => rnd.updateSky(p),
+    view(o) { if (o.pos) ME.pos.fromArray(o.pos); if (o.yaw !== undefined) ME.yaw = o.yaw; if (o.pitch !== undefined) ME.pitch = o.pitch; if (o.fov) { cam.fov = o.fov; cam.updateProjectionMatrix(); } },
+    pause(on) { paused = on !== false; }, sim(s) { for (let i = 0; i < Math.round(s * 30); i++) step(1 / 30); },
+    frame(n) { for (let i = 0; i < (n || 1); i++) frame(1 / 30); return rnd.stats(); }, stats: () => rnd.stats() };
+  frame(0); requestAnimationFrame(loop);
+  window.__ready = true;
+})();
+</script>

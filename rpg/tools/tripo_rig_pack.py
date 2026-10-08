@@ -1,7 +1,8 @@
 """Pack a Tripo-rigged character and its animation GLBs into one JSON the Reach builds a SkinnedMesh from.
 
 usage: python3 rpg/tools/tripo_rig_pack.py rig.glb out.json name=clip.glb [name=clip.glb ...]
-env:   TEX colour map size (2048), NTEX normal/ORM/emission size (1024), DARK albedo power, METAL, ROUGH, G0/G1 red glow thresholds, EMIT
+env:   TEX colour map size (2048), NTEX normal/ORM/emission size (1024), DARK albedo power, METAL, ROUGH, G0/G1 red glow thresholds, EMIT,
+       GLOW_RGB the glow's tint (1.2,0.45,0.4)
 
 The game has no GLTFLoader, so this keeps only what three.js needs: the joint tree (rest TRS), inverse bind matrices,
 the mesh (normals and skin as bytes), WebP maps with the red glow pulled out of the colour as emission, and each clip
@@ -58,7 +59,8 @@ NM = img(mt['normalTexture']['index']).convert('RGB')
 ss = lambda e0, e1, x: np.clip((x - e0) / (e1 - e0), 0, 1) ** 2 * (3 - 2 * np.clip((x - e0) / (e1 - e0), 0, 1))
 r, g, bb = C[..., 0], C[..., 1], C[..., 2]
 glow = ss(float(os.environ.get('G0', 0.15)), float(os.environ.get('G1', 0.45)), r - np.maximum(g, bb)) * ss(0.3, 0.7, r)
-E = glow[..., None] ** 1.5 * np.clip(C * np.array([1.2, 0.45, 0.4]), 0, 1) * float(os.environ.get('EMIT', 1.0))
+GRGB = np.array([float(x) for x in os.environ.get('GLOW_RGB', '1.2,0.45,0.4').split(',')])      # the glow's tint (the Feyr's by default)
+E = glow[..., None] ** 1.5 * np.clip(C * GRGB, 0, 1) * float(os.environ.get('EMIT', 1.0))
 A = np.power(C, float(os.environ.get('DARK', 1.35))) * (1 - glow[..., None] * 0.6) + glow[..., None] * np.array([0.12, 0.015, 0.01]) * 0.6
 rough = np.clip(MR[..., 1] + float(os.environ.get('ROUGH', 0)), 0.2, 1); metal = np.clip(MR[..., 2] * float(os.environ.get('METAL', 1)) * (1 - glow), 0, 1)
 q = lambda a: Image.fromarray((np.clip(a, 0, 1) * 255 + 0.5).astype(np.uint8))

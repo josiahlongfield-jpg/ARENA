@@ -3,7 +3,7 @@
 game_src.html  -> game.html   the RPG (published as the artifact; no doc skeleton)
                -> gallery.html  the wargear gallery alone (published as its own artifact)
 world_src.html -> world.html  the walkable preview it grew from
-room_src.html  -> room.html   the character room: the Vigil, the Skeleton and the Feyr idling, with the game's own meshes and maps
+room_src.html  -> room.html   the character room: the Vigil (idle, and armed in a combat stance), the Skeleton and the Feyr, old or new renderer
 Every script is syntax-checked with node.
 usage: python3 rpg/build.py   (from the repo root or from rpg/)
 """
@@ -30,8 +30,10 @@ game_assets = dict(assets, snd=json.load(open(os.path.join(HERE, '..', 'data', '
                    feyr=json.load(open(os.path.join(HERE, 'assets', 'feyr_rig.json'))),      # the Tripo-rigged Feyr (tools/tripo_rig_pack.py)
                    vigil=json.load(open(os.path.join(HERE, 'assets', 'vigil_rig.json'))))    # the player's body (tools/vigil_pack.py)
 
-def build(src_name, out_name, data):
+def build(src_name, out_name, data, inject=None):
     src = open(os.path.join(HERE, src_name)).read()
+    for marker, text in (inject or {}).items():       # code spliced in before the check, so it is checked too
+        assert src.count(marker) == 1, marker; src = src.replace(marker, text)
     assert src.count('/*__ASSETS__*/null') == 1
     out = src.replace('/*__ASSETS__*/null', json.dumps(data, separators=(',', ':')))
     open(os.path.join(HERE, out_name), 'w').write(out)
@@ -51,6 +53,12 @@ def build_gallery():
     print(f'gallery.html: {len(src) / 1e6:.1f} MB')
 build_gallery()
 build('world_src.html', 'world.html', assets)
-build('room_src.html', 'room.html', dict(vigil=game_assets['vigil'], feyr=game_assets['feyr'],
+# the room: the Vigil with finger joints (vigil/tools/body_fingers.py) twice, once holding the rifle (vigil/tools/rifle_pack.py) in the grips
+# vigil/tools/grip_solve.py found for her hands, and drawn by Vigil's renderer (vigil/src/js/render.js) or the plain one
+VIGIL = os.path.join(HERE, '..', 'vigil')
+rifle_js = open(os.path.join(VIGIL, 'assets', 'rifle.js')).read()
+build('room_src.html', 'room.html', dict(vigil=json.load(open(os.path.join(VIGIL, 'assets', 'vigil_body.json'))), feyr=game_assets['feyr'],
       skeleton=json.load(open(os.path.join(HERE, 'assets', 'skeleton_rig.json'))),      # the user's skeletal design (tools/vigil_pack.py)
-      tex={k: tex[k] for k in ('monastery_stone_floor|d', 'monastery_stone_floor|n', 'castle_wall_slates|d', 'castle_wall_slates|n')}))
+      rifle=json.loads(rifle_js[rifle_js.index('{'):rifle_js.rindex('}') + 1]), grips=json.load(open(os.path.join(VIGIL, 'assets', 'grips_body.json'))),
+      tex={k: tex[k] for k in ('monastery_stone_floor|d', 'monastery_stone_floor|n', 'castle_wall_slates|d', 'castle_wall_slates|n')}),
+      inject={'/*__RENDER__*/': open(os.path.join(VIGIL, 'src', 'js', 'render.js')).read().replace('\n', '\n  ').rstrip()})

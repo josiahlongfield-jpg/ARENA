@@ -3617,12 +3617,18 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     const mat = new THREE.MeshStandardMaterial({ map: tex('color', true), normalMap: tex('normal'), normalScale: new THREE.Vector2(1, -1), roughnessMap: orm, metalnessMap: orm,
       emissiveMap: tex('emis', true), emissive: 0xffffff, emissiveIntensity: 2.4, skinning: true });
     const ibm = []; for (let i = 0; i < g.joints.length; i++) ibm.push(new THREE.Matrix4().fromArray(g.ibm, i * 16));
-    // clips: int16 quaternions and float hip positions at a fixed rate
-    const clips = {}, speed = {};
+    // clips: int16 quaternions and float hip positions at a fixed rate.
+    // A Feyr floats: its legs end in one joined point, so Tripo's stepping legs would tear the mesh between them. The legs keep their
+    // sculpted pose in every clip, the hips only bob a little, and the body hovers (HOVER, with a slow drift in animateFeyr)
+    // Its kneel (hurt) would tip the joined legs out in front, so there the hips keep still too and only the body above them slumps
+    const clips = {}, speed = {}, LEG = /Thigh|Calf|Foot|ToeBase/, HANG = /^(Root|Hip|Pelvis)$/, hipZ = A.tree.find(n => n.n === 'Hip').t[2], HOVER = 0.22;
     for (const [name, c] of Object.entries(A.clips)) {
-      const tracks = c.tr.map(([bone, k, n, b]) => {
+      const tracks = c.tr.filter(([bone, k]) => !LEG.test(bone) && !(name === 'hurt' && k === 'q' && HANG.test(bone))).map(([bone, k, n, b]) => {
         const times = Float32Array.from({ length: n }, (_, i) => i / c.fps), raw = bytes(b).buffer;
-        if (k === 't') return new THREE.VectorKeyframeTrack(bone + '.position', times, new Float32Array(raw));
+        if (k === 't') {      // the hips' height (z in the rig) sinks at most 10 cm of rig, so the point never meets the ground
+          const v = new Float32Array(raw); for (let i = 2; i < v.length; i += 3) v[i] = hipZ - Math.min(0.1, (hipZ - v[i]) * (name === 'hurt' ? 0.23 : 0.5));
+          return new THREE.VectorKeyframeTrack(bone + '.position', times, v);
+        }
         const q = new Int16Array(raw), f = new Float32Array(q.length); for (let i = 0; i < q.length; i++) f[i] = q[i] / 32767;
         return new THREE.QuaternionKeyframeTrack(bone + '.quaternion', times, f);
       });
@@ -3633,17 +3639,17 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
       const bones = A.tree.map(n => { const b = new THREE.Bone(); b.name = n.n; b.position.fromArray(n.t); b.quaternion.fromArray(n.r); b.scale.fromArray(n.s); return b; });
       A.tree.forEach((n, i) => { if (n.p >= 0) bones[n.p].add(bones[i]); });
       const arm = bones[0], root = new THREE.Group(), holder = new THREE.Group();
-      holder.rotation.y = -PI / 2; holder.scale.setScalar(k); holder.add(arm); root.add(holder);
+      holder.rotation.y = -PI / 2; holder.scale.setScalar(k); holder.position.y = HOVER; holder.add(arm); root.add(holder);
       const m = mat.clone(), mesh = new THREE.SkinnedMesh(geo, m); mesh.castShadow = true; mesh.frustumCulled = false; arm.add(mesh);
       // bind in the rig's own space (the inverse binds were made there), not the scaled world, or the holder's scale would apply twice
       arm.updateMatrix(); mesh.bind(new THREE.Skeleton(g.joints.map(i => bones[i]), ibm), arm.matrix.clone());
       const mix = new THREE.AnimationMixer(arm), act = {};
       for (const n in clips) { act[n] = mix.clipAction(clips[n]); if (n === 'slash') { act[n].setLoop(THREE.LoopOnce); act[n].clampWhenFinished = true; } }
       act.idle.play();
-      return { root, holder, mesh, mat: m, mix, act, cur: 'idle', spine: bones.find(b => b.name === 'Spine01'), k };
+      return { root, holder, mesh, mat: m, mix, act, cur: 'idle', spine: bones.find(b => b.name === 'Spine01'), k, ph: Math.random() * 7 };
     }
     // the slash clip winds up from 0.7 s and lands at 2.1 s; played at 1.6x the blow lands 0.875 s after the wind-up starts
-    return { build, speed, slash0: 0.7, slashK: 1.6, H };
+    return { build, speed, slash0: 0.7, slashK: 1.6, H, HOVER };
   })();
 
   // ================================================================ enemies
@@ -3837,7 +3843,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
         J.root.rotation.set(0, 0, 0); J.root.rotation.y = e.yaw;
         J.root.rotateX(-smooth(f) * PI / 2 * (e.fall.dot(tmp.set(Math.sin(e.yaw), 0, Math.cos(e.yaw))) > 0 ? -1 : 1));
         J.root.position.copy(e.pos);
-        if (J.mix) { feyrPlay(J, 'hurt'); J.mix.update(dt); J.mat.emissiveIntensity = 2.4 * Math.max(0, 1 - e.deadT / 1.5); }
+        if (J.mix) { feyrPlay(J, 'hurt'); J.mix.update(dt); J.mat.emissiveIntensity = 2.4 * Math.max(0, 1 - e.deadT / 1.5); J.holder.position.y = FEYR.HOVER * (1 - f); }      // a dead Feyr drops out of the air
         if (e.deadT > 6) removeEnemy(e);
         continue;
       }
@@ -4086,6 +4092,7 @@ const GALLERY_ONLY = true;      // build.py also makes gallery.html: the wargear
     feyrPlay(J, name);
     if (name === 'walk') J.act.walk.timeScale = clamp(sp / (FEYR.speed.walk * J.k * e.sc), 0.6, 2.1);
     J.mix.update(dt);
+    J.holder.position.y = FEYR.HOVER + 0.04 * Math.sin(G.time * 1.3 + J.ph);      // drifting on the air
     // struck: a jolt back through the spine, on top of whatever clip is playing
     if (e.hitT > 0 || e.stag > 0) J.spine.rotateZ(-0.25 * Math.max(e.hitT / 0.12, Math.min(1, e.stag * 3)));
   }

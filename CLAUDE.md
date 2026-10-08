@@ -139,11 +139,37 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
   `templar-arena/concepts/step3/vigil_player/`. Test hooks `body(kind)`, `thirdP(on)`.
 - Gallery: `openGallery()` from the menu, and `rpg/gallery.html` (build.py, `GALLERY_ONLY`, no textures or sounds) is the same gallery alone,
   published to https://claude.ai/artifact/2dyF1DF8Zz8JJPPMpeA7pJ. Hook `window.__gal` (show, look, hawk, view, step) in that build.
-- Character room: `rpg/room_src.html` -> `rpg/room.html` (build.py) is an empty stone hall where the Vigil, the Skeleton and the Feyr idle with the game's own meshes,
-  maps and lights, to walk round and inspect. The Skeleton is the user's skeletal design, Tripo-rigged and packed by `vigil_pack.py` (GLOW=red) into
-  `rpg/assets/skeleton_rig.json`, so it could be worn with `wearBody` like the Vigil. Published to https://claude.ai/artifact/LWHmSFayM8rJzQn44RZJCZ. Hook `window.__room` (set, light, sim, still, run).
+- Character room: `rpg/room_src.html` -> `rpg/room.html` (build.py) is an empty stone hall where the Vigil (twice: at ease, and armed in a combat stance),
+  the Skeleton and the Feyr stand with the game's own meshes, maps and lights, to walk round and inspect. The Skeleton is the user's skeletal design, Tripo-rigged
+  and packed by `vigil_pack.py` (GLOW=red) into `rpg/assets/skeleton_rig.json`, so it could be worn with `wearBody` like the Vigil. Both Vigils use
+  `vigil/assets/vigil_body.json` (her rig plus finger joints). The armed one (`AV`, `stanceBody`, `STANCE`) is posed by hand each frame: legs by two-bone IK
+  (`legTo`), the rifle placed from her right eye (sight line) and her shoulder pocket (butt), then the arms by IK (`armTo`) onto the grips from
+  `vigil/assets/grips_body.json`, fingers included. R (or the panel button) switches between Vigil's renderer (`vigil/src/js/render.js`, injected at
+  `/*__RENDER__*/`) and the plain one; B goes back to the door; `?old` starts plain. The page is about 15.5 MB, near the 16 MB artifact limit.
+  Published to https://claude.ai/artifact/LWHmSFayM8rJzQn44RZJCZ. Hook `window.__room` (set, light, sim, still, run, mode(on), armed, rifle, stance, pose).
 - Test hook `window.__rpg`: begin(fresh), sim(s, fps), set({pos,yaw,pitch,hp,gold,quest}), tp(x,z,yaw), spawn, clear, noEnc, fire, sword,
   execute, dash, key, act, enter(id), exit, wave(n), killAll, xp, give(slot,rar,pw,exo), equip(id), power(), ab(k), fill(), node, subUse,
   cs(o), week(), abil {g, m, s, st, hud}, cos {shader, hawk, orn, skull, emblems, state, vis}, ui(name), talk(id), travel(id), save, quest, norender, render, view(cam, target, fov)/unview, board, land, fly, jump, trial,
   look, cannon, keep(), hawk(), jp(), state(). `noEnc(true)` stops encounters; `noEnc()` turns them back on.
   The page takes about 17 s to load headless (SwiftShader). `window.__world` is the old preview's hook.
+
+## Vigil (vigil/)
+The new game: a Destiny-like first-person shooter in the user's own designs, built from scratch (not on The Reach, to keep the art direction its own).
+The player is the Vigil with an assault rifle as the primary weapon; enemies will be the Feyr and the Skeleton. Work in progress.
+- `src/js/render.js`: `makeRenderer(canvas, opts)`, the frame: HDR target with 4x MSAA, procedural sky captured into PMREM for image-based light,
+  a 4096 sun shadow that follows `setFocus` in whole texels, half-res SSAO on the ambient share only (patched materials write it to alpha), bloom,
+  height fog patched into every material (use it instead of `scene.fog`), a layer-1 viewmodel pass with its own FOV, ACES and a grade.
+  Lights are in physical units (a non-physical scene needs its lights x PI). Quality 'high' | 'medium' | 'low'. Test yard: `test/render_test.html`.
+- `test/shot.js <url> <out.png> [steps]`: headless screenshots (steps eval, wait, waitFor, key, click, shot); waits for `window.__ready`.
+- Hands: `tools/hands.py` builds the finger rig (15 joints a hand) from landmarks marked by hand in `tools/vigil_hands.json` (per hand: wrist, u along
+  the fingers, palm normal, and each finger's joints in mm in the hand's (side, along, palm) frame). Tripo's Mixamo-spec rig has no fingers, so don't use it.
+  `tools/body_fingers.py` adds them to her whole body (`rpg/assets/vigil_rig.json` -> `assets/vigil_body.json`); `tools/fp_arms.py` builds the
+  150k first-person arms with them. Joint names `thumb1L` ... `little3R` (base to end), after the body's own 17.
+- Rifle: `tools/rifle_pack.py` packs the user's assault rifle (Tripo bake, project files `templar-arena/concepts/step3/rifle/ar_150k.glb`) into
+  `assets/rifle.js` (`window.VG_RIFLE`): body and a removable magazine, quantised to 16 bits in chunks of under 65536 vertices, 2K maps, and the
+  points the hands, sights and effects need (`pts`: sight, front, muzzle, gripTop/Bot, trigger, guard, butt, ejector, magTop/magDir, peep).
+  Frame: metres, muzzle -Z, top +Y, its right side +X, origin at the rear sight on the sight line. The peep hole is cut by a shader discard.
+- Grips: `tools/grip_solve.py hands.json rifle.js out.json [preview.png]` places each hand on its grip (right: pistol grip, index pad to the trigger;
+  left: under the handguard, fingers up its right side) and tries every finger pose on a grid, skinned as the game skins it, keeping the best grasp
+  that stays SKIN (0.8 mm) clear of the rifle (voxelised at 1 mm). Out: per hand `T` (her rest space -> rifle frame) and `q` (each finger joint's turn
+  in rest space). The hand's target = rifle matrix x T x the hand joint's rest matrix; each finger joint's quaternion = its rest quaternion x q.

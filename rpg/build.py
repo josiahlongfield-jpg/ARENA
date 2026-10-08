@@ -3,7 +3,8 @@
 game_src.html  -> game.html   the RPG (published as the artifact; no doc skeleton)
                -> gallery.html  the wargear gallery alone (published as its own artifact)
 world_src.html -> world.html  the walkable preview it grew from
-Both scripts are syntax-checked with node.
+room_src.html  -> room.html   the character room: the Vigil and the Feyr idling, with the game's own meshes and maps
+Every script is syntax-checked with node.
 usage: python3 rpg/build.py   (from the repo root or from rpg/)
 """
 import base64, json, os, re, subprocess, tempfile
@@ -50,3 +51,5 @@ def build_gallery():
     print(f'gallery.html: {len(src) / 1e6:.1f} MB')
 build_gallery()
 build('world_src.html', 'world.html', assets)
+build('room_src.html', 'room.html', dict(vigil=game_assets['vigil'], feyr=game_assets['feyr'],
+      tex={k: tex[k] for k in ('monastery_stone_floor|d', 'monastery_stone_floor|n', 'castle_wall_slates|d', 'castle_wall_slates|n')}))

@@ -138,6 +138,8 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
   `templar-arena/concepts/step3/vigil_player/`. Test hooks `body(kind)`, `thirdP(on)`.
 - Gallery: `openGallery()` from the menu, and `rpg/gallery.html` (build.py, `GALLERY_ONLY`, no textures or sounds) is the same gallery alone,
   published to https://claude.ai/artifact/2dyF1DF8Zz8JJPPMpeA7pJ. Hook `window.__gal` (show, look, hawk, view, step) in that build.
+- Character room: `rpg/room_src.html` -> `rpg/room.html` (build.py) is an empty stone hall where the Vigil and the Feyr idle with the game's own meshes,
+  maps and lights, to walk round and inspect. Published to https://claude.ai/artifact/LWHmSFayM8rJzQn44RZJCZ. Hook `window.__room` (set, light, sim, still, run).
 - Test hook `window.__rpg`: begin(fresh), sim(s, fps), set({pos,yaw,pitch,hp,gold,quest}), tp(x,z,yaw), spawn, clear, noEnc, fire, sword,
   execute, dash, key, act, enter(id), exit, wave(n), killAll, xp, give(slot,rar,pw,exo), equip(id), power(), ab(k), fill(), node, subUse,
   cs(o), week(), abil {g, m, s, st, hud}, cos {shader, hawk, orn, skull, emblems, state, vis}, ui(name), talk(id), travel(id), save, quest, norender, render, view(cam, target, fov)/unview, board, land, fly, jump, trial,

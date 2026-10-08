@@ -1,0 +1,288 @@
+<title>Reach Character Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Alegreya+Sans:wght@400;500;700&display=swap">
+<style>
+/* One dark look, the game's own: bone text on near-black, gold for what you can press. A full-screen room with one small panel in the corner. */
+:root { --bg: #0d0b0a; --ink: #e8dfcc; --dim: #a89d88; --gold: #c9a24a; --panel: rgba(14, 12, 10, .78); --line: rgba(232, 223, 204, .16);
+  --display: 'IM Fell English SC', 'Iowan Old Style', Georgia, serif; --body: 'Alegreya Sans', 'Segoe UI', system-ui, sans-serif; color-scheme: dark; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body); overflow: hidden; }
+#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#panel { position: fixed; left: 16px; top: calc(16px + env(safe-area-inset-top, 0px)); width: min(330px, calc(100vw - 32px)); background: var(--panel);
+  border: 1px solid var(--line); padding: 14px 16px; display: grid; gap: 10px; backdrop-filter: blur(6px); }
+#panel h1 { margin: 0; font: 400 24px/1.1 var(--display); letter-spacing: .02em; text-wrap: balance; }
+#panel p { margin: 0; color: var(--dim); }
+#keys { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 14px; }
+#keys dt { color: var(--gold); font-weight: 700; white-space: nowrap; }
+#keys dd { margin: 0; color: var(--dim); min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+button { font: 500 14px var(--body); color: var(--ink); background: transparent; border: 1px solid var(--line); padding: 6px 10px; cursor: pointer; }
+button:hover { border-color: var(--gold); }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
+#panel.min > :not(.top) { display: none; }
+.top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+#hide { padding: 2px 8px; font-size: 13px; }
+#hint { position: fixed; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 8px 14px; background: var(--panel);
+  border: 1px solid var(--line); color: var(--ink); font-size: 14px; pointer-events: none; transition: opacity .4s; max-width: calc(100vw - 32px); text-align: center; }
+#hint.off { opacity: 0; }
+#cross { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: var(--ink); opacity: .55; pointer-events: none; }
+#err { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; font-size: 17px; }
+@media (hover: none) { .desk { display: none; } } @media (hover: hover) { .touch { display: none; } }
+@media (prefers-reduced-motion: reduce) { #hint { transition: none; } }
+</style>
+<canvas id="c"></canvas>
+<div id="cross"></div>
+<section id="panel" aria-label="Room controls">
+  <div class="top"><h1>Character room</h1><button id="hide" type="button" aria-label="Hide the panel">Hide</button></div>
+  <p>The Vigil and the Feyr, with the meshes, maps and lights they have in The Reach. The Vigil is 1.95 m to the top of her helm, the Feyr 2.4 m.</p>
+  <dl id="keys" class="desk"><dt>W A S D</dt><dd>Walk (Shift to go faster)</dd><dt>Mouse</dt><dd>Look; click the room to lock it, Esc to free it</dd>
+    <dt>Space / C</dt><dd>Raise or lower your eye</dd><dt>Wheel</dt><dd>Zoom</dd><dt>L / P / R</dt><dd>Light, pause the idle, back to the door</dd></dl>
+  <p class="touch">Drag on the left half to walk and on the right half to look.</p>
+  <div class="row"><button id="light" type="button">Light: Reach day</button><button id="pause" type="button" aria-pressed="false">Pause idle</button></div>
+  <div class="row"><button id="up" type="button">Eye up</button><button id="down" type="button">Eye down</button><button id="home" type="button">Back to the door</button></div>
+</section>
+<div id="hint">Click the room to look around</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The Reach inlines them (build.py)
+(() => {
+  const $ = id => document.getElementById(id);
+  if (!window.THREE) { document.body.insertAdjacentHTML('beforeend', '<div id="err">The 3D engine didn’t load. Check your connection and reload the page.</div>'); return; }
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true, powerPreference: 'high-performance' }); }
+  catch (e) { document.body.insertAdjacentHTML('beforeend', '<div id="err">This browser couldn’t start 3D graphics (WebGL). Try Chrome, Edge or Firefox.</div>'); return; }
+  const V3 = THREE.Vector3, PI = Math.PI, clamp = (x, a, b) => x < a ? a : x > b ? b : x, damp = (k, dt) => 1 - Math.exp(-k * dt);
+  const CL = h => new THREE.Color(h).convertSRGBToLinear();
+  // the game's renderer settings, so the characters read as they do there
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+  renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(70, 1, 0.03, 400); cam.rotation.order = 'YXZ';
+
+  // ================================================================ the room: a walled hall open to the sky, 22 m across
+  const canvasTex = (w, h, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
+  // the floor and walls in the scanned stone The Reach uses (Poly Haven, CC0), at the game's tiling
+  const tl = new THREE.TextureLoader(), scan = (name, rx, ry, srgb) => { const t = tl.load(ASSETS.tex[name]); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(rx, ry); t.anisotropy = 8; if (srgb) t.encoding = THREE.sRGBEncoding; return t; };
+  const HALF = 11, WALL_H = 3.2;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(22, 22), new THREE.MeshStandardMaterial({ map: scan('monastery_stone_floor|d', 6.6, 6.6, true),
+    normalMap: scan('monastery_stone_floor|n', 6.6, 6.6), roughness: 0.9, metalness: 0 }));
+  floor.rotation.x = -PI / 2; floor.receiveShadow = true; scene.add(floor);
+  const wallM = new THREE.MeshStandardMaterial({ map: scan('castle_wall_slates|d', 7.4, 1.06, true), normalMap: scan('castle_wall_slates|n', 7.4, 1.06), color: 0x9a948a, roughness: 0.95 });
+  for (const [x, z, ry] of [[0, -HALF, 0], [0, HALF, PI], [-HALF, 0, PI / 2], [HALF, 0, -PI / 2]]) {
+    const w = new THREE.Mesh(new THREE.BoxGeometry(22.4, WALL_H, 0.4), wallM); w.position.set(x, WALL_H / 2, z); w.rotation.y = ry; w.castShadow = w.receiveShadow = true; scene.add(w);
+  }
+  // a plaque on the floor in front of each, with the height it stands
+  const plaque = (text, sub, x, z) => {
+    const t = canvasTex(512, 128, (g, w, h) => { g.fillStyle = '#1a1714'; g.fillRect(0, 0, w, h); g.strokeStyle = '#c9a24a'; g.lineWidth = 4; g.strokeRect(8, 8, w - 16, h - 16);
+      g.fillStyle = '#e8dfcc'; g.textAlign = 'center'; g.font = '44px Georgia, serif'; g.fillText(text, w / 2, 62); g.fillStyle = '#c9a24a'; g.font = '26px Georgia, serif'; g.fillText(sub, w / 2, 100); });
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.275), new THREE.MeshStandardMaterial({ map: t, roughness: 0.6, metalness: 0.2 }));
+    m.rotation.set(-PI / 2, 0, PI); m.position.set(x, 0.005, z); m.receiveShadow = true; scene.add(m);
+  };
+
+  // ---- light, from the game's own numbers (colour and strength); the sun is raised so the hall's walls don't shade the floor
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false,
+    uniforms: { top: { value: new V3() }, hor: { value: new V3() } },
+    vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'varying vec3 vD; uniform vec3 top, hor; void main(){ gl_FragColor = vec4(mix(hor, top, smoothstep(0.0, 0.6, vD.y)), 1.0); }' }));
+  scene.add(sky);
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x000000, 1), sun = new THREE.DirectionalLight(0xffffff, 1), fill = new THREE.DirectionalLight(0xffffff, 0);
+  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, near: 1, far: 80 });
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02; scene.add(hemi, sun, sun.target, fill);
+  const LIGHTS = [
+    { name: 'Reach day', hemi: [0xb8b4c8, 0x3a3028, 0.85], sun: [0xffc89a, 1.7], dir: [-0.55, 0.62, -0.8], fill: [0, 0], exp: 1.05, top: 0x34405a, hor: 0xd09868 },      // the region
+    { name: 'Ash Pit dusk', hemi: [0x9c7f8e, 0x2a1a14, 0.6], sun: [0xffa070, 1.7], dir: [-0.55, 0.5, -0.81], fill: [0x6d82c4, 0.4], exp: 1.1, top: 0x120d17, hor: 0xc74d2b },  // the Pit
+    { name: 'Nave gloom', hemi: [0x7484a6, 0x1a1512, 0.55], sun: [0xc4d4ff, 1.5], dir: [0.6, 0.75, -0.2], fill: [0xffb070, 0.25], exp: 1.25, top: 0x08080a, hor: 0x1a1a22 },  // the cathedral
+    { name: 'Night', hemi: [0x4a5878, 0x0c0a0a, 0.22], sun: [0x9fb4ff, 0.45], dir: [-0.3, 0.8, -0.5], fill: [0, 0], exp: 1.3, top: 0x020306, hor: 0x0a0d18 }];      // for the glows
+  let li = 0;
+  function setLight(i) {
+    li = (i + LIGHTS.length) % LIGHTS.length; const L = LIGHTS[li];
+    hemi.color.copy(CL(L.hemi[0])); hemi.groundColor.copy(CL(L.hemi[1])); hemi.intensity = L.hemi[2];
+    sun.color.setHex(L.sun[0]); sun.intensity = L.sun[1]; sun.position.set(...L.dir).normalize().multiplyScalar(40);
+    fill.color.setHex(L.fill[0] || 0xffffff); fill.intensity = L.fill[1]; fill.position.set(30, 25, 30);
+    renderer.toneMappingExposure = L.exp; const t = CL(L.top), h = CL(L.hor); sky.material.uniforms.top.value.set(t.r, t.g, t.b); sky.material.uniforms.hor.value.set(h.r, h.g, h.b);
+    $('light').textContent = 'Light: ' + L.name;
+  }
+
+  // ================================================================ two-bone helpers, as the game's (bones hang along local -Y)
+  const _m4 = new THREE.Matrix4(), _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _x = new V3(), _y = new V3(), _z = new V3();
+  function setBoneWorld(bone, dirW, hintW) {
+    _y.copy(dirW).normalize().negate();
+    _z.copy(hintW).addScaledVector(_y, -hintW.dot(_y)); if (_z.lengthSq() < 1e-6) _z.set(0, 0, 1).addScaledVector(_y, -_y.z); _z.normalize();
+    _x.crossVectors(_y, _z); _m4.makeBasis(_x, _y, _z); _q1.setFromRotationMatrix(_m4);
+    bone.parent.getWorldQuaternion(_q2); bone.quaternion.copy(_q2.invert().multiply(_q1)); bone.updateMatrixWorld(true);
+  }
+  function setHandWorld(hand, zW, yHintW) {
+    _y.copy(yHintW).normalize().negate(); _z.copy(zW).addScaledVector(_y, -zW.dot(_y)).normalize();
+    _x.crossVectors(_y, _z); _m4.makeBasis(_x, _y, _z); _q1.setFromRotationMatrix(_m4);
+    hand.parent.getWorldQuaternion(_q2); hand.quaternion.copy(_q2.invert().multiply(_q1)); hand.updateMatrixWorld(true);
+  }
+  const bytes = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  function geometry(g) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(bytes(g.pos).buffer), 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(new Int8Array(bytes(g.nrm).buffer), 3, true));
+    geo.setAttribute('uv', new THREE.BufferAttribute(new Uint16Array(bytes(g.uv).buffer), 2, true));
+    geo.setAttribute('skinIndex', new THREE.BufferAttribute(bytes(g.ji), 4));
+    geo.setAttribute('skinWeight', new THREE.BufferAttribute(bytes(g.jw), 4, true));
+    geo.setIndex(new THREE.BufferAttribute(g.i32 ? new Uint32Array(bytes(g.idx).buffer) : new Uint16Array(bytes(g.idx).buffer), 1));
+    return geo;
+  }
+  // the game's material for both: Tripo's maps, the glow as emission (2.4, as in The Reach)
+  function material(A, anis) {
+    const tl = new THREE.TextureLoader(), tex = (k, srgb) => { const t = tl.load(A.tex[k]); t.flipY = false; if (srgb) t.encoding = THREE.sRGBEncoding; t.anisotropy = anis; return t; };
+    const orm = tex('orm');
+    return new THREE.MeshStandardMaterial({ map: tex('color', true), normalMap: tex('normal'), normalScale: new THREE.Vector2(1, -1), roughnessMap: orm, metalnessMap: orm,
+      emissiveMap: tex('emis', true), emissive: 0xffffff, emissiveIntensity: 2.4, skinning: true });
+  }
+
+  // ================================================================ the Vigil: the player's skeleton, bound as wearBody binds it in the game
+  function buildVigil() {
+    const A = ASSETS.vigil, at = k => new V3(...A.at[k]), root = new THREE.Group(), J = { root };
+    const g = (parent, p) => { const o = new THREE.Group(); o.position.copy(p); parent.add(o); return o; };
+    J.pelvis = g(root, at('pelvis')); J.waist = g(J.pelvis, at('waist').sub(at('pelvis'))); J.head = g(J.waist, at('head').sub(at('waist')));
+    for (const s of 'LR') {
+      J['hip' + s] = g(J.pelvis, at('hip' + s).sub(at('pelvis'))); J['knee' + s] = g(J['hip' + s], at('knee' + s).sub(at('hip' + s)));
+      J['ankle' + s] = g(J['knee' + s], at('ankle' + s).sub(at('knee' + s))); J['sh' + s] = g(J.waist, at('sh' + s).sub(at('waist')));
+      J['el' + s] = g(J['sh' + s], new V3(0, -at('el' + s).distanceTo(at('sh' + s)), 0)); J['hd' + s] = g(J['el' + s], new V3(0, -at('hd' + s).distanceTo(at('el' + s)), 0));
+      J['tw' + s] = g(J['el' + s], new V3(0, -at('tw' + s).distanceTo(at('el' + s)), 0));
+    }
+    root.updateMatrixWorld(true);
+    for (const s of 'LR') {
+      setBoneWorld(J['sh' + s], new V3().subVectors(at('el' + s), at('sh' + s)), new V3(0, 0, -1));
+      setBoneWorld(J['el' + s], new V3().subVectors(at('hd' + s), at('el' + s)), new V3(0, 0, -1));
+      setHandWorld(J['hd' + s], new V3(0, 0, 1), new V3(...A.hand[s]));
+    }
+    root.updateMatrixWorld(true);
+    const bones = A.joints.map(k => J[k]), mesh = new THREE.SkinnedMesh(geometry(A.geo), material(A, 8));
+    mesh.castShadow = true; mesh.frustumCulled = false; root.add(mesh);
+    mesh.bind(new THREE.Skeleton(bones, bones.map(b => b.matrixWorld.clone().invert())), new THREE.Matrix4());
+    J.rest = {}; for (const k of A.joints) J.rest[k] = J[k].quaternion.clone();
+    return J;
+  }
+  // her idle (the game drives her by hand, so this is too): a slow breath, a look round, weight easing between the feet, arms settled in from the A-pose
+  const _qa = new THREE.Quaternion(), _Z = new V3(0, 0, 1);
+  function idleVigil(J, t) {
+    const br = Math.sin(t * 1.55), sway = Math.sin(t * 0.35);
+    J.waist.rotation.set(0.014 * br - 0.01, 0.05 * Math.sin(t * 0.23), 0);
+    J.head.rotation.set(0.05 * Math.sin(t * 0.41) - 0.02, 0.32 * Math.sin(t * 0.19) + 0.07 * Math.sin(t * 0.67), 0);
+    J.pelvis.rotation.z = 0.014 * sway; J.hipL.rotation.z = J.hipR.rotation.z = -0.014 * sway;
+    for (const s of 'LR') { const sx = s === 'L' ? 1 : -1; _qa.setFromAxisAngle(_Z, sx * (-0.03 - 0.012 * br)); J['sh' + s].quaternion.copy(_qa).multiply(J.rest['sh' + s]);
+      _qa.setFromAxisAngle(_x.set(1, 0, 0), 0.05 + 0.02 * br); J['el' + s].quaternion.copy(J.rest['el' + s]).premultiply(_qa); }
+  }
+
+  // ================================================================ the Feyr: Tripo's rig and its own idle clip, built as FEYR.build builds it
+  function buildFeyr() {
+    const A = ASSETS.feyr, g = A.geo;
+    const ibm = []; for (let i = 0; i < g.joints.length; i++) ibm.push(new THREE.Matrix4().fromArray(g.ibm, i * 16));
+    const bones = A.tree.map(n => { const b = new THREE.Bone(); b.name = n.n; b.position.fromArray(n.t); b.quaternion.fromArray(n.r); b.scale.fromArray(n.s); return b; });
+    A.tree.forEach((n, i) => { if (n.p >= 0) bones[n.p].add(bones[i]); });
+    const arm = bones[0], root = new THREE.Group(), holder = new THREE.Group();
+    holder.rotation.y = -PI / 2; holder.scale.setScalar(2.4 / g.height); holder.add(arm); root.add(holder);
+    const mesh = new THREE.SkinnedMesh(geometry(g), material(A, 4)); mesh.castShadow = true; mesh.frustumCulled = false; arm.add(mesh);
+    arm.updateMatrix(); mesh.bind(new THREE.Skeleton(g.joints.map(i => bones[i]), ibm), arm.matrix.clone());      // the rig's own space, never the scaled world
+    const c = A.clips.idle, tracks = c.tr.map(([bone, k, n, b]) => {
+      const times = Float32Array.from({ length: n }, (_, i) => i / c.fps), raw = bytes(b).buffer;
+      if (k === 't') return new THREE.VectorKeyframeTrack(bone + '.position', times, new Float32Array(raw));
+      const q = new Int16Array(raw), f = new Float32Array(q.length); for (let i = 0; i < q.length; i++) f[i] = q[i] / 32767;
+      return new THREE.QuaternionKeyframeTrack(bone + '.quaternion', times, f);
+    });
+    const mix = new THREE.AnimationMixer(arm); mix.clipAction(new THREE.AnimationClip('idle', c.d, tracks)).play();
+    return { root, mix };
+  }
+
+  // they stand mid-hall facing the door, with the sun behind you as you come in
+  const VG = buildVigil(), FY = buildFeyr();
+  VG.root.position.set(-1.5, 0, 0); FY.root.position.set(1.7, 0, 0); VG.root.rotation.y = FY.root.rotation.y = PI;
+  scene.add(VG.root, FY.root);
+  plaque('The Vigil', 'player · 1.95 m', -1.5, -1.0); plaque('The Feyr', 'enemy · 2.4 m', 1.7, -1.2);
+  const BODIES = [{ x: -1.5, z: 0, r: 0.42, h: 2.0 }, { x: 1.7, z: 0, r: 0.55, h: 2.45 }];
+
+  // ================================================================ you: walk, look, raise your eye, zoom
+  const ME = { pos: new V3(0, 0, -5.5), yaw: PI, pitch: -0.05, eye: 1.7, fov: 70 }, HOME = { x: 0, z: -5.5, yaw: PI, pitch: -0.05, eye: 1.7 };
+  const keys = new Set(); let paused = false, locked = false, hintT = 0;
+  const hint = (t, s = 2.5) => { $('hint').textContent = t; $('hint').classList.remove('off'); hintT = s; };
+  addEventListener('keydown', e => {
+    if (e.target.tagName === 'BUTTON' && (e.code === 'Space' || e.code === 'Enter')) return;
+    keys.add(e.code);
+    if (e.code === 'KeyL') setLight(li + 1); if (e.code === 'KeyP') togglePause(); if (e.code === 'KeyR') goHome();
+    if (e.code === 'KeyH') fold();
+    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  });
+  addEventListener('keyup', e => keys.delete(e.code)); addEventListener('blur', () => keys.clear());
+  const look = (dx, dy, k) => { ME.yaw -= dx * k; ME.pitch = clamp(ME.pitch - dy * k, -1.5, 1.5); };
+  const cv = $('c');
+  // a mouse locks the pointer when it can, and drags to look when it can't (some app views refuse pointer lock); touch splits the screen
+  const touch = { move: null, look: null };
+  cv.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse') {
+      if (!locked && cv.requestPointerLock) { try { const p = cv.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (_) {} }
+      touch.look = { id: e.pointerId, x: e.clientX, y: e.clientY, mouse: true }; return;
+    }
+    const side = e.clientX < innerWidth / 2 ? 'move' : 'look';
+    if (!touch[side]) { touch[side] = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); }
+  });
+  cv.addEventListener('pointermove', e => {
+    if (locked && e.pointerType === 'mouse') { look(e.movementX, e.movementY, 0.0022); return; }
+    const L = touch.look;
+    if (L && L.id === e.pointerId) { look(e.clientX - L.x, e.clientY - L.y, L.mouse ? 0.004 : 0.006); L.x = e.clientX; L.y = e.clientY; }
+    const M = touch.move; if (M && M.id === e.pointerId) { M.x = e.clientX; M.y = e.clientY; }
+  });
+  const lift = e => { for (const k of ['move', 'look']) if (touch[k] && touch[k].id === e.pointerId) touch[k] = null; };
+  cv.addEventListener('pointerup', lift); cv.addEventListener('pointercancel', lift);
+  document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === cv; if (locked) { touch.look = null; $('hint').classList.add('off'); } });
+  cv.addEventListener('wheel', e => { e.preventDefault(); ME.fov = clamp(ME.fov * Math.exp(e.deltaY * 0.001), 18, 85); }, { passive: false });
+  function togglePause() { paused = !paused; $('pause').setAttribute('aria-pressed', paused); $('pause').textContent = paused ? 'Resume idle' : 'Pause idle'; }
+  function goHome() { ME.pos.set(HOME.x, 0, HOME.z); ME.yaw = HOME.yaw; ME.pitch = HOME.pitch; ME.eye = HOME.eye; ME.fov = 70; }
+  $('light').addEventListener('click', () => setLight(li + 1)); $('pause').addEventListener('click', togglePause); $('home').addEventListener('click', goHome);
+  function fold(on) { const m = $('panel').classList.toggle('min', on); $('hide').textContent = m ? 'Show' : 'Hide'; $('hide').setAttribute('aria-label', m ? 'Show the panel' : 'Hide the panel'); }
+  $('hide').addEventListener('click', () => fold());
+  if (innerWidth < 600) fold(true);      // a phone needs the room more than the key list
+  const hold = (id, d) => { let on = false; const b = $(id); b.addEventListener('pointerdown', () => { on = true; }); for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => { on = false; }); return () => on ? d : 0; };
+  const upB = hold('up', 1), downB = hold('down', -1);
+
+  function move(dt) {
+    let f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+    let r = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+    const M = touch.move; if (M) { f = clamp(-(M.y - M.y0) / 60, -1, 1); r = clamp((M.x - M.x0) / 60, -1, 1); }
+    const sp = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 4.2 : 1.8) * Math.min(1, Math.hypot(f, r));
+    const l = Math.hypot(f, r) || 1, sy = Math.sin(ME.yaw), cy = Math.cos(ME.yaw);
+    ME.pos.x += (-sy * f + cy * r) / l * sp * dt; ME.pos.z += (-cy * f - sy * r) / l * sp * dt;
+    const up = (keys.has('Space') || keys.has('KeyE') ? 1 : 0) - (keys.has('KeyC') || keys.has('KeyQ') || keys.has('ControlLeft') ? 1 : 0) + upB() + downB();
+    ME.eye = clamp(ME.eye + up * 1.4 * dt, 0.25, 3.4);
+    ME.pos.x = clamp(ME.pos.x, -HALF + 0.5, HALF - 0.5); ME.pos.z = clamp(ME.pos.z, -HALF + 0.5, HALF - 0.5);
+    for (const b of BODIES) {         // close enough to study a seam, never inside them
+      if (ME.eye > b.h + 0.15) continue;
+      const dx = ME.pos.x - b.x, dz = ME.pos.z - b.z, d = Math.hypot(dx, dz);
+      if (d < b.r) { const k = b.r / (d || 1e-3); ME.pos.x = b.x + dx * k; ME.pos.z = b.z + dz * k; }
+    }
+  }
+
+  // ================================================================ the loop
+  function resize() { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); }
+  addEventListener('resize', resize); resize(); setLight(0);
+  let t = 0, last = performance.now(), frozen = false;
+  function step(dt) {
+    move(dt);
+    if (!paused) { t += dt; FY.mix.update(dt); idleVigil(VG, t); }
+    cam.position.set(ME.pos.x, ME.eye, ME.pos.z); cam.rotation.set(ME.pitch, ME.yaw, 0);
+    if (Math.abs(cam.fov - ME.fov) > 0.01) { cam.fov += (ME.fov - cam.fov) * damp(12, dt); cam.updateProjectionMatrix(); }
+    if (hintT > 0 && (hintT -= dt) <= 0 && locked) $('hint').classList.add('off');
+  }
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (!frozen) { step(dt); renderer.render(scene, cam); }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  if (!matchMedia('(hover: hover)').matches) hint('Drag left to walk, right to look', 5);
+
+  // for headless checks: place the eye, pick a light, run the idle, render one still
+  window.__room = { set(o) { if (o.pos) ME.pos.set(o.pos[0], 0, o.pos[1]); for (const k of ['yaw', 'pitch', 'eye', 'fov']) if (o[k] !== undefined) ME[k] = o[k]; },
+    light: i => setLight(i), sim(s) { for (let i = 0; i < Math.round(s * 30); i++) step(1 / 30); }, still() { frozen = true; cam.fov = ME.fov; cam.updateProjectionMatrix(); step(0); renderer.render(scene, cam); },
+    run() { frozen = false; }, me: ME };
+})();
+</script>

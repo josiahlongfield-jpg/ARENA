@@ -170,23 +170,7 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
     geo.setIndex(new THREE.BufferAttribute(g.i32 ? new Uint32Array(bytes(g.idx).buffer) : new Uint16Array(bytes(g.idx).buffer), 1));
     return geo;
   }
-  // her gauntlet hands (vigil/tools/gauntlet.py): 16-bit positions over their box, every vertex rigid on one joint, triangles by material
-  function handsGeo(h) {
-    const geo = new THREE.BufferGeometry(), u = new Uint16Array(bytes(h.pos).buffer), p = new Float32Array(u.length);
-    for (let i = 0; i < u.length; i++) p[i] = h.lo[i % 3] + u[i] * h.sc[i % 3];
-    const j = bytes(h.j), ji = new Uint8Array(h.n * 4), jw = new Uint8Array(h.n * 4);
-    for (let i = 0; i < h.n; i++) { ji[i * 4] = j[i]; jw[i * 4] = 255; }
-    geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
-    geo.setAttribute('normal', new THREE.BufferAttribute(new Int8Array(bytes(h.nrm).buffer), 3, true));
-    geo.setAttribute('skinIndex', new THREE.BufferAttribute(ji, 4)); geo.setAttribute('skinWeight', new THREE.BufferAttribute(jw, 4, true));
-    geo.setIndex(new THREE.BufferAttribute(h.i32 ? new Uint32Array(bytes(h.idx).buffer) : new Uint16Array(bytes(h.idx).buffer), 1));
-    for (const [start, count, m] of h.groups) geo.addGroup(start, count, m);
-    return geo;
-  }
-  // the glove and its plates, matched to her own: the glove to the sculpt's glove, the plates to her forearm plates (colour, roughness and metal sampled from her maps)
-  const handMats = () => [
-    new THREE.MeshStandardMaterial({ color: new THREE.Color(0x0e0e0f).convertSRGBToLinear(), roughness: 0.84, metalness: 0.2, skinning: true }),
-    new THREE.MeshStandardMaterial({ color: new THREE.Color(0x2d2d2f).convertSRGBToLinear(), roughness: 0.74, metalness: 0.48, skinning: true })];
+  /*__HANDS__*/
   // the game's material for both: Tripo's maps, the glow as emission (2.4, as in The Reach)
   function material(A, anis) {
     const tl = new THREE.TextureLoader(), tex = (k, srgb) => { const t = tl.load(A.tex[k]); t.flipY = false; if (srgb) t.encoding = THREE.sRGBEncoding; t.anisotropy = anis; return t; };
@@ -227,6 +211,8 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
       hm.bind(mesh.skeleton, new THREE.Matrix4()); J.hands = hm;
     }
     J.rest = {}; J.restW = {}; for (const k of A.joints) { J.rest[k] = J[k].quaternion.clone(); J.restW[k] = J[k].matrixWorld.clone(); }
+    // the hand's long axis in its joint's own frame (for armTo's straight wrists)
+    if (A.fingers && A.fingers.frames) { J.handU = {}; for (const s of 'LR') J.handU[s] = new V3(...A.fingers.frames[s].u).applyMatrix4(new THREE.Matrix4().extractRotation(J.restW['hd' + s]).invert()); }
     J.axis = {}; if (A.fingers) A.fingers.names.forEach((k, i) => { J.axis[k] = new V3(...A.fingers.axis[i]); });
     J.A = A;
     return J;
@@ -337,10 +323,18 @@ const ASSETS = /*__ASSETS__*/null;      // the Vigil and the Feyr exactly as The
     const ca = (a * a + d * d - b * b) / (2 * a * d), p = _b.copy(pole).addScaledVector(n, -pole.dot(n)).normalize();
     return new V3().copy(S).addScaledVector(n, a * ca).addScaledVector(p, a * Math.sqrt(Math.max(0, 1 - ca * ca)));
   }
+  // the way the elbow goes so the forearm runs as nearly along the hand as the reach allows (the wrist as straight as it can be), with
+  // the pole's own way mixed in, which decides when the hand points along the arm. u is the hand's long axis (A.fingers.frames) in world
+  function straightPole(S, W, u, pole, out) {
+    const n = _a.subVectors(W, S).normalize(), up = _b.copy(u).addScaledVector(n, -u.dot(n)), pp = _c.copy(pole).addScaledVector(n, -pole.dot(n)).normalize();
+    return out.copy(up).multiplyScalar(-2.5).add(pp);
+  }
   // arms: bones hang along their local -Y and bend about local x, as buildBody set them; Mt is where the hand's joint must end up
   function armTo(J, s, Mt, pole) {
     const sh = J['sh' + s], el = J['el' + s], hd = J['hd' + s], tw = J['tw' + s];
-    const S = sh.getWorldPosition(new V3()), W = new V3().setFromMatrixPosition(Mt), E = midJoint(S, W, el.position.length(), hd.position.length(), pole);
+    const S = sh.getWorldPosition(new V3()), W = new V3().setFromMatrixPosition(Mt);
+    if (J.handU) pole = straightPole(S, W, new V3().copy(J.handU[s]).applyMatrix4(new THREE.Matrix4().extractRotation(Mt)).normalize(), pole, new V3());
+    const E = midJoint(S, W, el.position.length(), hd.position.length(), pole);
     const x = new V3().crossVectors(_c.subVectors(E, S), _d.subVectors(W, E)).normalize(), y = new V3().subVectors(S, E).normalize();
     setWorldQ(sh, basisQ(x, y, new V3().crossVectors(x, y)));
     y.subVectors(E, W).normalize(); setWorldQ(el, basisQ(x, y, new V3().crossVectors(x, y)));

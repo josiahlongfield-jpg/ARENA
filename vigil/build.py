@@ -10,7 +10,7 @@ usage: python3 vigil/build.py
 import json, os, subprocess, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
-JS = ['base', 'render', 'zone', 'rig', 'weapon']           # in load order; each is one section of the game's IIFE
+JS = ['base', 'render', 'zone', 'hands', 'rig', 'weapon', 'main']           # in load order; each is one section of the game's IIFE
 A = lambda *p: os.path.join(HERE, 'assets', *p)
 
 def load_js_obj(path):
@@ -20,13 +20,18 @@ assets = {
     'rifle': load_js_obj(A('rifle.js')),                   # the user's rifle with its foregrip (rifle_pack.py, foregrip.py)
     'grips': json.load(open(A('grips_fp.json'))),          # where the hands hold it (grip_solve.py)
 }
-tex_dir = os.path.join(ROOT, 'rpg', 'assets', 'tex')       # the CC0 scans the zone lays on (zone.js `scan`)
+# sounds borrowed from Templar Arena's set (data/sounds.json; credits in the menu)
+SND = ['shot_g', 'far_g', 'crack0', 'crack1', 'crack2', 'dry_p', 'p_magin', 'p_magout', 'p_slide', 'land_con', 'hurt0', 'hurt1', 'hurt2', 'hurt3',
+       'flesh0', 'flesh1', 'flesh2', 'flesh3', 'bimp0', 'bimp1', 'swing0', 'swing1', 'swing2'] + [f'st_con{i}' for i in range(6)] + [f'imp_con{i}' for i in range(4)]
+_snd = json.load(open(os.path.join(ROOT, 'data', 'sounds.json'))); assets['snd'] = {k: _snd[k] for k in SND}
+code_all = ''.join(open(os.path.join(HERE, 'src', 'js', n + '.js')).read() for n in JS)
+tex_dir = os.path.join(ROOT, 'rpg', 'assets', 'tex')       # the CC0 scans the zone lays on (only those zone.js `scan`s)
 if os.path.isdir(tex_dir):
     import base64, re
     assets['tex'] = {}
     for f in sorted(os.listdir(tex_dir)):
         m = re.match(r'(.+)_(diff|nor)\.jpg$', f)
-        if m: assets['tex'][f'{m.group(1)}|{"d" if m.group(2) == "diff" else "n"}'] = 'data:image/jpeg;base64,' + base64.b64encode(open(os.path.join(tex_dir, f), 'rb').read()).decode()
+        if m and f"scan('{m.group(1)}|" in code_all: assets['tex'][f'{m.group(1)}|{"d" if m.group(2) == "diff" else "n"}'] = 'data:image/jpeg;base64,' + base64.b64encode(open(os.path.join(tex_dir, f), 'rb').read()).decode()
 
 page = open(os.path.join(HERE, 'src', 'vigil.html')).read()
 code = '\n'.join(open(os.path.join(HERE, 'src', 'js', n + '.js')).read() for n in JS)

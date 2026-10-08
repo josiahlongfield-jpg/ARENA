@@ -28,19 +28,6 @@ function packMat(A, o) {
   return new T.MeshStandardMaterial(Object.assign({ map: tex('color', true), normalMap: tex('normal'), normalScale: new T.Vector2(1, -1), roughnessMap: orm, metalnessMap: orm,
     emissiveMap: A.tex.emis ? tex('emis', true) : null, emissive: A.tex.emis ? 0xffffff : 0x000000, emissiveIntensity: 2.4, skinning: true }, o || {}));
 }
-// gauntlet hands (gauntlet.py): 16-bit positions over their box, every vertex rigid on one joint (j), triangles grouped by material
-function handsGeo(h) {
-  const geo = new T.BufferGeometry(), u = new Uint16Array(bytes(h.pos).buffer), p = new Float32Array(u.length);
-  for (let i = 0; i < u.length; i++) p[i] = h.lo[i % 3] + u[i] * h.sc[i % 3];
-  const j = bytes(h.j), ji = new Uint8Array(h.n * 4), jw = new Uint8Array(h.n * 4);
-  for (let i = 0; i < h.n; i++) { ji[i * 4] = j[i]; jw[i * 4] = 255; }
-  geo.setAttribute('position', new T.BufferAttribute(p, 3));
-  geo.setAttribute('normal', new T.BufferAttribute(new Int8Array(bytes(h.nrm).buffer), 3, true));
-  geo.setAttribute('skinIndex', new T.BufferAttribute(ji, 4)); geo.setAttribute('skinWeight', new T.BufferAttribute(jw, 4, true));
-  geo.setIndex(new T.BufferAttribute(h.i32 ? new Uint32Array(bytes(h.idx).buffer) : new Uint16Array(bytes(h.idx).buffer), 1));
-  for (const [start, count, m] of h.groups) geo.addGroup(start, count, m);
-  return geo;
-}
 // the rifle (rifle_pack.py): 16-bit positions across its box, cut in chunks so each index fits 16 bits
 function chunkGroup(q, mat) {
   const g = new T.Group();

@@ -152,7 +152,7 @@ def around(a, step, thumb):
 def best_pose(H, T, V, fi, A, k=3, far=None):
     """the k best poses in A for finger fi, scored as a grasp: each of its three segments touching the rifle, as many vertices in
     contact as can be, curled rather than straight, the end joint following the middle one as a real finger's does; never into the rifle.
-    far (a point and a direction): the end segment is wanted across that plane, as a thumb that wraps round to the grip's far side"""
+    far (a point and a direction): the end segment is wanted across that plane and touching, as a thumb that wraps round to the grip's far side"""
     out = []
     for c in range(0, len(A), 1500):
         a = A[c:c + 1500]; X = H.pose_finger(fi, a); n = X.shape[1]
@@ -162,7 +162,8 @@ def best_pose(H, T, V, fi, A, k=3, far=None):
         sc = 12 * seg + 0.25 * (d < TOUCH).sum(1) + 0.04 * np.degrees(a[:, :3].sum(1)) - 0.08 * np.abs(np.degrees(a[:, 2] - 0.67 * a[:, 1]))
         if far is not None:
             end = own == fi * 3 + 2; Xw = place(T, X[:, end].reshape(-1, 3)).reshape(len(a), -1, 3).mean(1)
-            sc = sc + 30 * np.clip(((Xw - far[0]) @ far[1]) / 0.012, 0, 1)
+            hold = ((d < TOUCH) & end[None]).any(1)      # only a thumb that lies on the far side counts, not one held out into the air
+            sc = sc + 30 * np.clip(((Xw - far[0]) @ far[1]) / 0.012, 0, 1) * hold
         sc = np.where(ok, sc, -1e9)
         for i in np.argsort(-sc)[:k]: out.append((float(sc[i]), np.asarray(a[i], float), int(seg[i])))
     return sorted(out, key=lambda r: -r[0])[:k]

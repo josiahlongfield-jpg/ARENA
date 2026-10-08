@@ -19,11 +19,7 @@ function midJoint(S, W, a, b, pole) {
   return new V3().copy(S).addScaledVector(n, a * ca).addScaledVector(p, a * Math.sqrt(Math.max(0, 1 - ca * ca)));
 }
 
-// the glove and its plates, matched to her own: the glove to the sculpt's glove, the plates to her forearm plates
-// (colour, roughness and metal sampled from her maps; no glow on the hands)
-const handMats = () => [
-  new T.MeshStandardMaterial({ color: new T.Color(0x0e0e0f).convertSRGBToLinear(), roughness: 0.84, metalness: 0.2, skinning: true }),
-  new T.MeshStandardMaterial({ color: new T.Color(0x2d2d2f).convertSRGBToLinear(), roughness: 0.74, metalness: 0.48, skinning: true })];
+// (her gauntlet hands, handsGeo and handMats, are in hands.js, shared with the character room)
 function buildArms(A) {
   const at = k => new V3(...A.at[k]), root = new T.Group(), J = { root, A };
   const g = (parent, p) => { const o = new T.Group(); o.position.copy(p); parent.add(o); return o; };

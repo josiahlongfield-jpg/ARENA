@@ -10,7 +10,7 @@ usage: python3 vigil/tools/gauntlet.py pack.json [out.json]      (vigil/assets/v
 - the sculpt's hand goes, from just past the band; any finger weight left near the wrist goes back to the hand joint;
 - the 30 finger joints move onto these hands, each with its flex axis (a positive turn curls it toward the palm), and the tips;
 - `hands` holds the new geometry in rest space, triangles grouped by material (0 glove, 1 plate): positions as 16 bits over the box lo..lo+sc*65535,
-  normals as bytes, and `j`, the one joint each vertex is rigid on.
+  normals as bytes, `j`, the one joint each vertex is rigid on, and `wear` (a byte), how much of a plate's worn rim the vertex is on.
 Run it on the packs as body_fingers.py / fp_arms.py made them. Run again on its own output, it gives the same frames and joints, and
 the same hands but for the collar, which follows the band's edge as last cut (a few mm).
 """
@@ -20,6 +20,7 @@ import numpy as np
 SRC = sys.argv[1]; OUT = sys.argv[2] if len(sys.argv) > 2 else SRC
 FN = ['thumb', 'index', 'middle', 'ring', 'little']
 U_CUT = 9.0                     # mm past the band's middle where the sculpt's hand is cut away
+PALM_LAMES = dict(L=2, R=0)      # lames under each wrist: the right's would meet the back of the pistol grip (grip_solve.py's fit)
 
 # ---------------------------------------------------------------- the right hand's design, mm in the hand's frame:
 # s across the hand (thumb side +), u along the fingers from the wrist, n through the palm (palm side +). The left is its mirror.
@@ -50,14 +51,18 @@ S_, U_, N_ = np.eye(3)
 
 # ---------------------------------------------------------------- mesh building: parts in the right hand's mm frame
 class Mesh:
-    """parts, each rigid on one joint: -1 the hand, else finger index * 3 + bone; group 0 glove, 1 plate"""
+    """parts, each rigid on one joint: -1 the hand, else finger index * 3 + bone; group 0 glove, 1 plate; wear (0..1 per vertex)
+    marks a plate's worn rim, which the game draws lighter and smoother, as the edges of her own plates are"""
     def __init__(s): s.parts = []
-    def add(s, P, T, joint, group):
+    def add(s, P, T, *a):
+        """add(P, T, joint, group), or add(P, T, wear, joint, group) for a plate (plate() returns P, T, wear)"""
+        wear, joint, group = a if len(a) == 3 else (None,) + a
         P = np.asarray(P, float); T = np.asarray(T, int)
+        if wear is None: wear = np.zeros(len(P))
         n = np.zeros_like(P); fn = np.cross(P[T[:, 1]] - P[T[:, 0]], P[T[:, 2]] - P[T[:, 0]])
         for k in range(3): np.add.at(n, T[:, k], fn)
         n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
-        s.parts.append((P, n, T, joint, group))
+        s.parts.append((P, n, T, joint, group, np.asarray(wear, float)))
 
 def grid_tris(nu, nv, wrap_v=True):
     """triangles over a (nu, nv) grid of points, rows along u; v wraps round if wrap_v"""
@@ -105,7 +110,8 @@ def plate(outer, inner, mid, nx, nv, out_at):
     walls = np.array(walls)
     To = orient(P, To, out_at(P[To].mean(1))); Ti = orient(P, To + no, -out_at(P[To + no].mean(1)))
     c = P[walls].mean(1); n = out_at(c); n = n / np.linalg.norm(n, axis=1, keepdims=True); wo = c - inner.mean(0); wo -= n * (wo * n).sum(1, keepdims=True)
-    return P, np.vstack([To, Ti, orient(P, walls, wo)])
+    wear = np.zeros(len(P)); border = np.zeros(no); border[idx] = 0.55; wear[:no] = border; wear[b0 + R:] = 1.0
+    return P, np.vstack([To, Ti, orient(P, walls, wo)]), wear
 
 def bone_plate(a, b, r_of, dorsal, x0, x1, ang, thick=1.7, gap=0.3, nx=10, nv=9, ridge=0.5, bevel=0.7, p=4):
     """an armour plate over the back of a bone: a curved shell from x0 to x1 (mm along it), ang (radians) either side of its back,
@@ -121,6 +127,20 @@ def bone_plate(a, b, r_of, dorsal, x0, x1, ang, thick=1.7, gap=0.3, nx=10, nv=9,
         return np.array(out)
     out_at = lambda X: X - (a + np.outer((X - a) @ d, d))
     return plate(sheet(thick, bevel, bevel * 0.6, ridge), sheet(-0.6, 0, 0, 0), sheet(thick - bevel, 0, 0, 0), nx, nv, out_at)
+
+def cap_plate(c, d, e1, e2, R, thick, a0, a1, b1, nx=8, nv=9, bevel=0.6):
+    """a domed cap over a joint: a patch of the sphere of radius R round c, from a0 to a1 (radians, toward d) and b1 either side of
+    the back (e2), outlined as a rounded rectangle, the rim chamfered"""
+    am, ha = (a0 + a1) / 2, (a1 - a0) / 2
+    def sheet(rad, inset):
+        out = []
+        for al in np.linspace(a0 + inset / rad, a1 - inset / rad, nx):
+            w = max(0.3, max(0.0, 1 - abs((al - am) / ha) ** 4) ** 0.25)
+            for v in np.linspace(-1, 1, nv):
+                be = v * max(0.05, b1 * w - inset / rad)
+                out.append(c + rad * (e2 * np.cos(al) * np.cos(be) + d * np.sin(al) + e1 * np.cos(al) * np.sin(be)))
+        return np.array(out)
+    return plate(sheet(R + thick, bevel), sheet(R, 0), sheet(R + thick - bevel, 0), nx, nv, lambda X: X - c)
 
 def superellipse(M, E):
     th = np.linspace(0, 2 * np.pi, M, endpoint=False); c, sn = np.cos(th), np.sin(th)
@@ -175,18 +195,65 @@ def palm_back(s, u):
     us = [p[0] for p in PALM]; a, s0, n0, bd = (np.interp(u, us, [p[i] for p in PALM]) for i in (1, 2, 3, 4))
     f = np.clip(np.abs((s - s0) / a), 0, 1); return n0 - bd * (1 - f ** PE) ** (1 / PE)
 
-def build_right(collar):
-    """the right gauntlet in its mm frame"""
+def glove_sec(u):
+    """the glove's own section at u, as the palm is lofted: half width, centre s, centre n, half depth over the back, and over the palm"""
+    us = [q[0] for q in PALM]; return np.array([np.interp(u, us, [q[i] for q in PALM]) for i in (1, 2, 3, 4, 5)])
+
+def lame(u0, u1, inner, thick, th0, th1, nx=7, nv=23, bevel=0.6, E=2.4, kick=0.8):
+    """a band of armour round the wrist from u0 to u1, like the lames between a gauntlet's cuff and its hand plate: inner(u) gives
+    its inner section (half width, centre s, centre n, half depth over the back, over the palm); it runs from th0 to th1 round the
+    wrist (radians: 0 the back, + toward the thumb, pi the palm), and its leading edge kicks up a little, as a lame's rolled edge"""
+    def sheet(add, inset):
+        out = []
+        for u in np.linspace(u0 + inset * 0.6, u1 - inset * 0.6, nx):
+            a, s0, n0, bd, bp = inner(u); up = kick * max(0.0, 1 - (u - u0) / 1.6) * (add > 0)
+            for th in np.linspace(th0 + inset / max(a, 1), th1 - inset / max(a, 1), nv):
+                x = np.sign(np.sin(th)) * abs(np.sin(th)) ** (2 / E); y = np.sign(np.cos(th)) * abs(np.cos(th)) ** (2 / E)
+                out.append((s0 + (a + add + up) * x, u, n0 - ((bd if y > 0 else bp) + add + up) * y))
+        return np.array(out)
+    def out_at(X):
+        c = np.array([inner(u) for u in X[:, 1]]); return np.c_[X[:, 0] - c[:, 1], np.zeros(len(X)), X[:, 2] - c[:, 2]]
+    return plate(sheet(thick, bevel), sheet(0, 0), sheet(thick - bevel, 0), nx, nv, out_at)
+
+def back_plate(u0, u1, wf, base, thick, dome=1.0, nx=10, nv=15, bevel=0.9):
+    """a plate over the back of the hand from u0 to u1, wf of the hand's width, its inner face sunk 0.6 mm under base(s, u) (n),
+    domed a little; returns the plate and its outer face (s, u) -> n, for a plate laid on top of it"""
+    um, hu = (u0 + u1) / 2, (u1 - u0) / 2
+    dm = lambda u: dome * (1 - ((u - um) / hu) ** 2)
+    def sheet(add, inset):
+        out = []
+        for u in np.linspace(u0, u1, nx):
+            w = max(0.3, max(0.0, 1 - abs((u - um) / hu) ** 4) ** 0.25); a, s0 = glove_sec(u)[:2]
+            for v in np.linspace(-1, 1, nv):
+                s = s0 + v * (wf * a * w - inset); uu = u - np.sign(u - um) * inset * 0.5
+                out.append((s, uu, base(s, uu) - add - dm(uu) * (add > 0)))
+        return np.array(out)
+    outer = lambda s, u: base(s, u) - thick - dm(u)
+    return plate(sheet(thick, bevel), sheet(-0.6, 0), sheet(thick - bevel, 0), nx, nv, lambda X: np.c_[0.02 * X[:, 0], 0 * X[:, 0], -np.ones(len(X))]), outer
+
+def build_right(collar, palm_lames=2):
+    """the right gauntlet in its mm frame (the left is built the same way and mirrored); palm_lames: how many of the lames under the
+    wrist it has"""
     m = Mesh()
     for fi, f in enumerate(FN):
         p, r = CH[f]; dors = nrm(-np.cross(AXES[f], nrm(p[2] - p[1])))           # the back of the digit: away from where it curls
         for k in range(3):
             a, b = p[k], p[k + 1]; L = np.linalg.norm(b - a); ra, rb = r[k], r[k + 1]
             m.add(*capsule(a, b, ra, rb, dors, k0=0.95 if k else 1.0), fi * 3 + k, 0)
-            # a plate per bone, as the sculpt has; the end bone's runs out toward the tip like a nail guard
             rof = lambda x, ra=ra, rb=rb, L=L: ra + (rb - ra) * np.clip(x / L, 0, 1)
-            x0, x1, ang = (0.30 * L, 0.88 * L, 1.0) if f == 'thumb' and k == 0 else (0.16 * L, 0.82 * L, 1.05) if k == 2 else (0.17 * L, 0.84 * L, 1.1)
-            m.add(*bone_plate(a, b, rof, dors, x0, x1, ang), fi * 3 + k, 1)
+            # her armour's plating, carried down the digit: two lames on the first bone, a plate on each of the others, a domed cap over
+            # each joint and one over the tip, with the glove showing in the seams between. None stands higher off the finger than the
+            # single plates the grips were fitted with (the middle finger's back is right under the trigger guard)
+            if f == 'thumb' and k == 0: m.add(*bone_plate(a, b, rof, dors, 0.30 * L, 0.80 * L, 1.15, thick=1.9), fi * 3 + k, 1)
+            elif k == 0:
+                m.add(*bone_plate(a, b, rof, dors, 0.10 * L, 0.445 * L, 1.1, thick=1.7), fi * 3 + k, 1)
+                m.add(*bone_plate(a, b, rof, dors, 0.465 * L, 0.80 * L, 1.1, thick=1.7, ridge=0.4), fi * 3 + k, 1)
+            else: m.add(*bone_plate(a, b, rof, dors, (0.16 if k == 2 else 0.17) * L, (0.76 if k == 2 else 0.78) * L, 1.08), fi * 3 + k, 1)
+            d, e1, e2 = seg_frame(a, b, dors)
+            if k < 2:      # the cap over the joint at this bone's end, on this bone: the next bone turns away under it
+                m.add(*cap_plate(b, d, e1, e2, rb + 0.4, 1.5, np.radians(-34), np.radians(6), np.radians(48)), fi * 3 + k, 1)
+            else:          # over the tip, short of its pad
+                m.add(*cap_plate(b, d, e1, e2, rb + 0.4, 1.4, np.radians(-28), np.radians(38), np.radians(58)), fi * 3 + k, 1)
     # the palm: rounded sections from the wrist to the knuckles; the thenar and hypothenar pads swell the palm side
     bump = lambda s, u: 6 * np.exp(-((s - 24) / 14) ** 2 - ((u - 27) / 16) ** 2) + 3.5 * np.exp(-((s + 25) / 11) ** 2 - ((u - 22) / 18) ** 2)
     P, T = loft([sec + ((bump if sec[0] < 70 else None),) for sec in PALM], E=PE)
@@ -195,21 +262,24 @@ def build_right(collar):
     k = P[:, 1] > 62; line = np.interp(P[k, 0], ks, ku) + 2
     P[k, 1] = 62 + (P[k, 1] - 62) * (line - 62) / (81 - 62)
     m.add(P, T, -1, 0)
-    # the plate over the back of the hand: follows the palm's back, a little domed, the rim chamfered
-    nx, nv = 12, 15; us = np.linspace(10, 63, nx); um, hu = 36.5, 26.5
-    def sheet(add, inset):
-        out = []
-        for u in us:
-            w = max(0.3, (1 - abs((u - um) / hu) ** 4) ** 0.25); a, s0 = np.interp(u, [q[0] for q in PALM], [q[1] for q in PALM]), np.interp(u, [q[0] for q in PALM], [q[2] for q in PALM])
-            for v in np.linspace(-1, 1, nv):
-                s = s0 + v * (0.86 * a * w - inset); dome = 1.2 * (1 - ((u - um) / hu) ** 2)
-                out.append((s, u + np.sign(u - um) * -inset * 0.5, palm_back(s, u) - 0.3 - add - dome * (add > 0)))
-        return np.array(out)
-    m.add(*plate(sheet(2.0, 0.9), sheet(-0.6, 0), sheet(1.3, 0), nx, nv, lambda X: np.c_[np.zeros(len(X)), np.zeros(len(X)), -np.ones(len(X))] + 0.02 * np.c_[X[:, 0], 0 * X[:, 0], 0 * X[:, 0]]), -1, 1)
-    # the knuckle ridge: a stud over each knuckle, as the sculpt has
+    # the back of the hand: two plates with a seam between them, the second carrying a raised panel, as her forearm plates are stepped
+    pb = lambda s_, u_: palm_back(s_, u_) - 0.3
+    P1, o1 = back_plate(29.8, 42.0, 0.86, pb, 2.0, dome=0.8); m.add(*P1, -1, 1)
+    P2, o2 = back_plate(42.6, 64.0, 0.88, lambda s_, u_: pb(s_, u_) - 0.5, 2.0, dome=1.0); m.add(*P2, -1, 1)
+    P3, _ = back_plate(46.0, 60.0, 0.42, lambda s_, u_: o2(s_, u_) - 0.3, 1.2, dome=0.3, nx=8, nv=9, bevel=0.6); m.add(*P3, -1, 1)
+    # a domed cap over each knuckle
     for f in FN[1:]:
-        j = CH[f][0][0]; r0 = CH[f][1][0]
-        m.add(*rbox(j + np.array([0, -1.0, -(r0 + 3.9)]), (r0 * 0.62, 5.5, 2.4), 1.4), -1, 1)
+        p, r = CH[f]; d, e1, e2 = seg_frame(p[0], p[1], -N_)
+        m.add(*cap_plate(p[0], d, e1, e2, r[0] + 0.7, 1.9, np.radians(-46), np.radians(12), np.radians(52)), -1, 1)
+    # three lames step down from the forearm's cuff to the hand plate (the cuff is far deeper than the hand), so the hand comes out
+    # of the gauntlet instead of out of a pipe: round the back and sides, and two under the wrist on the palm side, short of the thumb
+    cs_, ca, cb, cn = collar; out_ = lambda t: 1 - (1 - t) ** 2
+    band = np.array([0.95 * ca, 0.95 * cs_, 0.95 * cn, 0.95 * cb, 0.95 * cb])
+    G_ = lambda u: band + (glove_sec(u) + [0.9, 0, 0, 0.9, 0.9] - band) * out_(np.clip((u - 10.6) / (29.4 - 10.6), 0, 1))
+    for u0, u1 in ((10.6, 16.6), (17.0, 23.0), (23.4, 29.4)):
+        m.add(*lame(u0, u1, G_, 2.0, np.radians(-115), np.radians(70)), -1, 1)
+    for u0, u1 in ((10.6, 16.6), (17.0, 23.0))[:palm_lames]:
+        m.add(*lame(u0, u1, G_, 1.6, np.radians(150), np.radians(235), nv=13), -1, 1)
     # the collar: from the sculpt's wrist band in to the glove's wrist
     cs_, ca, cb, cn = collar
     m.add(*loft([(U_CUT - 0.6, ca * 1.01, cs_, cn, cb * 1.01, cb * 1.01, None), (U_CUT + 1.2, ca * 0.97, cs_ * 0.95, cn * 0.95, cb * 0.96, cb * 0.96, None),
@@ -278,13 +348,14 @@ g.update(n=len(P), pos=b64(P.astype(np.float32)), nrm=b64(Nn.astype(np.int8)), u
          idx=b64(I.astype(np.uint32 if i32 else np.uint16)), i32=bool(i32))
 
 # ---------------------------------------------------------------- the new hands, into her rest space
-HP, HN, HJ, HI, HG = [], [], [], [], []; jpos, jax, tips = {}, {}, {}; o = 0
+HP, HN, HJ, HI, HG, HW = [], [], [], [], [], []; jpos, jax, tips = {}, {}, {}; o = 0
 for sd in 'LR':
     W0, u, pn, side = frames[sd]; mir = -1.0 if sd == 'L' else 1.0
     toW = lambda X: W0 + (X[..., :1] * mir * side + X[..., 1:2] * u + X[..., 2:3] * pn) / 1000
     toD = lambda v: nrm(v[0] * mir * side + v[1] * u + v[2] * pn)
     k = names.index('hd' + sd)
-    for Pp, Np, T, code, G in build_right(collars[sd]).parts:
+    for Pp, Np, T, code, G, Wr in build_right(collars[sd], palm_lames=PALM_LAMES[sd]).parts:
+        HW.append(Wr)
         HP.append(toW(Pp)); HN.append(Np[:, :1] * mir * side + Np[:, 1:2] * u + Np[:, 2:3] * pn)
         HI.append((T[:, [0, 2, 1]] if sd == 'L' else T) + o); HG.append(np.full(len(T), G)); o += len(Pp)
         HJ.append(np.full(len(Pp), k if code < 0 else names.index(f'{FN[code // 3]}{code % 3 + 1}{sd}')))
@@ -293,7 +364,7 @@ for sd in 'LR':
         # a mirrored hand turns about the mirrored axis, negated (an axis is a pseudovector)
         for bn in range(3): jpos[f'{f}{bn + 1}{sd}'] = toW(p[bn]); jax[f'{f}{bn + 1}{sd}'] = toD(AXES[f]) * mir
         tips[f + sd] = toW(p[3])
-HP = np.vstack(HP); HN = np.vstack(HN); HG = np.concatenate(HG); HI = np.vstack(HI); HJ = np.concatenate(HJ)
+HP = np.vstack(HP); HN = np.vstack(HN); HG = np.concatenate(HG); HI = np.vstack(HI); HJ = np.concatenate(HJ); HW = np.concatenate(HW)
 # triangles sorted by material so each is one draw range
 order = np.argsort(HG, kind='stable'); HI = HI[order]; HG = HG[order]
 groups = [[int(np.searchsorted(HG, gi)) * 3, int((HG == gi).sum()) * 3, int(gi)] for gi in (0, 1) if (HG == gi).any()]
@@ -301,7 +372,7 @@ Hn8 = np.clip(np.round(HN / np.maximum(np.linalg.norm(HN, axis=1, keepdims=True)
 hi32 = len(HP) > 65535
 # packed small (the room page is near its 16 MB limit): positions as 16 bits over their box, and one joint per vertex, since every part is rigid
 lo = HP.min(0); sc = np.maximum(HP.max(0) - lo, 1e-6) / 65535
-A['hands'] = dict(n=len(HP), lo=lo.tolist(), sc=sc.tolist(), pos=b64(np.round((HP - lo) / sc).astype(np.uint16)), nrm=b64(Hn8), j=b64(HJ.astype(np.uint8)),
+A['hands'] = dict(n=len(HP), lo=lo.tolist(), sc=sc.tolist(), pos=b64(np.round((HP - lo) / sc).astype(np.uint16)), nrm=b64(Hn8), j=b64(HJ.astype(np.uint8)), wear=b64(np.round(HW * 255).astype(np.uint8)),
                   idx=b64(HI.astype(np.uint32 if hi32 else np.uint16)), i32=bool(hi32), groups=groups, mats=['glove', 'plate'])
 r5 = lambda v: [round(float(x), 5) for x in v]
 F['pos'] = [r5(jpos[n]) for n in F['names']]; F['axis'] = [r5(jax[n]) for n in F['names']]; F['tips'] = {k_: r5(v) for k_, v in tips.items()}

@@ -4,6 +4,7 @@ game_src.html  -> game.html   the RPG (published as the artifact; no doc skeleto
                -> gallery.html  the wargear gallery alone (published as its own artifact)
 world_src.html -> world.html  the walkable preview it grew from
 room_src.html  -> room.html   the character room: the Vigil (idle, and armed in a combat stance), the Skeleton and the Feyr, old or new renderer
+               -> room_artifact/  the same as published (index.html + a_<asset>.js), since one page may not pass 16 MB
 Every script is syntax-checked with node.
 usage: python3 rpg/build.py   (from the repo root or from rpg/)
 """
@@ -30,13 +31,21 @@ game_assets = dict(assets, snd=json.load(open(os.path.join(HERE, '..', 'data', '
                    feyr=json.load(open(os.path.join(HERE, 'assets', 'feyr_rig.json'))),      # the Tripo-rigged Feyr (tools/tripo_rig_pack.py)
                    vigil=json.load(open(os.path.join(HERE, 'assets', 'vigil_rig.json'))))    # the player's body (tools/vigil_pack.py)
 
-def build(src_name, out_name, data, inject=None):
+def build(src_name, out_name, data, inject=None, split=None):
     src = open(os.path.join(HERE, src_name)).read()
     for marker, text in (inject or {}).items():       # code spliced in before the check, so it is checked too
         assert src.count(marker) == 1, marker; src = src.replace(marker, text)
     assert src.count('/*__ASSETS__*/null') == 1
     out = src.replace('/*__ASSETS__*/null', json.dumps(data, separators=(',', ':')))
     open(os.path.join(HERE, out_name), 'w').write(out)
+    if split:      # the artifact: each asset as its own script beside the page, filling one key of window.VGA before the page's script runs
+        d = os.path.join(HERE, split); os.makedirs(d, exist_ok=True)
+        hook = '<script>\nconst ASSETS = /*__ASSETS__*/null;'; assert src.count(hook) == 1, 'the asset hook moved'
+        open(os.path.join(d, 'index.html'), 'w').write(src.replace(hook, ''.join(f'<script src="a_{k}.js"></script>\n' for k in data) + '<script>\nconst ASSETS = window.VGA;'))
+        for k, v in data.items():
+            js = f'(window.VGA = window.VGA || {{}})[{json.dumps(k)}] = ' + json.dumps(v, separators=(',', ':')) + ';\n'
+            assert len(js) < 15e6, f'a_{k}.js is too big'; open(os.path.join(d, f'a_{k}.js'), 'w').write(js)
+        print(f'{split}/: page + {len(data)} asset scripts')
     # syntax check: the inline game script, without the inlined data
     script = re.search(r'<script>\n(.*?)</script>', src, re.S).group(1)
     with tempfile.NamedTemporaryFile('w', suffix='.js', delete=False) as fh: fh.write(script)
@@ -63,4 +72,5 @@ build('room_src.html', 'room.html', dict(vigil=json.load(open(os.path.join(VIGIL
       skeleton=json.load(open(os.path.join(HERE, 'assets', 'skeleton_rig.json'))),      # the user's skeletal design (tools/vigil_pack.py)
       rifle=json.loads(rifle_js[rifle_js.index('{'):rifle_js.rindex('}') + 1]), grips=json.load(open(os.path.join(VIGIL, 'assets', 'grips_body.json'))),
       tex={k: tex[k] for k in ('monastery_stone_floor|d', 'monastery_stone_floor|n', 'castle_wall_slates|d', 'castle_wall_slates|n')}),
-      inject={'/*__RENDER__*/': open(os.path.join(VIGIL, 'src', 'js', 'render.js')).read().replace('\n', '\n  ').rstrip()})
+      inject={'/*__RENDER__*/': open(os.path.join(VIGIL, 'src', 'js', 'render.js')).read().replace('\n', '\n  ').rstrip(),
+              '/*__HANDS__*/': open(os.path.join(VIGIL, 'src', 'js', 'hands.js')).read().replace('\n', '\n  ').rstrip()}, split='room_artifact')      # her gauntlet hands, as the game draws them

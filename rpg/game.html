@@ -6088,7 +6088,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
       abilEl.style.setProperty('--sc', S.col);
       for (const [k, el] of [['gren', abG], ['melee', abV], ['sup', abX]]) {
         const p = k === 'sup' && sh ? sh.left / sh.max : AB[k]; el.firstChild.style.setProperty('--p', p.toFixed(3)); el.classList.toggle('full', p >= 1 && !(k === 'sup' && sh));
-        const n = k === 'sup' && sh ? sh.name : NODE[subPick(k)][0]; if (el.lastChild.textContent !== n) el.lastChild.textContent = n;
+        const n = k === 'sup' && sh ? (sh.shots != null ? `${sh.name} · ${sh.shots}` : sh.name) : NODE[subPick(k)][0]; if (el.lastChild.textContent !== n) el.lastChild.textContent = n;
       }
     }
     $('ammo').innerHTML = `${GUN.ammo} <small>/ ${GUN.mag}</small>`;
@@ -6964,8 +6964,840 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
   GOPT.shader = COS.SHADERS.map(s => [s.id, s.name]); GOPT.orn = COS.ORNS.filter(o => o.blade === 'power').map(o => [o.id, o.name.replace(/ field$/, '')]);
   GOPT.skull = COS.SKULLS.map(s => [s.id, s.name]); GOPT.paint = COS.HAWKS.map(s => [s.id, s.name]);
   Object.assign(GAL.look, { shader: 'templar', orn: 'field', skull: 'bone', paint: 'chapter' });
-  const ABIL = { grenade() {}, melee() {}, super() {}, active: () => false, update() {}, statusTick: () => false, speedMult: () => 1, dmgMult: () => 1, takenMult: () => 1,
-    onSwing() {}, onHit() {}, onKill() {}, fireOverride: () => false, reset() {}, hud: () => null, quiet: false, state: () => ({}) };      // STUB
+  // ================================================================ subclass abilities: grenades (G), melee abilities (V), supers (X), and what they leave on foes
+  // Sword Brother (storm blue), Crusader (solar orange), Chaplain (violet and gold). The lead owns energy and the loadout; this owns what the
+  // abilities do: thrown grenades, blasts, waves, auras, the Templar's look while a super runs, and statuses on foes. A foe's statuses live in
+  // e.ab (burning, stunned, weakened, the litany's slow, a vortex's pull). Melee abilities borrow the combo's third-person pose path:
+  // C.mode = 'abil' with a move of our own in C.move, which updateCombo plays and bladeHits ignores (the ability deals its own damage).
+  const ABIL = (() => {
+    const _a = new V3(), _b = new V3(), _c = new V3(), _d = new V3(), _e = new V3(), _f = new V3(), _n = new V3(), _vel = new V3(), _up = new V3(0, 1, 0);
+    const fwd = o => o.set(-Math.sin(P.yaw), 0, -Math.cos(P.yaw));
+    const linC = h => new THREE.Color(h).convertSRGBToLinear();
+    const cnt = x => { const n = Math.floor(x); return n + (Math.random() < x - n ? 1 : 0); };      // a rate times dt, as a whole number of particles
+    const dirFrom = (c, e) => { const d = v(e.pos.x - c.x, 0, e.pos.z - c.z), l = d.length(); return l > 1e-3 ? d.divideScalar(l) : fwd(d); };
+    const rdir = () => { const a = rand(0, PI * 2); return v(Math.cos(a), 0, Math.sin(a)); };
+    const shakeAt = (c, k, R) => { G.shake = Math.max(G.shake, k * clamp(1.3 - P.pos.distanceTo(c) / R, 0, 1)); };
+    const heal = (f, why) => { if (!P.alive) return; const h = Math.round(P.maxHp * f); P.hp = Math.min(P.maxHp, P.hp + h); num(v(P.pos.x, P.pos.y + 2.2, P.pos.z), '+' + h, 'heal'); };
+    const PC = { fire: [1, 0.48, 0.12, 0.9], hot: [1, 0.85, 0.5, 1], ember: [1, 0.55, 0.2, 1], storm: [0.6, 0.86, 1, 1], void: [0.72, 0.48, 1, 0.9], gold: [1, 0.8, 0.4, 1],
+      smoke: [0.15, 0.13, 0.12, 0.6], ash: [0.28, 0.25, 0.23, 0.8], heal: [0.6, 1, 0.55, 1], vdeep: [0.45, 0.2, 0.9, 0.8] };
+    function puff(p, vx, vy, vz, c, s, life, g = 0, dr = 1.5, grow = 0, solid) { _vel.set(vx, vy, vz); (solid ? dustFX : glowFX).spawn(p, _vel, c, s, life, g, dr, grow); }
+    function fireball(c, R, n) {      // a blast's body: hot puffs thrown out and up, swelling as they cool
+      puff(c, 0, 0, 0, PC.hot, R * 2.2, 0.1);      // the flash at its heart
+      for (let i = 0; i < n; i++) { _n.set(rand(-1, 1), rand(-0.1, 1), rand(-1, 1)).normalize(); const k = rand(0.1, 0.6) * R; puff(_e.copy(c).addScaledVector(_n, k), _n.x * R * rand(2.5, 5.5), _n.y * R * rand(2.5, 5.5), _n.z * R * rand(2.5, 5.5), i % 3 ? PC.fire : PC.hot, rand(0.55, 0.95) * R, rand(0.35, 0.7), -1, 6, 1.8); }
+    }
+    function smoke(c, n, R) { for (let i = 0; i < n; i++) { _n.set(rand(-1, 1), rand(0.2, 1), rand(-1, 1)).normalize(); puff(_e.copy(c).addScaledVector(_n, rand(0.3, 0.8) * R), _n.x * R * 1.5, _n.y * R * 1.5 + 0.6, _n.z * R * 1.5, PC.smoke, rand(0.6, 1) * R, rand(1.3, 2.3), -0.5, 1.6, 2.2, true); } }
+    function debris(c, n, col = PC.ash) { for (let i = 0; i < n; i++) puff(c, rand(-6, 6), rand(3, 10), rand(-6, 6), col, rand(0.04, 0.09), rand(0.8, 1.3), 16, 0.4, 0, true); }
+
+    // ---- shaders. One program draws every ground decal, wall of fire, lightning crescent and blast shell; `kind` picks the look.
+    const FXV = 'varying vec2 vU; varying vec3 vN; varying vec3 vV; void main(){ vU = uv; vN = normalize(normalMatrix * normal); vec4 mv = modelViewMatrix * vec4(position, 1.0); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }';
+    const FXF = `uniform vec3 col; uniform vec3 col2; uniform float t; uniform float a; uniform float kind; uniform float seed; uniform float R;
+      varying vec2 vU; varying vec3 vN; varying vec3 vV;
+      float h1(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n2(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h1(i), h1(i + vec2(1.0, 0.0)), f.x), mix(h1(i + vec2(0.0, 1.0)), h1(i + vec2(1.0, 1.0)), f.x), f.y); }
+      float fb(vec2 p){ return n2(p) * 0.55 + n2(p * 2.1 + 7.3) * 0.3 + n2(p * 4.6 + 3.1) * 0.15; }
+      void main(){
+        vec3 c = col; float al = 0.0; float r = vU.x; float th = vU.y * 6.28318;
+        vec2 q = vec2(cos(th), sin(th)) * r * R;
+        if (kind < 0.5) {            // fire on the ground: ragged tongues, white-hot where they are thickest
+          float n = fb(q * 0.9 + vec2(seed, -t * 1.1)); float m = fb(q * 2.3 + vec2(-t * 1.9, seed));
+          float edge = 1.0 - smoothstep(0.45 + n * 0.4, 1.0, r); float f = edge * (0.3 + 1.2 * n * m);
+          c = mix(col * 0.75, col2, smoothstep(0.45, 0.95, f)); al = f * 1.15;
+        } else if (kind < 1.5) {     // a vortex: arms spiralling in to a bright eye
+          float s = sin(th * 3.0 + log(r + 0.04) * 7.0 + t * 7.0); float arm = smoothstep(0.0, 0.9, s) * (1.0 - smoothstep(0.7, 1.0, r)) * smoothstep(0.03, 0.2, r);
+          float core = 1.0 - smoothstep(0.0, 0.22, r); float rim = smoothstep(0.86, 0.95, r) * (1.0 - smoothstep(0.95, 1.0, r));
+          c = mix(col, col2, core + rim * 0.5); al = arm * 0.7 + core * 0.9 + rim * 0.55;
+        } else if (kind < 2.5) {     // a holy circle: a bright rim, a ring of runes turning inside it, a light sweeping round
+          float rim = smoothstep(0.935, 0.975, r) * (1.0 - smoothstep(0.98, 1.0, r)); float inner = smoothstep(0.84, 0.855, r) * (1.0 - smoothstep(0.865, 0.88, r));
+          float cell = vU.y * 40.0 - t * 0.6; float runes = step(0.45, fract(cell)) * step(0.3, h1(vec2(floor(cell), 3.0))) * smoothstep(0.885, 0.895, r) * (1.0 - smoothstep(0.915, 0.925, r));
+          float sweep = pow(fract(vU.y - t * 0.15), 8.0) * smoothstep(0.1, 0.9, r) * 0.35;
+          c = mix(col, col2, rim + runes * 0.4); al = rim + inner * 0.6 + runes * 0.75 + 0.05 + 0.1 * r * r + sweep;
+        } else if (kind < 3.5) {     // a blast's flash on the ground: soft in the middle, a hot rim
+          al = (1.0 - r) * (1.0 - r) * 0.85 + smoothstep(0.78, 0.95, r) * (1.0 - smoothstep(0.95, 1.0, r)) * 0.7; c = mix(col, col2, (1.0 - r) * (1.0 - r));
+        } else if (kind < 4.5) {     // a wall of fire: tongues licking up a sheet (u along it, v up)
+          float x = vU.x; float y = vU.y; float n = fb(vec2(x * R * 1.6, y * 1.5 - t * 2.4) + seed); float m = fb(vec2(x * R * 3.5 + 4.0, y * 3.0 - t * 4.0));
+          float h = (n * 0.75 + m * 0.45) * 1.2;      // tongues: flame wherever the noise reaches above this height
+          float f = smoothstep(y - 0.12, y + 0.12, h) * (1.0 - y * 0.5) * smoothstep(0.0, 0.2, x) * (1.0 - smoothstep(0.8, 1.0, x)) * smoothstep(0.0, 0.05, y);
+          c = mix(col, col2, smoothstep(0.3, 0.8, f * (1.25 - y))) * (1.0 + f * 0.5); al = f * 1.7;
+        } else if (kind < 5.5) {     // a crescent of lightning: a jagged white core, a glow round it, stray filaments, the ends fading
+          float x = vU.x; float y = vU.y; float w = pow(sin(3.14159 * x), 0.8); float j = (fb(vec2(x * 9.0 + seed, t * 23.0)) - 0.5) * 0.3 * w;
+          float d = abs(y - 0.5 - j) / max(w, 0.04);
+          float core = 1.0 - smoothstep(0.0, 0.12, d); float glow = 1.0 - smoothstep(0.0, 0.5, d); float lens = step(d, 0.5) * (0.25 + 0.35 * fb(vec2(x * 14.0 - t * 12.0, y * 5.0 + seed)));
+          float fil = step(0.78, n2(vec2(x * 30.0, t * 30.0 + seed))) * (1.0 - smoothstep(0.0, 0.45, d)) * 0.6;
+          c = mix(col, col2, core + 0.3 * glow); al = (core * 1.4 + glow * 0.75 + lens + fil) * smoothstep(0.0, 0.08, x) * (1.0 - smoothstep(0.92, 1.0, x));
+        } else if (kind < 6.5) {     // the litany's curtain: faint rising streaks, gone by head height
+          float x = vU.x; float y = vU.y; float s = fb(vec2(x * 60.0, y * 2.0 - t * 0.6));
+          al = (1.0 - y) * (1.0 - y) * (0.1 + 0.4 * s * s) + (1.0 - smoothstep(0.0, 0.06, y)) * 0.5;
+        } else {                     // a blast's shell: bright at the rim, clear through the middle, torn by noise so it reads as fire or force and not glass
+          float f = 1.0 - abs(dot(normalize(vN), normalize(vV))); f = f * f; float n = fb(vec2(vU.x * 11.0 + seed, vU.y * 7.0 - t * 6.0));
+          c = mix(col, col2, f * n); al = (f * 0.9 + 0.06) * smoothstep(0.42, 0.66, n) * 1.6;
+        }
+        gl_FragColor = vec4(c, clamp(al, 0.0, 1.0) * a);
+      }`;
+    const fxMat = kind => new THREE.ShaderMaterial({ uniforms: { col: { value: new THREE.Color() }, col2: { value: new THREE.Color() }, t: { value: 0 }, a: { value: 0 }, kind: { value: kind }, seed: { value: rand(0, 50) }, R: { value: 1 } },
+      vertexShader: FXV, fragmentShader: FXF, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    function gridGeo(nu, nv) {      // a (nu x nv) grid: uv only; the shape is laid into its positions later
+      const n = (nu + 1) * (nv + 1), uv = new Float32Array(n * 2), nor = new Float32Array(n * 3), idx = [];
+      for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) { const k = j * (nu + 1) + i; uv[k * 2] = i / nu; uv[k * 2 + 1] = j / nv; nor[k * 3 + 1] = 1; }
+      for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * (nu + 1) + i, b = a + nu + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setIndex(idx);
+      return g;
+    }
+    const fxMesh = (geo, kind, order = 3) => { const m = new THREE.Mesh(geo, fxMat(kind)); m.frustumCulled = false; m.visible = false; m.renderOrder = order; scene.add(m); return m; };
+    // discs hug the ground: laid once where they're placed (uv.x is the radius, uv.y the angle)
+    function layDisc(m, x, z, R, lift = 0.07) {
+      const y0 = GY(x, z), p = m.geometry.attributes.position, uv = m.geometry.attributes.uv;
+      for (let k = 0; k < p.count; k++) { const r = uv.getX(k) * R, th = uv.getY(k) * PI * 2, dx = Math.cos(th) * r, dz = Math.sin(th) * r; p.setXYZ(k, dx, GY(x + dx, z + dz) - y0 + lift, dz); }
+      p.needsUpdate = true; m.position.set(x, y0, z); m.material.uniforms.R.value = R;
+    }
+    const DISCS = Array.from({ length: 14 }, () => { const m = fxMesh(gridGeo(12, 48), 0); return { m, u: m.material.uniforms, on: false, own: null, t: 0, dur: 1 }; });
+    function takeDisc(kind) {
+      let D = DISCS.find(d => !d.on); if (!D) D = DISCS.filter(d => !d.own).sort((a, b) => b.t - a.t)[0]; if (!D) return null;
+      Object.assign(D, { on: true, own: null, t: 0, dur: 1 }); D.u.kind.value = kind; D.u.a.value = 0; D.u.t.value = rand(0, 10); D.m.visible = true; return D;
+    }
+    function groundFlash(c, R, ca, cb, dur) { const D = takeDisc(3); if (!D) return; layDisc(D.m, c.x, c.z, R); D.u.col.value.setRGB(...ca); D.u.col2.value.setRGB(...cb); D.dur = dur; D.u.a.value = 1; }
+    const shellG = new THREE.SphereGeometry(1, 24, 16);
+    const SHELLS = Array.from({ length: 7 }, () => { const m = fxMesh(shellG, 7, 4); return { m, u: m.material.uniforms, on: false, own: null, t: 0, dur: 1, r0: 0, r1: 1, sy: 1 }; });
+    function shell(c, r0, r1, ca, cb, dur, own, sy = 1) {      // sy squashes it: a blast on the ground spreads more than it rises
+      const S = SHELLS.find(s => !s.on) || SHELLS.filter(s => !s.own).sort((a, b) => b.t - a.t)[0]; if (!S) return null;
+      Object.assign(S, { on: true, own: own || null, t: 0, dur, r0, r1, sy }); S.m.position.copy(c); S.m.scale.set(r0, r0 * sy, r0); S.u.t.value = rand(0, 10); S.u.col.value.setRGB(...ca); S.u.col2.value.setRGB(...cb); S.u.a.value = 1; S.m.visible = true; return S;
+    }
+    // crescents and walls of fire: a curved sheet (u along the arc, v across), bowed forward along local -Z
+    const crescentGeo = () => { const g = gridGeo(24, 4), p = g.attributes.position, uv = g.attributes.uv; for (let k = 0; k < p.count; k++) { const a = lerp(-1.05, 1.05, uv.getX(k)); p.setXYZ(k, Math.sin(a), uv.getY(k) - 0.5, 1 - Math.cos(a)); } return g; };
+    const WAVES = Array.from({ length: 6 }, () => { const m = fxMesh(crescentGeo(), 5); m.rotation.order = 'YXZ';
+      return { m, u: m.material.uniforms, on: false, kind: '', o: new V3(), dir: new V3(), dist: 0, max: 0, sp: 0, hw: 1, H: 1, dmg: 0, src: '', burn: false, hit: new Set(), t: 0, pc: PC.storm }; });
+
+    // ---- lightning: camera-facing ribbons through a jagged line, re-jagged every few frames so they crawl
+    const ZN = 10, zapMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      vertexShader: 'attribute float sd; attribute float al; attribute vec3 cl; varying float vS; varying float vA; varying vec3 vC; void main(){ vS = sd; vA = al; vC = cl; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'varying float vS; varying float vA; varying vec3 vC; void main(){ float d = abs(vS); float core = 1.0 - smoothstep(0.0, 0.3, d); float glow = (1.0 - d) * (1.0 - d); gl_FragColor = vec4(mix(vC, vec3(1.0), core * 0.85), clamp((core + glow * 0.55) * vA, 0.0, 1.0)); }' });
+    const ZAPS = Array.from({ length: 26 }, () => {
+      const g = new THREE.BufferGeometry(), n = (ZN + 1) * 2, sd = new Float32Array(n), idx = [];
+      for (let i = 0; i < n; i++) sd[i] = i % 2 ? 1 : -1;
+      for (let k = 0; k < ZN; k++) { const a = k * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3)); g.setAttribute('sd', new THREE.BufferAttribute(sd, 1));
+      g.setAttribute('al', new THREE.BufferAttribute(new Float32Array(n), 1)); g.setAttribute('cl', new THREE.BufferAttribute(new Float32Array(n * 3), 3)); g.setIndex(idx);
+      const m = new THREE.Mesh(g, zapMat); m.frustumCulled = false; m.visible = false; m.renderOrder = 5; scene.add(m);
+      return { m, g, pts: Array.from({ length: ZN + 1 }, () => new V3()), a: new V3(), b: new V3(), t: 0, life: 1, w: 0.1, jag: 1, rj: 0 };
+    });
+    let zapI = 0; const _zc = new THREE.Color();
+    function jagZap(Z) {
+      _d.subVectors(Z.b, Z.a); const L = _d.length();
+      _e.set(0, 1, 0); if (Math.abs(_d.y) > 0.9 * L) _e.set(1, 0, 0);
+      _f.crossVectors(_d, _e).normalize(); _e.crossVectors(_d, _f).normalize();
+      const amp = Math.min(L * 0.12, 1.4) * Z.jag;
+      for (let i = 0; i <= ZN; i++) { const t = i / ZN, s = Math.sin(PI * t) * amp; Z.pts[i].copy(Z.a).addScaledVector(_d, t).addScaledVector(_f, rand(-s, s)).addScaledVector(_e, rand(-s, s)); }
+    }
+    function zap(a, b, hex, w = 0.1, life = 0.2, jag = 1) {
+      const Z = ZAPS.find(z => z.t <= 0) || ZAPS[zapI = (zapI + 1) % ZAPS.length];
+      Z.a.copy(a); Z.b.copy(b); Z.w = w; Z.t = Z.life = life; Z.jag = jag; Z.rj = 0; Z.m.visible = true;
+      const cl = Z.g.attributes.cl, col = _zc.setHex(hex);
+      for (let i = 0; i < cl.count; i++) cl.setXYZ(i, col.r, col.g, col.b); cl.needsUpdate = true;
+      return Z;
+    }
+    function drawZap(Z, dt) {
+      Z.t -= dt; if (Z.t <= 0) { Z.m.visible = false; return; }
+      if ((Z.rj -= dt) <= 0) { Z.rj = 0.04; jagZap(Z); }
+      const f = Z.t / Z.life, al = Math.min(1, f * 2.2) * (0.7 + Math.random() * 0.3), pos = Z.g.attributes.position.array, A = Z.g.attributes.al.array;
+      for (let i = 0; i <= ZN; i++) {
+        const p = Z.pts[i], p0 = Z.pts[i > 0 ? i - 1 : 0], p1 = Z.pts[i < ZN ? i + 1 : ZN];
+        _a.subVectors(p1, p0); _b.subVectors(cam.position, p); _c.crossVectors(_a, _b); const l = _c.length() || 1; _c.multiplyScalar(Z.w * 0.5 / l);
+        const k = i * 6; pos[k] = p.x - _c.x; pos[k + 1] = p.y - _c.y; pos[k + 2] = p.z - _c.z; pos[k + 3] = p.x + _c.x; pos[k + 4] = p.y + _c.y; pos[k + 5] = p.z + _c.z;
+        A[i * 2] = A[i * 2 + 1] = Math.min(1, Math.min(i, ZN - i) / 1.5 + 0.35) * al;
+      }
+      Z.g.attributes.position.needsUpdate = Z.g.attributes.al.needsUpdate = true;
+    }
+
+    // ---- sounds: short synthesized hits through the shared helpers (nothing is held, so nothing drones)
+    const spa = p => p ? spatial(p) : { g: 1, pan: 0 };
+    const AS = {
+      toss() { if (!live()) return; const t = actx.currentTime; air(t, 0.3, 260, 950, 380, 1.0, 0.4, -0.35, 0.25, 0.15, 0.35); tone(t, 0.03, 'square', 2900, 2700, 0.035, 0.001, -0.3, 0.05, 7000); },
+      clink(p, soft) { if (!live()) return; const t = actx.currentTime, s = spa(p); tone(t, soft ? 0.06 : 0.14, 'triangle', soft ? 900 : 1750, soft ? 700 : 1550, (soft ? 0.2 : 0.12) * s.g, 0.001, s.pan, 0.15); noise(t, 0.04, 'highpass', 5000, 3000, 0.8, 0.12 * s.g, 0.001, s.pan, 0.1); },
+      blast(p, k = 1) { if (!live()) return; const t = actx.currentTime, s = spa(p), g = Math.min(1, s.g * 1.8) * k;
+        tone(t, 0.9, 'sine', 75, 24, g, 0.004, s.pan, 0.55); noise(t, 0.9, 'lowpass', 2400, 90, 0.6, 0.85 * g, 0.003, s.pan, 0.6); noise(t, 0.12, 'highpass', 3500, 1200, 0.7, 0.5 * g, 0.001, s.pan, 0.3);
+        sfx('bimp1', g * 1.1, rand(0.6, 0.7), s.pan, 0, 0.5); },
+      crack(p, k = 1) { if (!live()) return; const t = actx.currentTime, s = spa(p), g = Math.min(1, s.g * 1.6) * k;      // lightning: a hard snap, then a spray of crackle
+        noise(t, 0.06, 'highpass', 6000, 2500, 0.7, 0.6 * g, 0.001, s.pan, 0.25); tone(t, 0.16, 'sawtooth', 2200, 160, 0.14 * g, 0.002, s.pan, 0.3, 5000);
+        for (let i = 0; i < 6; i++) noise(t + rand(0.02, 0.25), 0.025, 'highpass', 7000, 4500, 0.7, rand(0.08, 0.25) * g, 0.001, clamp(s.pan + rand(-0.2, 0.2), -1, 1), 0.15); },
+      thunder(p, k = 1) { if (!live()) return; const t = actx.currentTime, s = spa(p), g = Math.min(1, s.g * 1.8) * k;
+        AS.crack(p, k); noise(t + 0.03, 1.6, 'lowpass', 900, 70, 0.6, 0.9 * g, 0.01, s.pan, 0.7); tone(t, 1.0, 'sine', 62, 26, 0.8 * g, 0.006, s.pan, 0.6); },
+      whoomp(p, k = 1) { if (!live()) return; const t = actx.currentTime, s = spa(p), g = Math.min(1, s.g * 1.6) * k;      // fire catching: a rush up through the band, then crackle
+        noise(t, 0.55, 'lowpass', 180, 2200, 0.7, 0.7 * g, 0.06, s.pan, 0.4); tone(t, 0.4, 'sine', 90, 45, 0.5 * g, 0.02, s.pan, 0.4);
+        for (let i = 0; i < 7; i++) noise(t + rand(0.08, 0.6), 0.02, 'bandpass', 3500, 2500, 2, rand(0.06, 0.18) * g, 0.001, s.pan, 0.2); },
+      sizzle(p) { if (!live()) return; const t = actx.currentTime, s = spa(p); noise(t, 0.5, 'bandpass', 7000, 1800, 1.4, 0.45 * Math.min(1, s.g * 1.6), 0.01, s.pan, 0.3); },
+      swirl(p, d = 1.2) { if (!live()) return; const t = actx.currentTime, s = spa(p); air(t, d, 180, 1300, 260, 1.6, 0.55 * Math.min(1, s.g * 1.6), clamp(s.pan - 0.5, -1, 1), clamp(s.pan + 0.5, -1, 1), 0.45, 0.6); },
+      chime(p, low) { if (!live()) return; const t = actx.currentTime, s = spa(p), f0 = low ? 196 : 660;      // a struck bell: partials that only decay
+        for (const [m, gg] of [[1, 0.16], [2.01, 0.08], [2.76, 0.06], [4.07, 0.03]]) tone(t, low ? 2.0 : 1.1, 'sine', f0 * m, f0 * m * 0.997, gg * Math.min(1, s.g * 1.5) * (low ? 1.6 : 1), 0.002, s.pan, 0.6); },
+      flare(p) { if (!live()) return; const t = actx.currentTime; noise(t, 0.45, 'highpass', 1500, 7000, 0.7, 0.55, 0.05, 0, 0.5); AS.chime(p); tone(t, 0.3, 'sine', 140, 60, 0.5, 0.004, 0, 0.4); },
+      relic() { if (!live()) return; const t = actx.currentTime;      // the relic bolter: the pistol's boom slowed and doubled, and the shell's long rocket
+        sfx('shot_g', 1.5, rand(0.5, 0.56), -0.1, 0, 0.7); sfx('bolt_k', 1.3, 0.7, -0.1, 0, 0.5); SYN.bolt();
+        tone(t, 0.7, 'sine', 68, 26, 0.9, 0.003, -0.1, 0.6); noise(t, 0.35, 'bandpass', 1800, 400, 0.9, 0.35, 0.002, -0.1, 0.4); },
+      rack() { if (!live()) return; sfx('p_slide', 1.2, 0.62, -0.1, 0, 0.3); sfx('p_magin', 1, 0.7, -0.1, 0.12, 0.3); }
+    };
+
+    // ---- statuses on foes (e.ab). DoT ticks twice a second; stuns stop the AI (statusTick says so) and cut short any attack being wound up.
+    const AFF = new Set();
+    const stOf = e => { if (!e.ab) e.ab = { burn: 0, bdps: 0, btick: 0.5, bsrc: 'ability', stun: 0, sgold: false, weak: 0, pull: 0, px: 0, pz: 0, pk: 0, lit: false, tint: '', mats: null, crown: null, zt: 0 }; AFF.add(e); return e.ab; };
+    function burn(e, dps, dur, src) { if (!e.alive) return; const s = stOf(e); if (s.burn <= 0) s.btick = 0.25; s.bdps = s.burn > 0 ? Math.max(s.bdps, dps) : dps; s.burn = Math.max(s.burn, dur); s.bsrc = src; }
+    const STOPS = new Set(['wind', 'lunge', 'aim', 'crouch', 'smash', 'cwind', 'charge', 'cleave', 'recover']);      // a champion's summoning roar is left alone
+    function stun(e, dur, gold) {
+      if (!e.alive || e.state === 'execd' || e.state === 'broken') return;
+      const s = stOf(e), k = e.type === 'champion' ? 0.35 : e.boss ? 0.5 : e.D.mass > 1 ? 0.75 : 1;
+      if (s.stun <= 0) num(eUp(e, e.ly + 0.8), 'Stunned', 'blk');
+      s.stun = Math.max(s.stun, dur * k); s.sgold = !!gold;
+      if (STOPS.has(e.state)) { e.state = 'chase'; e.t = 0; e.cd = Math.max(e.cd, 0.5); }
+      if (e.J.glow) e.J.glow.material.opacity = 0;
+      e.stag = Math.max(e.stag, 0.3);
+    }
+    function weaken(e, dur) { if (!e.alive) return; const s = stOf(e); if (s.weak <= 0) num(eUp(e, e.ly + 0.8), 'Weakened', 'blk'); s.weak = Math.max(s.weak, dur); }
+    // the tell on the body: an emissive tint, swapped in per material (clones share the original's shader program, so nothing recompiles)
+    const TINT = { burn: [0xff3a08, 0.15], stun: [0x3a8cff, 0.25], gold: [0xffb040, 0.25], weak: [0x6a20e0, 0.12], lit: [0x6a20e0, 0.05] }, TCACHE = new Map(), TLIST = { burn: [], stun: [], gold: [], weak: [], lit: [] };      // the aura's own mark is faint: the circle already shows who stands in it
+    function tintMat(m, kind) {
+      let o = TCACHE.get(m); if (!o) TCACHE.set(m, o = {});
+      if (!o[kind]) { const c = o[kind] = m.clone(); if (m.onBeforeCompile) c.onBeforeCompile = m.onBeforeCompile; if (m.hasOwnProperty('customProgramCacheKey')) c.customProgramCacheKey = m.customProgramCacheKey; c.emissive.setHex(TINT[kind][0]); c.emissiveIntensity = TINT[kind][1]; TLIST[kind].push(c); }
+      return o[kind];
+    }
+    function setTint(e, kind) {
+      const s = e.ab; if (s.tint === kind) return; s.tint = kind;
+      if (!s.mats) { s.mats = []; e.J.root.traverse(o => { const m = o.material; if (o.isMesh && m && m.isMeshStandardMaterial && !m.transparent && m.emissive && m.emissive.getHex() === 0) s.mats.push(o, m); }); }
+      for (let i = 0; i < s.mats.length; i += 2) s.mats[i].material = kind ? tintMat(s.mats[i + 1], kind) : s.mats[i + 1];
+    }
+    // stunned foes wear a spinning ring over the head
+    const crownG = new THREE.TorusGeometry(0.22, 0.02, 5, 24), STORMC = linC(0x9fd8ff).multiplyScalar(1.6), GOLDC = linC(0xffd27a).multiplyScalar(1.6);
+    const CROWNS = Array.from({ length: 12 }, () => { const m = new THREE.Mesh(crownG, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })); m.visible = false; m.frustumCulled = false; scene.add(m); return { m, on: false }; });
+    function crownFor(s, col) { if (!s.crown) { s.crown = CROWNS.find(c => !c.on) || null; if (s.crown) { s.crown.on = true; s.crown.m.visible = true; } } if (s.crown) s.crown.m.material.color.copy(col); }
+    function dropCrown(s) { if (s.crown) { s.crown.on = false; s.crown.m.visible = false; s.crown = null; } }
+    function clearSt(e) { const s = e.ab; if (!s) return; if (s.mats) setTint(e, ''); dropCrown(s); e.ab = null; AFF.delete(e); }
+    const _h = new V3(), _hcb = (c, r, head) => { if (head) { _h.copy(c); _h.y += r; return true; } return false; };
+    function headOf(e) { _h.set(e.pos.x, e.pos.y + e.ly * 1.4, e.pos.z); enemySpheres(e, _hcb); return _h; }
+    let _rk = 0, _rr = 0; const _rp = new V3(), _rcb = (c, r) => { if (_rk-- <= 0) { _rp.copy(c); _rr = r; return true; } return false; };
+    function bodyPt(e) { _rk = (Math.random() * e.D.spheres.length) | 0; enemySpheres(e, _rcb); _rp.x += rand(-0.7, 0.7) * _rr; _rp.y += rand(-0.7, 0.7) * _rr; _rp.z += rand(-0.7, 0.7) * _rr; return _rp; }
+    function statusFrame(e, s, dt) {
+      if (s.stun > 0) s.stun -= dt; if (s.weak > 0) s.weak -= dt; if (s.pull > 0) s.pull -= dt;
+      if (s.burn > 0) {
+        s.burn -= dt; s.btick -= dt;
+        if (s.btick <= 0) { s.btick += 0.5; api.quiet = true; strike(e, s.bdps * 0.5, rdir(), 0, s.bsrc); api.quiet = false; if (!e.alive) return; }
+        const big = e.sc * (e.D.mass > 1 ? 1.5 : 1);
+        for (let i = 0, n = cnt(dt * 50 * big); i < n; i++) { const p = bodyPt(e); puff(p, rand(-0.3, 0.3), rand(1.2, 2.4), rand(-0.3, 0.3), Math.random() < 0.2 ? PC.hot : PC.fire, rand(0.18, 0.34) * big, rand(0.3, 0.5), -1, 1.5, -0.5); }
+        if (Math.random() < dt * 8) puff(bodyPt(e), rand(-0.6, 0.6), rand(1.5, 3), rand(-0.6, 0.6), PC.ember, 0.03, rand(0.8, 1.4), -0.2, 0.3);
+        if (Math.random() < dt * 7) puff(_e.copy(headOf(e)).setY(_h.y + 0.3), rand(-0.3, 0.3), rand(0.8, 1.4), rand(-0.3, 0.3), PC.smoke, 0.4 * big, rand(0.9, 1.4), -0.5, 1.5, 2, true);
+      }
+      if (s.stun > 0) {
+        crownFor(s, s.sgold ? GOLDC : STORMC);
+        if (s.crown) { const h = headOf(e), m = s.crown.m; m.position.set(h.x, h.y + 0.2 + Math.sin(G.time * 6) * 0.03, h.z); m.rotation.set(PI / 2 + Math.sin(G.time * 5 + e.run) * 0.25, 0, G.time * 7); m.scale.setScalar(e.sc * (e.D.mass > 1 ? 1.4 : 1) * (0.9 + Math.random() * 0.15)); m.material.opacity = Math.min(1, s.stun * 3) * (0.75 + Math.random() * 0.25); }
+        if ((s.zt -= dt) <= 0) { s.zt = rand(0.08, 0.2); if (s.sgold) puff(headOf(e), rand(-0.5, 0.5), rand(0.2, 0.8), rand(-0.5, 0.5), PC.gold, 0.05, 0.6, -0.3, 1); else { _c.copy(bodyPt(e)); zap(_c, bodyPt(e), 0xbfe8ff, 0.035, 0.08, 1.6); } }
+      } else dropCrown(s);
+      if ((s.weak > 0 || s.lit) && Math.random() < dt * 6) puff(bodyPt(e), rand(-0.2, 0.2), rand(-0.6, -0.2), rand(-0.2, 0.2), PC.vdeep, 0.07, 0.8, 0, 1);
+      setTint(e, s.stun > 0 ? (s.sgold ? 'gold' : 'stun') : s.burn > 0 ? 'burn' : s.weak > 0 ? 'weak' : s.lit ? 'lit' : '');
+      if (s.stun <= 0 && s.burn <= 0 && s.weak <= 0 && s.pull <= 0 && !s.lit) clearSt(e);
+    }
+
+    // ---- who stands where
+    function foesNear(c, R, hy = 2.6, los = false) {      // every foe whose body is within R of c (on the ground plane, with a height allowance): [{ e, d }]
+      const L = [];
+      for (const e of ENEMIES) {
+        if (!e.alive || e.state === 'execd') continue;
+        const dx = e.pos.x - c.x, dz = e.pos.z - c.z; if (Math.abs(dx) > R + 3 || Math.abs(dz) > R + 3 || c.y < e.pos.y - hy || c.y > e.pos.y + e.ly * 2 + hy) continue;
+        const d = Math.max(0, Math.hypot(dx, dz) - e.r * 0.6); if (d > R) continue;
+        if (los) { _e.set(e.pos.x, e.pos.y + e.ly, e.pos.z); _f.set(c.x, c.y + 0.3, c.z); _n.subVectors(_e, _f); const l = _n.length(); if (l > 0.6 && rayWorld(_f, _n.divideScalar(l), l) < l - 0.7) continue; }
+        L.push({ e, d });
+      }
+      return L;
+    }
+    function cone(R, cosA) {      // foes in front of the Templar, within R
+      fwd(_d); const L = [];
+      for (const e of ENEMIES) { if (!e.alive || e.state === 'execd' || Math.abs(e.pos.y - P.pos.y) > 2.5) continue;
+        const dx = e.pos.x - P.pos.x, dz = e.pos.z - P.pos.z, d = Math.hypot(dx, dz); if (d - e.r * 0.7 > R) continue; if (d > 1.2 && (dx * _d.x + dz * _d.z) / d < cosA) continue; L.push(e); }
+      return L;
+    }
+    const hurt = (e, dmg, dir, knock, src) => strike(e, dmg, dir, knock, src);      // ability damage goes through strike, so Power and crits apply
+    const LATER = [], later = (t, fn) => LATER.push({ t, fn });
+
+    // ---- grenades: thrown from the left shoulder along the aim in an arc; they bounce once or twice and settle (krak and melta clamp on to what they touch)
+    const GDEF = { frag: { n: 'Frag grenade', c: 0xff6a2a, fuse: 1.7, settle: 0.35 }, krak: { n: 'Krak grenade', c: 0xff2a1a, stick: true, fuse: 0.6 }, arcg: { n: 'Arc grenade', c: 0x8fd0ff, fuse: 1.5, settle: 0.12 },
+      incendiary: { n: 'Incendiary grenade', c: 0xff9a3a, fuse: 1.7, settle: 0 }, melta: { n: 'Melta charge', c: 0xffd8a0, stick: true, fuse: 1.0 },
+      vortex: { n: 'Vortex grenade', c: 0xb07aff, fuse: 1.7, settle: 0 }, purgation: { n: 'Purgation charge', c: 0xe0b24a, fuse: 1.7, settle: 0 } };
+    const GRN = Array.from({ length: 6 }, () => {
+      const g = new THREE.Group(); g.visible = false; scene.add(g);
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), M.gunmetal), chg = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.1, 8), M.gunmetal);
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.088, 0.017, 5, 14), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+      g.add(ball, chg, band, halo); g.traverse(o => { o.frustumCulled = false; });
+      return { g, ball, chg, band, halo, on: false, id: '', pos: new V3(), vel: new V3(), spin: new V3(), t: 0, st: 0, bn: 0, settled: false, stuck: null, off: new V3() };
+    });
+    function grenade(id) {
+      const D = GDEF[id]; if (!D || !P.alive || G.state !== 'play' || FLY.on || (C.active && C.mode === 'exec')) return false;
+      let g = GRN.find(q => !q.on); if (!g) { g = GRN.reduce((a, b) => (a.t > b.t ? a : b)); boom(g); }      // all of them out: the oldest goes off now
+      Object.assign(g, { on: true, id, t: 0, st: 0, bn: 0, settled: false, stuck: null }); g.g.visible = true;
+      g.ball.visible = !D.stick; g.chg.visible = !!D.stick; g.band.material.color.copy(linC(D.c)); g.halo.material.color.copy(linC(D.c)).multiplyScalar(1.5);
+      _d.set(0, 0, -1).applyQuaternion(cam.quaternion);
+      // the left shoulder: in first person a little left of and below the eye, pulled back in third person to the pauldron itself
+      if (C.cam > 0.5) { T.shL.getWorldPosition(g.pos); g.pos.y += 0.3; } else g.pos.set(-0.32, -0.26, -0.5).applyQuaternion(cam.quaternion).add(cam.position);
+      _a.subVectors(g.pos, cam.position); const L = _a.length(); if (L > 0.01 && rayWorld(cam.position, _a.divideScalar(L), L) < L) g.pos.copy(cam.position);      // not from inside a wall you're pressed against
+      // aimed to cross the crosshair's line about 12 m out (or wherever it meets the world first), so a charge lands on what you look at
+      const reach = Math.min(12, rayWorld(cam.position, _d, 12)); _b.copy(cam.position).addScaledVector(_d, reach).sub(g.pos).normalize();
+      g.vel.copy(_b).multiplyScalar(19); g.vel.y += 4; g.vel.x += P.vel.x * 0.5; g.vel.z += P.vel.z * 0.5;
+      g.spin.set(rand(-14, 14), rand(-14, 14), rand(-14, 14)); g.g.position.copy(g.pos);
+      AS.toss(); moveToast(D.n);
+      return true;
+    }
+    let _tpad = 0, _thit = false; const _tp = new V3(), _tq = new V3(), _tcb = (c, r) => { if (segPointDist(_tp, _tq, c) < r + _tpad) { _thit = true; return true; } return false; };
+    function touching(p, q, pad) {      // the first foe whose body the segment p..q passes within pad of
+      _tp.copy(p); _tq.copy(q); _tpad = pad;
+      for (const e of ENEMIES) { if (!e.alive || e.state === 'execd' || Math.abs(e.pos.x - p.x) + Math.abs(e.pos.z - p.z) > 7) continue; _thit = false; enemySpheres(e, _tcb); if (_thit) return e; }
+      return null;
+    }
+    function stickTo(g, e) {      // held in the foe's own frame, so it rides along as he turns and runs
+      const s = Math.sin(e.yaw), c = Math.cos(e.yaw), dx = g.pos.x - e.pos.x, dz = g.pos.z - e.pos.z;
+      g.stuck = e; g.st = 0; g.off.set(dx * c - dz * s, g.pos.y - e.pos.y - e.lift, dx * s + dz * c); g.vel.set(0, 0, 0);
+      AS.clink(g.pos, true); sparks(g.pos, 8, PC.ember, 2.5, 0.2); num(eUp(e, e.ly + 0.7), 'Stuck', 'blk');
+    }
+    function hitSurface(g, ground) {
+      const D = GDEF[g.id], gy = GY(g.pos.x, g.pos.z), low = ground || g.pos.y - gy < 0.4;
+      if (D.stick) { g.settled = true; g.st = 0; g.vel.set(0, 0, 0); AS.clink(g.pos, true); sparks(g.pos, 6, PC.ember, 2, 0.2); return; }      // a charge clamps on wherever it lands
+      if (low) { const k = 0.4; _n.set(GY(g.pos.x - k, g.pos.z) - GY(g.pos.x + k, g.pos.z), 2 * k, GY(g.pos.x, g.pos.z - k) - GY(g.pos.x, g.pos.z + k)).normalize(); }      // the slope it landed on
+      else _n.set(-g.vel.x, 0, -g.vel.z).normalize();      // a wall: near enough, facing back along the throw
+      const vn = g.vel.dot(_n); if (vn < 0) { g.vel.addScaledVector(_n, -vn).multiplyScalar(low ? 0.35 : 0.5).addScaledVector(_n, -0.4 * vn); }      // the ground grips it: most of the run is lost, a little hop is kept
+      g.bn++;
+      if (g.vel.length() > 1.5) { AS.clink(g.pos); puff(g.pos, 0, 0.5, 0, PC.smoke, 0.15, 0.5, -0.2, 2, 1.5, true); }
+      if (low && (g.bn >= 3 || g.vel.length() < 2.4)) { g.settled = true; g.st = 0; g.vel.set(0, 0, 0); g.pos.y = gy + 0.085; }
+    }
+    function updGren(g, dt) {
+      const D = GDEF[g.id]; g.t += dt;
+      if (g.stuck) {
+        const e = g.stuck;
+        if (!e.alive || e.gone) { g.stuck = null; g.settled = false; g.vel.set(0, 0, 0); }      // its foe fell: it drops with him
+        else { const s = Math.sin(e.yaw), c = Math.cos(e.yaw); g.pos.set(e.pos.x + g.off.x * c + g.off.z * s, e.pos.y + e.lift + g.off.y, e.pos.z - g.off.x * s + g.off.z * c); }
+        g.st += dt;
+      } else if (!g.settled) {
+        g.vel.y -= 22 * dt; _a.copy(g.pos).addScaledVector(g.vel, dt);
+        if (g.t > 0.06) { const e = touching(g.pos, _a, D.stick ? 0.4 : 0.3); if (e) { if (D.stick) { g.pos.copy(_a); stickTo(g, e); } else { boom(g); return; } } }      // a little generous: a charge thrown at a foe should find him
+        if (!g.stuck) {
+          const sp = g.vel.length(), L = sp * dt; _d.copy(g.vel).divideScalar(Math.max(1e-6, sp));
+          const h = L > 1e-5 ? rayWorld(g.pos, _d, L + 0.09) : Infinity;
+          if (h < L + 0.09) { g.pos.addScaledVector(_d, Math.max(0, h - 0.09)); hitSurface(g, false); } else g.pos.copy(_a);
+          const gy = GY(g.pos.x, g.pos.z) + 0.085; if (!g.settled && g.pos.y < gy) { g.pos.y = gy; if (g.vel.y < 0) hitSurface(g, true); }
+          g.g.rotation.x += g.spin.x * dt; g.g.rotation.y += g.spin.y * dt; g.g.rotation.z += g.spin.z * dt;
+        }
+      } else g.st += dt;
+      g.g.position.copy(g.pos);
+      // the halo blinks faster as the fuse runs down, and a thin trail of its colour follows the throw
+      const left = D.stick ? (g.stuck || g.settled ? D.fuse - g.st : 1) : D.fuse - g.t, rate = 3 + 14 * clamp(1 - left / 1.2, 0, 1);
+      g.halo.material.opacity = 0.25 + 0.5 * (Math.sin(G.time * rate * 2) > 0 ? 1 : 0.2); g.halo.scale.setScalar(0.8 + 0.4 * clamp(1 - left, 0, 1));
+      if (!g.settled && !g.stuck && Math.random() < 0.7) puff(g.pos, 0, 0, 0, D.stick ? PC.ember : PC.hot, 0.05, 0.18);
+      if (D.stick ? (g.stuck || g.settled) && g.st >= D.fuse : g.settled && g.st >= D.settle) boom(g);
+      else if (g.t > (D.stick ? 3.2 : D.fuse)) boom(g);
+    }
+    function blastFX(c, R, hex, ca, cb, k = 1) {      // what every blast shares: a light, a shell, a scorch on the ground, a ring, the shake
+      flash(_e.copy(c).setY(c.y + 0.5), hex, 9 * k, 0.28);
+      shell(c, R * 0.1, R * 0.75, ca, cb, 0.2, null, 0.7);
+      const gy = GY(c.x, c.z); groundFlash(_f.set(c.x, gy, c.z), R * 0.9, ca, cb, 0.6); shock(_f.set(c.x, gy + 0.05, c.z), R, hex);
+      shakeAt(c, 0.6 * k, 18);
+    }
+    const DET = {
+      frag(c) {
+        blastFX(c, 4.5, 0xff8a3a, [1, 0.45, 0.12], [1, 0.9, 0.6]); fireball(c, 1.5, 22); sparks(c, 40, PC.hot, 13, 0.5); debris(c, 18); smoke(c, 12, 1.3); dust(c, 10, 1.6, [0.35, 0.3, 0.26, 0.6]);
+        AS.blast(c); let any = false;
+        for (const { e, d } of foesNear(c, 4.5, 2.6, true)) { hurt(e, lerp(140, 70, d / 4.5), dirFrom(c, e), 9, 'grenade'); any = true; }
+        if (any) G.hitStop = Math.max(G.hitStop, 0.05);
+      },
+      krak(c, e0) {      // a shaped charge: most of it goes into what it's stuck to
+        flash(c, 0xffb070, 8, 0.16); shell(c, 0.2, 2.2, [1, 0.5, 0.2], [1, 0.95, 0.8], 0.22); groundFlash(_f.set(c.x, GY(c.x, c.z), c.z), 1.8, [1, 0.4, 0.15], [1, 0.9, 0.7], 0.4);
+        sparks(c, 50, PC.hot, 16, 0.35); for (let i = 0; i < 16; i++) puff(c, rand(-1.5, 1.5), rand(5, 11), rand(-1.5, 1.5), PC.fire, rand(0.15, 0.3), rand(0.3, 0.5), 4, 2, 0.8);
+        smoke(c, 5, 0.7); AS.crack(c, 0.6); AS.blast(c, 0.8); shakeAt(c, 0.45, 14);
+        if (e0 && e0.alive) { hurt(e0, 320, dirFrom(c, e0), 7, 'grenade'); G.hitStop = Math.max(G.hitStop, 0.08); }
+        for (const { e } of foesNear(c, 2, 2.2)) if (e !== e0) hurt(e, 60, dirFrom(c, e), 5, 'grenade');
+      },
+      arcg(c) {
+        blastFX(c, 3.5, 0x6ab8ff, [0.35, 0.65, 1], [0.9, 0.97, 1]); sparks(c, 50, PC.storm, 12, 0.4); AS.thunder(c, 0.8);
+        const gy = GY(c.x, c.z); for (let i = 0; i < 7; i++) { const a = rand(0, PI * 2), r = rand(2, 3.6), x = c.x + Math.cos(a) * r, z = c.z + Math.sin(a) * r; zap(_e.copy(c).setY(c.y + 0.2), _f.set(x, Math.max(gy, GY(x, z)) + 0.1, z), 0x9fd8ff, 0.08, rand(0.15, 0.28), 1.4); }
+        for (const { e, d } of foesNear(c, 3.5, 2.4, true)) hurt(e, lerp(110, 70, d / 3.5), dirFrom(c, e), 7, 'grenade');
+        // then the chain: the three nearest within 6 m, one after another
+        const ch = foesNear(c, 6, 2.6).sort((a, b) => a.d - b.d).slice(0, 3); let from = c.clone().setY(c.y + 0.5);
+        ch.forEach(({ e }, i) => later(0.08 * (i + 1), () => { if (!e.alive) return; const to = eUp(e, e.ly); zap(from, to, 0xbfe8ff, 0.11, 0.28, 1.2); hurt(e, 60, dirFrom(from, e), 3, 'grenade'); sparks(to, 14, PC.storm, 6, 0.3); AS.crack(to, 0.6); from = to; }));
+      },
+      incendiary(c) {
+        const g = v(c.x, GY(c.x, c.z), c.z); flash(_e.copy(g).setY(g.y + 0.6), 0xff7a20, 8, 0.35); fireball(c, 1.1, 16); sparks(c, 24, PC.ember, 8, 0.5); AS.whoomp(c, 1.2); shakeAt(c, 0.3, 14);
+        firePool(g, 3.5, 5, 40, 'grenade', true);
+      },
+      melta(c, e0) {      // white heat in a tight sphere: nothing inside it is spared
+        flash(c, 0xffe0b0, 13, 0.32); shell(c, 0.3, 2.6, [1, 0.55, 0.2], [1, 1, 0.9], 0.35, null, 0.85); groundFlash(_f.set(c.x, GY(c.x, c.z), c.z), 2.6, [1, 0.5, 0.15], [1, 0.95, 0.8], 0.8);
+        sparks(c, 60, PC.hot, 10, 0.6); for (let i = 0; i < 30; i++) puff(c, rand(-5, 5), rand(2, 8), rand(-5, 5), PC.hot, rand(0.04, 0.07), rand(0.6, 1.1), 14, 0.5);
+        fireball(c, 1, 14); smoke(c, 8, 1); AS.sizzle(c); AS.blast(c, 1.1); shakeAt(c, 0.7, 16);
+        let any = false; for (const { e } of foesNear(c, 2.5, 2.6)) { hurt(e, 400, dirFrom(c, e), 10, 'grenade'); any = true; }
+        if (any || e0) G.hitStop = Math.max(G.hitStop, 0.08);
+      },
+      vortex(c) {
+        const g = v(c.x, GY(c.x, c.z), c.z); flash(_e.copy(g).setY(g.y + 1), 0x9a60ff, 6, 0.3); AS.swirl(g, 3);
+        const D = takeDisc(1); if (D) { layDisc(D.m, g.x, g.z, 6); D.own = true; D.u.col.value.setRGB(0.6, 0.34, 1); D.u.col2.value.setRGB(0.95, 0.85, 1); }
+        const S = shell(_e.copy(g).setY(g.y + 1.1), 0.5, 0.5, [0.45, 0.2, 0.95], [0.9, 0.75, 1], 3, true);
+        ZONES.push({ kind: 'vortex', x: g.x, y: g.y, z: g.z, R: 6, Rd: 4, t: 0, dur: 3, dps: 50, src: 'grenade', tick: 0, D, S, zt: 0 });
+      },
+      purgation(c) {      // a reliquary bursts: it scours what's near and blesses the brother who threw it
+        blastFX(c, 4, 0xffd27a, [1, 0.75, 0.35], [1, 1, 0.85]); shock(_f.set(c.x, GY(c.x, c.z) + 0.05, c.z), 2.6, 0xb07aff); sparks(c, 40, PC.gold, 10, 0.5); sparks(c, 20, PC.void, 7, 0.5);
+        AS.chime(c); AS.blast(c, 0.7);
+        for (const { e } of foesNear(c, 4, 2.6, true)) hurt(e, 100, dirFrom(c, e), 7, 'grenade');
+        for (let i = 0; i < 18; i++) { _a.set(P.pos.x + rand(-0.3, 0.3), P.pos.y + rand(0.8, 1.8), P.pos.z + rand(-0.3, 0.3)).sub(c).divideScalar(0.55); puff(c, _a.x, _a.y, _a.z, i % 2 ? PC.gold : PC.heal, 0.07, 0.55, 0, 0); }
+        later(0.5, () => { heal(0.15); flash(_e.set(P.pos.x, P.pos.y + 1.4, P.pos.z), 0xffd27a, 4, 0.3); });
+      }
+    };
+    function boom(g) { g.on = false; g.g.visible = false; const c = g.pos.clone(), e0 = g.stuck; g.stuck = null; DET[g.id](c, e0); }
+
+    // ---- lingering zones: fire on the ground, the vortex
+    const ZONES = [];
+    function firePool(c, R, dur, dps, src, burnIt) {
+      const D = takeDisc(0); if (D) { layDisc(D.m, c.x, c.z, R); D.own = true; D.u.col.value.setRGB(1, 0.4, 0.08); D.u.col2.value.setRGB(1, 0.88, 0.5); }
+      ZONES.push({ kind: 'fire', x: c.x, y: GY(c.x, c.z), z: c.z, R, t: 0, dur, dps, src, burnIt, tick: 0, D });
+    }
+    function updZone(z, dt) {
+      z.t += dt; const f = z.t / z.dur, fade = Math.min(1, z.t / 0.15) * (1 - smooth(clamp((f - 0.85) / 0.15, 0, 1)));
+      if (z.D) { z.D.u.a.value = fade; z.D.u.t.value += dt; }
+      const c = _c.set(z.x, z.y + 0.6, z.z), tickNow = (z.tick -= dt) <= 0; if (tickNow) z.tick += 0.5;
+      if (z.kind === 'fire') {
+        const k = (z.R / 3.5) ** 2 * fade;
+        for (let i = 0, n = cnt(dt * 50 * k); i < n; i++) { const a = rand(0, PI * 2), r = z.R * Math.sqrt(Math.random()) * 0.9, x = z.x + Math.cos(a) * r, y = z.z + Math.sin(a) * r; puff(_a.set(x, GY(x, y) + 0.1, y), rand(-0.2, 0.2), rand(1.4, 2.8), rand(-0.2, 0.2), Math.random() < 0.2 ? PC.hot : PC.fire, rand(0.25, 0.5), rand(0.35, 0.65), -1, 1.5, -0.6); }
+        if (Math.random() < dt * 10 * k) puff(_a.set(z.x + rand(-z.R, z.R) * 0.6, z.y + 0.3, z.z + rand(-z.R, z.R) * 0.6), rand(-0.6, 0.6), rand(2, 3.5), rand(-0.6, 0.6), PC.ember, 0.03, rand(1, 2), -0.2, 0.3);
+        if (Math.random() < dt * 5 * k) puff(_a.set(z.x + rand(-z.R, z.R) * 0.5, z.y + 1.2, z.z + rand(-z.R, z.R) * 0.5), rand(-0.3, 0.3), rand(1, 1.6), rand(-0.3, 0.3), PC.smoke, 0.6, rand(1.2, 1.8), -0.4, 1.2, 2.5, true);
+        if (tickNow && fade > 0.3) { api.quiet = true; for (const { e } of foesNear(c, z.R, 1.8)) { hurt(e, z.dps * 0.5, rdir(), 0, z.src); if (z.burnIt) burn(e, 30, 4, z.src); } api.quiet = false; }
+      } else if (z.kind === 'vortex') {
+        for (const e of ENEMIES) {      // everything within reach is dragged toward the eye (statusTick does the moving, before the foe's own AI)
+          if (!e.alive || e.state === 'execd' || Math.abs(e.pos.y - z.y) > 3) continue;
+          const d = Math.hypot(e.pos.x - z.x, e.pos.z - z.z); if (d > z.R + e.r) continue;
+          const s = stOf(e); s.pull = 0.15; s.px = z.x; s.pz = z.z; s.pk = 3 + 6 * (1 - d / z.R);
+        }
+        if (tickNow) { api.quiet = true; for (const { e } of foesNear(c, z.Rd, 2.2)) hurt(e, z.dps * 0.5, rdir(), 0, z.src); api.quiet = false; }
+        for (let i = 0, n = cnt(dt * 60 * fade); i < n; i++) { const a = rand(0, PI * 2), r = rand(2.5, z.R), x = z.x + Math.cos(a) * r, y = z.z + Math.sin(a) * r;
+          puff(_a.set(x, GY(x, y) + rand(0.1, 1.2), y), (-Math.cos(a) * 4 - Math.sin(a) * 5), rand(0, 0.6), (-Math.sin(a) * 4 + Math.cos(a) * 5), i % 3 ? PC.void : PC.vdeep, rand(0.05, 0.12), rand(0.5, 0.8), 0, 0.4); }
+        if (z.S) { z.S.m.scale.setScalar(0.45 + Math.sin(z.t * 18) * 0.06 + z.t * 0.08); z.S.u.a.value = fade; }
+        if ((z.zt -= dt) <= 0) { z.zt = rand(0.12, 0.3); const ang = rand(0, PI * 2); zap(_e.set(z.x, z.y + 1.1, z.z), _f.set(z.x + Math.cos(ang) * 2.5, z.y + rand(0.2, 1.5), z.z + Math.sin(ang) * 2.5), 0xb990ff, 0.05, 0.12, 1.5); }
+        if (z.t >= z.dur) {      // it collapses with a last thump
+          const g = _e.set(z.x, z.y + 1, z.z); flash(g, 0x9a60ff, 7, 0.25); shell(g, 0.4, 3.5, [0.5, 0.25, 1], [0.95, 0.85, 1], 0.3); SYN.boom(g); sparks(g, 30, PC.void, 8, 0.4);
+          if (z.S) { z.S.on = false; z.S.own = null; z.S.m.visible = false; }
+        }
+      }
+      if (z.t >= z.dur && z.D) { z.D.on = false; z.D.own = null; z.D.m.visible = false; }
+    }
+
+    // ---- waves: storm crescents off the sword in Wrath of Sigismund, the rolling wall of fire, the zealot's slash
+    function wave(kind, o, dir, max, sp, hw, dmg, src, ca, cb, roll, burnIt) {
+      const W_ = WAVES.find(w => !w.on) || WAVES.reduce((a, b) => (a.t > b.t ? a : b));
+      _a.set(o.x, o.y + 1.8, o.z); const free = rayWorld(_a, dir, max + 0.5);      // walls stop it (gentle slopes don't)
+      Object.assign(W_, { on: true, kind, dist: 0, max: Math.max(0.5, Math.min(max, free - 0.3)), sp, hw, dmg, src, burn: !!burnIt, t: 0, pc: kind === 'fire' ? PC.fire : kind === 'slash' ? PC.void : PC.storm });
+      W_.o.copy(o); W_.dir.copy(dir).setY(0).normalize(); W_.hit.clear();
+      const fire = kind === 'fire'; W_.H = fire ? 2.4 : 1.15; const R = fire ? hw * 1.15 : hw * 2.1;      // a crescent is drawn wider than it cuts, so it reads
+      W_.u.kind.value = fire ? 4 : 5; W_.u.col.value.setRGB(...ca); W_.u.col2.value.setRGB(...cb); W_.u.R.value = R; W_.u.a.value = 0;
+      W_.m.scale.set(R, W_.H, R); W_.m.rotation.set(0, Math.atan2(-W_.dir.x, -W_.dir.z), roll); W_.m.visible = true;
+      return W_;
+    }
+    function updWave(W_, dt) {
+      W_.t += dt; const d0 = W_.dist; W_.dist = Math.min(W_.max, W_.dist + W_.sp * dt);
+      const px = W_.o.x + W_.dir.x * W_.dist, pz = W_.o.z + W_.dir.z * W_.dist, gy = GY(px, pz), fire = W_.kind === 'fire';
+      W_.m.position.set(px, gy + (fire ? W_.H * 0.5 - 0.2 : 1.25), pz);
+      const f = W_.dist / W_.max; W_.u.a.value = Math.min(1, W_.t / 0.04) * (1 - smooth(clamp((f - 0.7) / 0.3, 0, 1))); W_.u.t.value += dt;
+      if (W_.dmg > 0) for (const e of ENEMIES) {
+        if (!e.alive || e.state === 'execd' || W_.hit.has(e)) continue;
+        const rx = e.pos.x - W_.o.x, rz = e.pos.z - W_.o.z, al = rx * W_.dir.x + rz * W_.dir.z; if (al < d0 - 0.9 || al > W_.dist + 0.6) continue;
+        const lat = rx * W_.dir.z - rz * W_.dir.x; if (Math.abs(lat) > W_.hw + e.r * 0.7 || Math.abs(e.pos.y - gy) > 3) continue;
+        W_.hit.add(e); const at = eUp(e, e.ly);
+        hurt(e, W_.dmg, v(W_.dir.x - W_.dir.z * Math.sign(lat) * 0.4, 0, W_.dir.z + W_.dir.x * Math.sign(lat) * 0.4).normalize(), fire ? 6 : 4, W_.src);
+        if (W_.burn) burn(e, 30, 4, W_.src);
+        sparks(at, 14, W_.pc, 6, 0.3); G.hitStop = Math.max(G.hitStop, 0.03); if (!fire) AS.crack(at, 0.4);
+      }
+      // along the front: tongues of flame for the wall, crackling sparks for the crescent
+      const side = _b.set(-W_.dir.z, 0, W_.dir.x), a = W_.u.a.value;
+      if (fire) { for (let i = 0, n = cnt(dt * 200 * a); i < n; i++) { const s = rand(-1, 1) * W_.hw, x = px + side.x * s, z = pz + side.z * s; puff(_a.set(x, GY(x, z) + rand(0.1, 0.9), z), W_.dir.x * W_.sp * 0.5, rand(1.5, 3.5), W_.dir.z * W_.sp * 0.5, Math.random() < 0.25 ? PC.hot : PC.fire, rand(0.4, 0.75), rand(0.3, 0.5), -1, 1.5, -0.3); }
+        for (let i = 0, n = cnt(dt * 24 * a); i < n; i++) { const s = rand(-1, 1) * W_.hw, x = px + side.x * s - W_.dir.x, z = pz + side.z * s - W_.dir.z; puff(_a.set(x, GY(x, z) + W_.H * 0.8, z), W_.dir.x * 2, rand(1, 2), W_.dir.z * 2, PC.smoke, rand(0.6, 0.9), rand(1, 1.6), -0.4, 1.2, 2, true); } }
+      else for (let i = 0, n = cnt(dt * 40 * a); i < n; i++) { const s = rand(-1, 1) * W_.hw * 1.1; puff(_a.set(px + side.x * s, W_.m.position.y + rand(-0.3, 0.3), pz + side.z * s), rand(-1, 1), rand(-0.5, 1), rand(-1, 1), W_.pc, rand(0.03, 0.06), rand(0.2, 0.35), 4, 2); }
+      if (W_.dist >= W_.max) { W_.on = false; W_.m.visible = false; }
+    }
+
+    // ---- melee abilities: a pose through the combo's own machinery, then the effect at the moment the blow lands
+    const MOVES = {
+      slam: { w: 0.2, s: 0.12, r: 0.42, snd: 2, k: STRIKES[2].k, reach: 1.9, next: 0 },
+      lunge: { w: 0.06, s: 0.3, r: 0.3, snd: 2, k: THRUST.k, drive: 26, next: 1 },
+      punch: { w: 0.1, s: 0.1, r: 0.32, snd: 0, reach: 1.6, next: 0, k: [P3([-0.42, 1.32, -0.12], [-0.05, 0.85, -0.5], -0.55, 0.05), P3([-0.26, 1.42, 0.5], [0, 0.95, 0.3], 0.1, 0.25), P3([-0.16, 1.45, 0.84], [0, 0.92, 0.38], 0.25, 0.35)] },
+      raise: { w: 0.16, s: 0.12, r: 0.36, snd: 1, next: 0, k: [P3([-0.36, 1.3, 0.32], [-0.1, 0.95, 0.2], 0, 0), P3([-0.22, 1.86, 0.44], [0, 1, 0.1], 0, -0.1), P3([-0.2, 1.96, 0.42], [0, 1, 0.05], 0, -0.12)] },
+      slash: { w: 0.1, s: 0.13, r: 0.3, snd: 0, k: STRIKES[0].k, reach: 1.75, next: 1 }
+    };
+    const MV = { cur: null, fx: null, tick: null, done: true };
+    function startMove(Mv, fx, tick) {
+      if (C.active) endCombo();
+      Object.assign(C, { active: true, mode: 'abil', step: 0, queued: false, pips: 0, phase: 'w', t: 0, slamDone: false, move: Mv }); C.hits = new Set();
+      copyPose(fromPose, pose); C.target = pickTarget(); C.lungeV.set(0, 0, 0);
+      if (Mv.drive) { if (C.target) P.yaw = Math.atan2(-(C.target.pos.x - P.pos.x), -(C.target.pos.z - P.pos.z)); fwd(C.lungeV).multiplyScalar(Mv.drive); }
+      else if (C.target && Mv.reach) { const dx = C.target.pos.x - P.pos.x, dz = C.target.pos.z - P.pos.z, d = Math.hypot(dx, dz), reach = Mv.reach + C.target.r - 0.45; if (d > reach) C.lungeV.set(dx / d, 0, dz / d).multiplyScalar(Math.min((d - reach) / (Mv.w + Mv.s * 0.5), 15)); }
+      Object.assign(MV, { cur: Mv, fx, tick: tick || null, done: false });
+      SYN.windup(Mv.snd, Mv.w);
+    }
+    const bladeMid = () => { T.bladeBase.getWorldPosition(_a); T.bladeTip.getWorldPosition(_b); return _a.lerp(_b, 0.55).clone(); };
+    function lungeTick(LG, dt) {
+      fwd(_d);
+      if ((LG.zt -= dt) <= 0) { LG.zt = 0.025; zap(_a.set(P.pos.x + rand(-0.4, 0.4), P.pos.y + rand(0.5, 1.9), P.pos.z + rand(-0.4, 0.4)), _b.set(P.pos.x - _d.x * rand(1.5, 3) + rand(-0.5, 0.5), P.pos.y + rand(0.3, 1.8), P.pos.z - _d.z * rand(1.5, 3) + rand(-0.5, 0.5)), 0xbfe8ff, 0.07, 0.14, 1.4); }
+      for (let i = 0; i < 3; i++) puff(_a.set(P.pos.x + rand(-0.4, 0.4), P.pos.y + rand(0.3, 1.9), P.pos.z + rand(-0.4, 0.4)), -_d.x * 4 + rand(-1, 1), rand(-0.5, 1), -_d.z * 4 + rand(-1, 1), PC.storm, rand(0.04, 0.08), 0.3, 0, 2);
+      for (const e of ENEMIES) {
+        if (!e.alive || e.state === 'execd' || LG.hit.has(e) || Math.abs(e.pos.y - P.pos.y) > 2) continue;
+        if (Math.hypot(e.pos.x - P.pos.x, e.pos.z - P.pos.z) > e.r + 1.1) continue;
+        LG.hit.add(e); const at = eUp(e, e.ly);
+        // thrown out of the line, to whichever side he stood, and on
+        const side = Math.sign((e.pos.x - P.pos.x) * -_d.z + (e.pos.z - P.pos.z) * _d.x) || 1, dir = v(_d.x * 0.6 - _d.z * side, 0, _d.z * 0.6 + _d.x * side).normalize();
+        if (!LG.first) { LG.first = e; hurt(e, 180, dir, 11, 'ability'); G.hitStop = Math.max(G.hitStop, 0.07); flash(at, 0x8fd0ff, 7, 0.15); sparks(at, 30, PC.storm, 9, 0.4); SYN.swordHit(at, true); AS.crack(at); }
+        else { hurt(e, 60, dir, 8, 'ability'); sparks(at, 16, PC.storm, 7, 0.3); }
+        G.shake = Math.max(G.shake, 0.25);
+      }
+    }
+    function lungeEnd(LG) {      // the discharge at the end of the run: everything within 3 m of the line he took
+      const ax = LG.from.x, az = LG.from.z, bx = P.pos.x - ax, bz = P.pos.z - az, l2 = bx * bx + bz * bz || 1;
+      for (const e of ENEMIES) {
+        if (!e.alive || e.state === 'execd' || LG.hit.has(e) || Math.abs(e.pos.y - P.pos.y) > 2.5) continue;
+        const t = clamp(((e.pos.x - ax) * bx + (e.pos.z - az) * bz) / l2, 0, 1), qx = ax + bx * t, qz = az + bz * t;
+        if (Math.hypot(e.pos.x - qx, e.pos.z - qz) - e.r * 0.5 > 3) continue;
+        const at = eUp(e, e.ly); zap(_a.set(qx, P.pos.y + 1.1, qz), at, 0xbfe8ff, 0.1, 0.3, 1.3); hurt(e, 60, dirFrom(_a, e), 5, 'ability'); sparks(at, 14, PC.storm, 6, 0.3);
+      }
+      const c = v(P.pos.x, GY(P.pos.x, P.pos.z) + 0.05, P.pos.z); shock(c, 3, 0x8fd0ff); flash(_e.copy(c).setY(c.y + 1), 0x8fd0ff, 6, 0.2); dust(c, 16, 1); sparks(c, 24, PC.storm, 8, 0.4);
+      AS.thunder(c, 0.5); G.shake = Math.max(G.shake, 0.3);
+    }
+    function thunderclap() {
+      fwd(_d); const c = v(P.pos.x + _d.x * 1.3, 0, P.pos.z + _d.z * 1.3); c.y = GY(c.x, c.z) + 0.05;
+      ring.position.copy(c); ring.visible = true; ringT = 0.5; ring.scale.setScalar(0.3);
+      shock(c, 4.2, 0x8fd0ff); shock(c, 2.2, 0xffffff); groundFlash(c, 4.2, [0.35, 0.65, 1], [0.9, 0.97, 1], 0.6); shell(_e.copy(c).setY(c.y + 0.3), 0.5, 4.2, [0.35, 0.65, 1], [0.85, 0.95, 1], 0.3, null, 0.45);
+      flash(_e.copy(c).setY(c.y + 0.8), 0x6ab8ff, 10, 0.3); dust(c, 36, 2); sparks(c, 50, PC.storm, 11, 0.5);
+      for (let i = 0; i < 8; i++) { const a = i / 8 * PI * 2 + rand(-0.3, 0.3), r = rand(2.6, 4.2), x = c.x + Math.cos(a) * r, z = c.z + Math.sin(a) * r; zap(_e.copy(c).setY(c.y + 0.2), _f.set(x, GY(x, z) + 0.15, z), 0x9fd8ff, 0.09, rand(0.18, 0.3), 1.3); }
+      SYN.slam(c, 1.2); AS.thunder(c); G.shake = Math.max(G.shake, 0.55); G.hitStop = Math.max(G.hitStop, 0.09);
+      for (const { e } of foesNear(c, 4, 2.6)) { hurt(e, 90, dirFrom(c, e), 7, 'ability'); stun(e, 1.5); zap(_e.copy(c).setY(c.y + 0.3), eUp(e, e.ly), 0xbfe8ff, 0.1, 0.3, 1.2); }
+    }
+    function burnfist() {
+      fwd(_d); T.hdR.getWorldPosition(_c); const at = _c.clone();
+      flash(at, 0xff7a20, 9, 0.22); shell(at, 0.2, 1.7, [1, 0.42, 0.1], [1, 0.9, 0.6], 0.22);
+      for (let i = 0; i < 50; i++) { _n.copy(_d).applyAxisAngle(_up, rand(-0.6, 0.6)); _n.y = rand(-0.2, 0.35); _n.normalize().multiplyScalar(rand(5, 13)); puff(at, _n.x, _n.y, _n.z, i % 4 ? PC.fire : PC.hot, rand(0.2, 0.42), rand(0.22, 0.42), -1, 3, 1.4); }
+      sparks(at, 24, PC.ember, 8, 0.4); SYN.slam(at, 0.5); AS.whoomp(at, 1); G.shake = Math.max(G.shake, 0.3);
+      let any = false; for (const e of cone(3, 0.6)) { hurt(e, 120, dirFrom(P.pos, e), 8, 'ability'); burn(e, 30, 4, 'ability'); any = true; }
+      if (any) G.hitStop = Math.max(G.hitStop, 0.07);
+    }
+    function flamewave() {
+      fwd(_d); const o = v(P.pos.x + _d.x * 0.8, 0, P.pos.z + _d.z * 0.8); o.y = GY(o.x, o.z);
+      wave('fire', o, _d, 8, 12, 2.0, 100, 'ability', [1, 0.4, 0.08], [1, 0.9, 0.55], 0, true);
+      flash(_e.copy(o).setY(o.y + 0.8), 0xff7a20, 9, 0.3); dust(o, 24, 1.5); sparks(o, 30, PC.ember, 8, 0.4); SYN.slam(o, 0.9); AS.whoomp(o, 1.3); G.shake = Math.max(G.shake, 0.4); G.hitStop = Math.max(G.hitStop, 0.05);
+    }
+    function crozius() {
+      fwd(_d); const c = v(P.pos.x + _d.x * 1.6, 0, P.pos.z + _d.z * 1.6); c.y = GY(c.x, c.z) + 0.05;
+      shock(c, 3.5, 0xb07aff); shock(c, 2, 0xe0b24a); groundFlash(c, 3.2, [0.6, 0.32, 1], [1, 0.85, 0.5], 0.55); shell(_e.copy(c).setY(c.y + 0.4), 0.3, 2.6, [0.6, 0.32, 1], [1, 0.85, 0.55], 0.28, null, 0.55);
+      flash(_e.copy(c).setY(c.y + 0.8), 0xa070ff, 9, 0.25); sparks(c, 40, PC.gold, 9, 0.45); sparks(c, 30, PC.void, 7, 0.5); dust(c, 30, 1.6);
+      SYN.slam(c, 1.1); SYN.clang(); G.shake = Math.max(G.shake, 0.5);
+      let any = false; for (const e of cone(3.5, 0.55)) { hurt(e, 150, dirFrom(P.pos, e), 10, 'ability'); weaken(e, 6); any = true; }
+      if (any) G.hitStop = Math.max(G.hitStop, 0.09);
+    }
+    function rosarius() {      // the Chaplain's rosarius flares: everything near is struck blind for two seconds
+      const c = v(P.pos.x, P.pos.y + 1.5, P.pos.z), g = v(c.x, GY(c.x, c.z), c.z);
+      flash(c, 0xfff0c0, 15, 0.45); shell(c, 0.4, 6, [1, 0.8, 0.4], [1, 1, 0.92], 0.38, null, 0.6); groundFlash(g, 6, [1, 0.78, 0.4], [1, 1, 0.85], 0.55); shock(_e.copy(g).setY(g.y + 0.05), 6, 0xffe0a0);
+      sparks(c, 60, PC.gold, 10, 0.6); AS.flare(c); G.shake = Math.max(G.shake, 0.2); vigFlash = 0.35;
+      for (const { e } of foesNear(c, 6, 3)) stun(e, 2, true);
+    }
+    function zeal() {
+      fwd(_d); wave('slash', P.pos, _d, 1.8, 8, 1.3, 0, '', [0.62, 0.35, 1], [1, 0.92, 0.75], -0.3);
+      let kills = 0, any = false;
+      for (const e of cone(3, 0.55)) { any = true; const at = eUp(e, e.ly); if (hurt(e, 140, dirFrom(P.pos, e), 8, 'ability')) kills++; sparks(at, 20, PC.void, 7, 0.3); SYN.swordHit(at, true); }
+      if (any) { G.hitStop = Math.max(G.hitStop, 0.08); G.shake = Math.max(G.shake, 0.3); }
+      if (kills) { heal(0.25); try { AB.melee = Math.min(1, (AB.melee || 0) + 0.5); } catch (_) {} moveToast('Zeal rewarded'); AS.chime(P.pos); flash(_e.set(P.pos.x, P.pos.y + 1.4, P.pos.z), 0xb07aff, 5, 0.3); }
+    }
+    const BB = { n: 0, t: 0 }, SE = { t: 0 };
+    const MELEE = {
+      stormlunge() { const LG = { from: P.pos.clone(), first: null, hit: new Set(), zt: 0 }; P.iframes = Math.max(P.iframes, 0.55); AS.crack(null, 0.7); startMove(MOVES.lunge, () => lungeEnd(LG), dt => lungeTick(LG, dt)); },
+      thunderclap() { startMove(MOVES.slam, thunderclap); },
+      blessed() { startMove(MOVES.raise, () => { BB.n = 3; BB.t = 30; const m = bladeMid(); AS.chime(m); sparks(m, 30, PC.gold, 5, 0.5); flash(m, 0xffd27a, 5, 0.3); }); },
+      burnfist() { startMove(MOVES.punch, burnfist); },
+      flamewave() { startMove(MOVES.slam, flamewave); },
+      searing() { startMove(MOVES.raise, () => { SE.t = 8; const m = bladeMid(); AS.whoomp(m, 0.6); fireball(m, 0.4, 14); flash(m, 0xff7a20, 5, 0.3); }); },
+      crozius() { startMove(MOVES.slam, crozius); },
+      rosarius() { startMove(MOVES.raise, rosarius); },
+      zeal() { startMove(MOVES.slash, zeal); }
+    };
+    const MNAME = { stormlunge: 'Storm Lunge', thunderclap: 'Thunderclap', blessed: 'Blessed Blade', burnfist: 'Burning Fist', flamewave: 'Wave of Fire', searing: 'Searing Edge', crozius: 'Crozius Strike', rosarius: 'Rosarius Flare', zeal: 'Zealous Rebuke' };
+    let vigFlash = 0;      // the rosarius whitens the edges of the view for a moment
+
+    // ---- the Templar's look: blade field colour, trail, light (restored exactly when nothing runs)
+    { const tm = trailMesh.material; if (tm.fragmentShader.indexOf('vec4(0.45, 0.75, 1.0,') >= 0) { tm.uniforms.tcol = { value: new V3(0.45, 0.75, 1.0) }; tm.fragmentShader = tm.fragmentShader.replace('void main(){', 'uniform vec3 tcol; void main(){').replace('vec4(0.45, 0.75, 1.0,', 'vec4(tcol,'); tm.needsUpdate = true; } }
+    const TRAIL = trailMesh.material.uniforms.tcol || null;
+    const BF = COSM.blade || M.field;      // the sword's own field (cosmetics gave the Templar private copies of his paints)
+    // what the blade looked like before a look took over (taken fresh each time, so a cosmetic field colour chosen meanwhile comes back too)
+    const L0 = { fe: new THREE.Color(), fi: 1, au: new THREE.Color(), li: new THREE.Color(), arc: new THREE.Color(), tr: new THREE.Color() };
+    const LOOKS = {
+      storm: { fe: 0xb4e6ff, fi: 3.2, au: 0x6ac0ff, ak: 2.8, li: 0x7ac8ff, lk: 3, arc: 0xe8f8ff, tr: [0.7, 0.92, 1.6], pc: PC.storm, r: 16 },
+      bless: { fe: 0xffe2a0, fi: 2.6, au: 0xffc860, ak: 2.2, li: 0xffd890, lk: 2.4, arc: 0xfff2c8, tr: [1.1, 0.88, 0.5], pc: PC.gold, r: 14 },
+      sear: { fe: 0xff6a1a, fi: 2.8, au: 0xff5a14, ak: 2.4, li: 0xff7a30, lk: 2.6, arc: 0xffb070, tr: [1.1, 0.5, 0.18], pc: PC.fire, r: 30 },
+      lit: { fe: 0xc8a0ff, fi: 2.2, au: 0x9a5aff, ak: 2.2, li: 0xb07aff, lk: 2, arc: 0xe4d0ff, tr: [0.75, 0.5, 1.05], pc: PC.void, r: 6 }
+    };
+    let lookK = '';
+    function bladeLook(k) {
+      if (k === lookK) return; const L = LOOKS[k];
+      if (!lookK) { L0.fe.copy(BF.emissive); L0.fi = BF.emissiveIntensity; L0.au.copy(T.auraM.color); L0.li.copy(T.swordLight.color); L0.arc.copy(T.arcs[0].material.color); if (TRAIL) L0.tr.copy(TRAIL.value); }
+      lookK = k; COS.hold = !!L;      // the cosmetics' per-frame trail colour waits while a look runs
+      if (!L) { BF.emissive.copy(L0.fe); BF.emissiveIntensity = L0.fi; T.auraM.color.copy(L0.au); T.swordLight.color.copy(L0.li); T.arcs[0].material.color.copy(L0.arc); if (TRAIL) TRAIL.value.copy(L0.tr); return; }
+      BF.emissive.setHex(L.fe); BF.emissiveIntensity = L.fi; T.auraM.color.copy(linC(L.au)).multiplyScalar(L.ak); T.swordLight.color.setHex(L.li).multiplyScalar(L.lk); T.arcs[0].material.color.copy(linC(L.arc)); if (TRAIL) TRAIL.value.setRGB(...L.tr);
+    }
+    function bladeFX(dt) {      // the field boils off the blade
+      const L = LOOKS[lookK]; if (!L) return; const fp = C.cam < 0.5, k = fp ? 0.5 : 1;
+      for (let i = 0, n = cnt(dt * L.r * k); i < n; i++) {
+        T.bladeBase.getWorldPosition(_a); T.bladeTip.getWorldPosition(_b); _a.lerp(_b, Math.random());
+        if (lookK === 'sear') puff(_a, rand(-0.2, 0.2), rand(0.8, 1.6), rand(-0.2, 0.2), PC.fire, rand(0.07, 0.13) * k, rand(0.25, 0.4), -1, 1.5, -0.4);
+        else puff(_a, rand(-0.5, 0.5), rand(-0.2, 0.8), rand(-0.5, 0.5), L.pc, 0.03 * k, rand(0.2, 0.4), 0, 2);
+      }
+    }
+
+    // ---- the litany's standard: an iron pole, the Chapter's banner on a crossbar, a gilded cross with a skull at its heart
+    const STD = (() => {
+      const g = new THREE.Group(); g.visible = false; scene.add(g);
+      seg(v(0, -0.7, 0), v(0, 3.62, 0), 0.055, 0.045, M.iron, 7, g);
+      for (const y of [0.15, 1.5, 2.9]) mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.07, 8), M.gold, g, { p: [0, y, 0], edge: false });
+      mesh(new THREE.BoxGeometry(1.36, 0.07, 0.07), M.iron, g, { p: [0, 3.2, 0], edge: false });
+      for (const sx of [-1, 1]) { mesh(new THREE.SphereGeometry(0.06, 8, 6), M.gold, g, { p: [sx * 0.7, 3.2, 0], edge: false }); seg(v(sx * 0.66, 3.18, 0.03), v(sx * 0.6, 2.3, 0.06), 0.012, 0.012, M.steel, 4, g, { edge: false, cast: false }); }
+      const cloth = new THREE.PlaneGeometry(1.2, 2.0, 4, 10); cloth.translate(0, -1.0, 0);
+      { const p = cloth.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i); p.setZ(i, Math.sin(x * 5 + y * 2) * 0.04 * (-y / 2)); if (y < -1.9) p.setY(i, y + Math.abs(Math.sin(x * 9)) * 0.1); } cloth.computeVertexNormals(); }
+      const ban = mesh(cloth, M.banner, g, { p: [0, 3.17, 0.05], edge: false });
+      mesh(ext(crossShape(0.62), 0.05, 0.01), M.gold, g, { p: [0, 3.86, -0.025], edge: false });
+      mesh(new THREE.SphereGeometry(0.1, 10, 8), M.bone, g, { p: [0, 3.86, 0.06], s: [1, 1.12, 0.9], edge: false });
+      for (const sx of [-1, 1]) mesh(new THREE.SphereGeometry(0.024, 6, 4), M.joint, g, { p: [sx * 0.036, 3.88, 0.145], edge: false, cast: false });
+      purity(g, v(0.32, 2.75, 0.08), v(0, 0, 1), 1.3, 3); purity(g, v(-0.3, 1.9, 0.1), v(0, 0, 1), 1.0, 2);
+      const glowM = new THREE.MeshBasicMaterial({ color: linC(0x9a50ff), transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false });
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 10), glowM); glow.position.set(0, 3.86, 0); g.add(glow);
+      return { g, ban, glow, glowM };
+    })();
+    const CUR = fxMesh(gridGeo(72, 1), 6);      // the aura's curtain: a faint wall at its edge
+    function layCurtain(x, z, R, H) { const y0 = GY(x, z), p = CUR.geometry.attributes.position, uv = CUR.geometry.attributes.uv; for (let k = 0; k < p.count; k++) { const th = uv.getX(k) * PI * 2, dx = Math.cos(th) * R, dz = Math.sin(th) * R; p.setXYZ(k, dx, GY(x + dx, z + dz) - y0 + uv.getY(k) * H, dz); } p.needsUpdate = true; CUR.position.set(x, y0, z); }
+    // Wrath of Sigismund: a storm circle round the Templar's feet
+    const FOOT = fxMesh(gridGeo(4, 48), 2);
+    { const p = FOOT.geometry.attributes.position, uv = FOOT.geometry.attributes.uv; for (let k = 0; k < p.count; k++) { const r = uv.getX(k) * 1.7, th = uv.getY(k) * PI * 2; p.setXYZ(k, Math.cos(th) * r, 0.06, Math.sin(th) * r); } FOOT.material.uniforms.R.value = 1.7; FOOT.material.uniforms.col.value.setRGB(0.35, 0.65, 1); FOOT.material.uniforms.col2.value.setRGB(0.85, 0.95, 1); }
+    // Ansgar's Judgement: the pistol becomes a relic bolter (a gilded long barrel, a muzzle brake, vents glowing with heat)
+    const REL = (() => {
+      const g = new THREE.Group(); g.visible = false; T.pistol.add(g);
+      const ventM = new THREE.MeshStandardMaterial({ color: 0x3a1a08, emissive: 0xff5a10, emissiveIntensity: 1.6, roughness: 0.35 }), o = { edge: false, cast: false };
+      const bar = new THREE.CylinderGeometry(0.03, 0.035, 0.36, 8); bar.rotateX(PI / 2); mesh(bar, M.gunmetal, g, Object.assign({ p: [0, 0.15, 0.54] }, o));
+      for (const z of [0.42, 0.55, 0.66]) mesh(new THREE.TorusGeometry(0.037, 0.009, 4, 10), M.gold, g, Object.assign({ p: [0, 0.15, z] }, o));
+      mesh(new THREE.BoxGeometry(0.085, 0.065, 0.08), M.gold, g, Object.assign({ p: [0, 0.15, 0.74] }, o));
+      for (const sx of [-1, 1]) { mesh(new THREE.BoxGeometry(0.006, 0.04, 0.05), ventM, g, Object.assign({ p: [sx * 0.044, 0.15, 0.745] }, o)); mesh(new THREE.BoxGeometry(0.005, 0.028, 0.16), ventM, g, Object.assign({ p: [sx * 0.041, 0.15, 0.24] }, o)); }
+      mesh(new THREE.BoxGeometry(0.06, 0.04, 0.2), M.gold, g, Object.assign({ p: [0, 0.215, 0.08] }, o)); mesh(new THREE.BoxGeometry(0.035, 0.012, 0.13), ventM, g, Object.assign({ p: [0, 0.238, 0.08] }, o));
+      purity(g, v(0.045, 0.1, 0.12), v(1, 0, 0), 0.45, 2);
+      return { g, ventM, muzzle: grp(g, [0, 0.15, 0.79]) };
+    })();
+
+    // ---- supers
+    const SJ = [T.shL, T.shR, T.hdL, T.hdR, T.head, T.pelvis, T.kneeL, T.kneeR, T.bladeTip, T.waist];      // where Sigismund's lightning crawls (the blade tip follows the wargear)
+    const SUP = { on: false, id: '', mod: null, t: 0, dur: 1, shots: 0, max: 0, dmg: 0, zt: 0, R: 8 };
+    const SNAME = { sigismund: 'Wrath of Sigismund', judgement: 'Ansgar’s Judgement', litany: 'Litany of Hate' };
+    const LIT = { on: false, x: 0, y: 0, z: 0, land: 0, sink: 0, inP: false, D: null, a: 0 };
+    function castSig() {
+      const c = P.pos.clone(), hit = v(c.x, c.y + 1.2, c.z), top = v(c.x + rand(-3, 3), c.y + 34, c.z + rand(-3, 3));
+      zap(top, hit, 0xd8f0ff, 0.55, 0.45, 1.2); zap(top, hit, 0x8fd0ff, 0.25, 0.35, 2); zap(_a.copy(top).add(_b.set(rand(-4, 4), 0, rand(-4, 4))), hit, 0x8fd0ff, 0.14, 0.3, 2.4);
+      flash(hit, 0x9fd8ff, 14, 0.4); shock(_e.set(c.x, GY(c.x, c.z) + 0.05, c.z), 6, 0x8fd0ff); shock(_e, 3.4, 0xffffff); shell(hit, 0.5, 6, [0.35, 0.65, 1], [0.9, 0.97, 1], 0.35, null, 0.5); groundFlash(_e, 6, [0.35, 0.65, 1], [0.9, 0.97, 1], 0.7);
+      sparks(hit, 70, PC.storm, 12, 0.6); dust(c, 40, 2.4); AS.thunder(hit, 1.3); SYN.slam(c, 1.2); G.shake = Math.max(G.shake, 0.7); G.slowT = Math.max(G.slowT, 0.25);
+      for (const { e } of foesNear(c, 5, 3)) { hurt(e, 40, dirFrom(c, e), 10, 'super'); zap(hit, eUp(e, e.ly), 0xbfe8ff, 0.1, 0.3, 1.3); }
+      FOOT.visible = true; FOOT.material.uniforms.a.value = 0;
+    }
+    function castJud() {
+      REL.g.visible = true; T.pistol.visible = true; T.plasma.visible = false; GUN.reloadT = 0; GUN.ammo = Math.max(GUN.ammo, 1); GUN.cd = 0.35;
+      const c = P.pos.clone(), g = v(c.x, GY(c.x, c.z), c.z);
+      for (let i = 0; i < 40; i++) { const a = i / 40 * PI * 2; puff(_a.set(c.x + Math.cos(a) * 0.9, g.y + 0.2, c.z + Math.sin(a) * 0.9), Math.cos(a) * 7, rand(1, 3), Math.sin(a) * 7, i % 3 ? PC.fire : PC.hot, rand(0.3, 0.5), rand(0.35, 0.55), -1, 3, 1.2); }
+      flash(_e.copy(g).setY(g.y + 1.2), 0xff7a20, 10, 0.4); shock(_e.copy(g).setY(g.y + 0.05), 4, 0xff8a3a); groundFlash(g, 3.5, [1, 0.42, 0.1], [1, 0.9, 0.6], 0.6); shell(_e.copy(g).setY(g.y + 1), 0.5, 3.5, [1, 0.42, 0.1], [1, 0.9, 0.6], 0.35, null, 0.6);
+      AS.whoomp(c, 1.3); AS.rack(); G.shake = Math.max(G.shake, 0.35);
+    }
+    function castLit() {
+      // planted ahead and to the right, turned to face him: right in front it would hide the whole fight in first person
+      fwd(_d); _d.applyAxisAngle(_e.set(0, 1, 0), -0.95); const s = v(P.pos.x + _d.x * 2.8, 0, P.pos.z + _d.z * 2.8); collide(s, 0.4); s.y = GY(s.x, s.z);
+      Object.assign(LIT, { x: s.x, y: s.y, z: s.z, land: 0.32, sink: 0, on: false, a: 0 });
+      STD.g.position.set(s.x, s.y + 16, s.z); STD.g.rotation.set(0, P.yaw - 0.95, 0); STD.g.visible = true;
+      startMove(MOVES.raise, () => {}); if (live()) air(actx.currentTime, 0.4, 300, 1600, 500, 1.2, 0.5, 0, 0, 0.3, 0.8);      // it falls from the sky as he raises the blade
+    }
+    function landStd() {      // the standard strikes the ground: the aura opens round it
+      STD.g.position.y = LIT.y; LIT.on = true;
+      const c = v(LIT.x, LIT.y + 0.05, LIT.z), R = SUP.R; shock(c, R, 0xb07aff); shock(c, R * 0.5, 0xe0b24a); flash(_e.copy(c).setY(c.y + 2.5), 0xa070ff, 12, 0.45);
+      dust(c, 50, 2); sparks(_e.copy(c).setY(c.y + 0.2), 50, PC.gold, 10, 0.5); shell(_e.copy(c).setY(c.y + 1), 0.5, R, [0.55, 0.3, 1], [1, 0.85, 0.55], 0.45, null, 0.35);
+      SYN.slam(c, 1.4); AS.chime(c, true); G.shake = Math.max(G.shake, 0.6); G.hitStop = Math.max(G.hitStop, 0.06);
+      LIT.D = takeDisc(2); if (LIT.D) { layDisc(LIT.D.m, LIT.x, LIT.z, R, 0.09); LIT.D.own = true; LIT.D.u.col.value.setRGB(0.55, 0.3, 1); LIT.D.u.col2.value.setRGB(1, 0.82, 0.45); }
+      layCurtain(LIT.x, LIT.z, R, 3.2); CUR.material.uniforms.col.value.setRGB(0.6, 0.35, 1); CUR.material.uniforms.col2.value.setRGB(1, 0.85, 0.5); CUR.material.uniforms.a.value = 0; CUR.visible = true;
+      for (const { e } of foesNear(c, 2.5, 2.5)) hurt(e, 60, dirFrom(c, e), 9, 'super');
+    }
+    function superStart(id, mod) {
+      if (SUP.on || !SNAME[id] || !P.alive || G.state !== 'play' || FLY.on || JP.air || (C.active && C.mode !== 'combo' && C.mode !== 'thrust')) return false;
+      if (C.active) endCombo();
+      Object.assign(SUP, { on: true, id, mod: mod || null, zt: 0, shots: 0 });
+      if (id === 'sigismund') { SUP.dur = 15 + (mod === 'sig_long' ? 5 : 0); castSig(); }
+      else if (id === 'judgement') { SUP.dur = 12; SUP.shots = SUP.max = mod === 'jud_more' ? 6 : 3; SUP.dmg = mod === 'jud_more' ? 500 : 900; castJud(); }
+      else { SUP.dur = 18 + (mod === 'lit_long' ? 8 : 0); SUP.R = mod === 'lit_wide' ? 12 : 8; castLit(); }
+      SUP.t = SUP.dur; moveToast(SNAME[id]);
+      return true;
+    }
+    function endSuper() {
+      if (!SUP.on) return; SUP.on = false;
+      if (SUP.id === 'judgement') { REL.g.visible = false; applyLook(); }
+      if (SUP.id === 'sigismund') FOOT.visible = false;
+      if (SUP.id === 'litany') { LIT.on = false; LIT.inP = false; LIT.sink = LIT.land > 0 ? 0.01 : 0.8; LIT.land = 0; for (const e of ENEMIES) if (e.ab) e.ab.lit = false; }
+    }
+    // the relic bolter's shot: the round punches through shields, bursts into a 3 m fireball and sets everything in it burning
+    function relicShot() {
+      const o = cam.position.clone(), d = v(0, 0, -1).applyQuaternion(cam.quaternion);
+      let best = rayWorld(o, d, 160), hitE = null;
+      for (const e of ENEMIES) { if (!e.alive || e.state === 'execd' || e.pos.distanceTo(o) > best + 4) continue; enemySpheres(e, (c, r) => { const t = raySphere(o, d, c, r + 0.1); if (t < best) { best = t; hitE = e; } }); }
+      const hp = o.clone().addScaledVector(d, Math.max(0.5, best - 0.05)); REL.muzzle.getWorldPosition(_a); const mz = _a.clone();
+      zap(mz, hp, 0xffa040, 0.14, 0.16, 0); tracer(mz, hp, 0xffc070); flash(mz, 0xff8a30, 7, 0.12);
+      for (let i = 0; i < 24; i++) puff(mz, d.x * rand(3, 9) + rand(-1.5, 1.5), d.y * rand(3, 9) + rand(-1, 2), d.z * rand(3, 9) + rand(-1.5, 1.5), i % 3 ? PC.fire : PC.hot, rand(0.08, 0.2), rand(0.12, 0.25), -1, 3, 1);
+      AS.relic(); GUN.kick = 1; GUN.cd = 0.75; G.shake = Math.max(G.shake, 0.45); P.pitch = clamp(P.pitch + 0.035, -1.4, 1.4);
+      SUP.shots--; let killed = false; api.lastShot = { d: +best.toFixed(1), hit: hitE ? hitE.type : null };
+      if (best < 159) {
+        flash(_e.copy(hp).setY(hp.y + 0.4), 0xff7a20, 11, 0.3); shell(hp, 0.3, 3.2, [1, 0.42, 0.1], [1, 0.92, 0.6], 0.32, null, 0.8); groundFlash(_f.set(hp.x, GY(hp.x, hp.z), hp.z), 3, [1, 0.42, 0.1], [1, 0.9, 0.6], 0.7);
+        fireball(hp, 1.3, 24); sparks(hp, 46, PC.hot, 12, 0.5); debris(hp, 14); smoke(hp, 10, 1.2); AS.blast(hp, 1.1); AS.whoomp(hp, 0.8); shakeAt(hp, 0.6, 20);
+        if (hitE) {
+          if (hitE.type === 'brute' && hitE.guard > 0 && hitE.state !== 'broken') { hitE.guard = 0; breakEnemy(hitE, 3.5); }      // the relic round shatters a brute's shield
+          if (hurt(hitE, SUP.dmg, d.clone().setY(0).normalize(), 14, 'super')) killed = true; burn(hitE, 30, 4, 'super'); G.hitStop = Math.max(G.hitStop, 0.1);
+        }
+        for (const { e, d: dd } of foesNear(hp, 3, 2.5, true)) { if (e === hitE) continue; if (hurt(e, lerp(120, 80, dd / 3), dirFrom(hp, e), 8, 'super')) killed = true; burn(e, 30, 4, 'super'); }
+        if (SUP.mod === 'jud_burn') firePool(_f.set(hp.x, GY(hp.x, hp.z), hp.z).clone(), 3, 4, 40, 'super', false);
+        if (killed && SUP.mod === 'jud_refund') { SUP.shots++; moveToast('Righteous: the shell returns'); AS.rack(); }
+      }
+      if (SUP.shots <= 0) SUP.t = Math.min(SUP.t, 0.7);      // the last shell: let its fire play out, then the pistol cools
+    }
+    function updSuper(dt) {
+      if (SUP.on) { SUP.t -= dt; if (SUP.t <= 0 || !P.alive) endSuper(); }
+      if (SUP.on && SUP.id === 'sigismund') {
+        const fade = Math.min(1, (SUP.dur - SUP.t) / 0.3) * Math.min(1, SUP.t / 0.5);
+        FOOT.position.set(P.pos.x, JP.air ? GY(P.pos.x, P.pos.z) : P.pos.y, P.pos.z); FOOT.material.uniforms.a.value = fade * (0.7 + Math.sin(G.time * 9) * 0.15); FOOT.material.uniforms.t.value += dt;
+        // lightning crawls over him: joint to joint in third person, along the blade in first
+        if ((SUP.zt -= dt) <= 0) { SUP.zt = rand(0.05, 0.11);
+          if (C.cam > 0.5) { SJ[8] = T.bladeTip; pick(SJ).getWorldPosition(_a); pick(SJ).getWorldPosition(_b); if (_a.distanceToSquared(_b) > 0.04) zap(_a, _b, 0xbfe8ff, 0.04, 0.08, 1.6); }
+          else { T.bladeBase.getWorldPosition(_a); T.bladeTip.getWorldPosition(_b); zap(_a, _b, 0xd8f0ff, 0.025, 0.07, 1.2); } }
+        if (Math.random() < dt * 12) puff(_a.set(P.pos.x + rand(-0.8, 0.8), P.pos.y + rand(0, 0.3), P.pos.z + rand(-0.8, 0.8)), 0, rand(1, 2.5), 0, PC.storm, 0.04, 0.5, 0, 1);
+      }
+      if (SUP.on && SUP.id === 'judgement') {
+        T.pistol.visible = true; T.plasma.visible = false; REL.g.visible = true;      // even if wargear changes mid-super
+        REL.ventM.emissiveIntensity = 1.3 + Math.random() * 0.9 + GUN.kick * 2;
+        REL.muzzle.getWorldPosition(_a); const k = C.cam < 0.5 ? 0.5 : 1;
+        if (Math.random() < dt * 30) puff(_a, rand(-0.2, 0.2), rand(0.4, 1.1), rand(-0.2, 0.2), PC.fire, rand(0.04, 0.08) * k, rand(0.15, 0.3), -1, 2, -0.3);
+        if (Math.random() < dt * 6) puff(_a, rand(-0.4, 0.4), rand(0.8, 1.6), rand(-0.4, 0.4), PC.ember, 0.02, rand(0.5, 0.9), -0.2, 0.5);
+      }
+      if (SUP.id === 'litany' && (SUP.on || LIT.sink > 0)) {
+        if (LIT.land > 0) {      // falling: a streak of violet fire behind it
+          LIT.land -= dt; const f = 1 - Math.max(0, LIT.land) / 0.32; STD.g.position.y = LIT.y + 16 * (1 - f * f);
+          for (let i = 0; i < 4; i++) puff(_a.set(LIT.x + rand(-0.2, 0.2), STD.g.position.y + rand(3, 4.5), LIT.z + rand(-0.2, 0.2)), 0, rand(4, 8), 0, i % 2 ? PC.void : PC.gold, rand(0.1, 0.25), 0.3, 0, 2);
+          if (LIT.land <= 0 && SUP.on) landStd();
+        }
+        const R = SUP.R;
+        if (LIT.on) {
+          LIT.a = Math.min(1, LIT.a + dt * 3) * Math.min(1, SUP.t / 0.6);
+          LIT.inP = Math.hypot(P.pos.x - LIT.x, P.pos.z - LIT.z) < R && Math.abs(P.pos.y - LIT.y) < 4;
+          if (LIT.inP && SUP.mod === 'lit_heal' && P.alive && P.hp < P.maxHp) { P.hp = Math.min(P.maxHp, P.hp + P.maxHp * 0.04 * dt); if (Math.random() < dt * 8) puff(_a.set(P.pos.x + rand(-0.5, 0.5), P.pos.y + rand(0.2, 1.8), P.pos.z + rand(-0.5, 0.5)), 0, 1, 0, PC.heal, 0.05, 0.6, -0.3, 1); }
+          for (const e of ENEMIES) {      // foes inside are slowed and take more (statusFrame tints them)
+            if (!e.alive) continue; const inside = Math.hypot(e.pos.x - LIT.x, e.pos.z - LIT.z) < R + e.r * 0.5 && Math.abs(e.pos.y - LIT.y) < 4;
+            if (inside) stOf(e).lit = true; else if (e.ab) e.ab.lit = false;
+          }
+          for (let i = 0, n = cnt(dt * 26 * (R / 8) ** 2 * LIT.a); i < n; i++) { const a = rand(0, PI * 2), r = R * Math.sqrt(Math.random()), x = LIT.x + Math.cos(a) * r, z = LIT.z + Math.sin(a) * r; puff(_a.set(x, GY(x, z) + 0.1, z), 0, rand(0.6, 1.4), 0, Math.random() < 0.3 ? PC.gold : PC.void, rand(0.04, 0.08), rand(1.2, 2), -0.2, 0.5); }
+          STD.glowM.opacity = 0.25 + Math.sin(G.time * 3) * 0.08 + Math.random() * 0.06; if (Math.random() < dt * 14) puff(_a.set(LIT.x + rand(-0.3, 0.3), STD.g.position.y + 3.86 + rand(-0.3, 0.3), LIT.z + rand(-0.3, 0.3)), rand(-0.2, 0.2), rand(0.2, 0.6), rand(-0.2, 0.2), Math.random() < 0.5 ? PC.gold : PC.void, 0.05, 0.8, -0.2, 1); STD.glow.scale.setScalar(1 + Math.sin(G.time * 3) * 0.1);
+          STD.ban.rotation.y = Math.sin(G.time * 1.3) * 0.08; STD.ban.rotation.x = Math.sin(G.time * 2.1) * 0.04;
+        }
+        if (LIT.sink > 0) { LIT.sink -= dt; LIT.a = Math.max(0, LIT.sink / 0.8); STD.g.position.y = LIT.y - (1 - LIT.a) * 4.5; if (LIT.sink <= 0) { STD.g.visible = false; CUR.visible = false; if (LIT.D) { LIT.D.on = false; LIT.D.own = null; LIT.D.m.visible = false; LIT.D = null; } } }
+        if (LIT.D) { LIT.D.u.a.value = LIT.a; LIT.D.u.t.value += dt; } CUR.material.uniforms.a.value = LIT.a * 0.8; CUR.material.uniforms.t.value += dt;
+      }
+    }
+
+    // ---- the per-frame pass
+    let warm = 0;
+    const api = {
+      quiet: false,      // true while a damage-over-time tick runs (damageEnemy can skip its blood and flesh sound)
+      grenade,
+      melee(id) {
+        if (!MELEE[id] || !P.alive || G.state !== 'play' || FLY.on || JP.air || (C.active && C.mode !== 'combo' && C.mode !== 'thrust')) return false;
+        moveToast(MNAME[id]); MELEE[id](); return true;
+      },
+      super: superStart,
+      active: () => SUP.on,
+      update(dt) {
+        // the first frame draws one of each new shader unseen, so their programs compile now and not mid-fight
+        if (warm < 2) { warm++; for (const [m, busy] of [[DISCS[0].m, DISCS[0].on], [WAVES[0].m, WAVES[0].on], [ZAPS[0].m, ZAPS[0].t > 0]]) if (!busy) { m.visible = warm === 1; if (m.material.uniforms.a) m.material.uniforms.a.value = 0; } }
+        for (let i = LATER.length - 1; i >= 0; i--) { const L = LATER[i]; if ((L.t -= dt) <= 0) { LATER.splice(i, 1); L.fn(); } }
+        if (MV.cur && !MV.done) {      // the move's blow lands at the start of its recovery (or at once, if a shot or an execution cut it short)
+          const mine = C.active && C.mode === 'abil' && C.move === MV.cur;
+          if (mine && MV.tick) MV.tick(dt);
+          if (!P.alive) MV.done = true; else if (!mine || C.phase === 'r') { MV.done = true; MV.fx(); }
+        }
+        for (const g of GRN) if (g.on) updGren(g, dt);
+        for (let i = ZONES.length - 1; i >= 0; i--) { updZone(ZONES[i], dt); if (ZONES[i].t >= ZONES[i].dur) ZONES.splice(i, 1); }
+        for (const W_ of WAVES) if (W_.on) updWave(W_, dt);
+        for (const D of DISCS) if (D.on && !D.own) { D.t += dt; D.u.t.value += dt; D.u.a.value = Math.pow(Math.max(0, 1 - D.t / D.dur), 2); if (D.t >= D.dur) { D.on = false; D.m.visible = false; } }
+        for (const S of SHELLS) if (S.on) { S.u.t.value += dt; if (S.own) continue; S.t += dt; const f = Math.min(1, S.t / S.dur), r = lerp(S.r0, S.r1, 1 - Math.pow(1 - f, 3)); S.m.scale.set(r, r * S.sy, r); S.u.a.value = Math.pow(1 - f, 1.5); if (f >= 1) { S.on = false; S.m.visible = false; } }
+        for (const Z of ZAPS) if (Z.t > 0) drawZap(Z, dt);
+        updSuper(dt);
+        if (BB.n > 0 && (BB.t -= dt) <= 0) BB.n = 0;
+        if (SE.t > 0) SE.t -= dt;
+        bladeLook(SUP.on && SUP.id === 'sigismund' ? 'storm' : SE.t > 0 ? 'sear' : BB.n > 0 ? 'bless' : LIT.on && LIT.inP ? 'lit' : '');
+        bladeFX(dt);
+        for (const e of AFF) { if (!e.ab || !e.alive || e.gone) { clearSt(e); continue; } statusFrame(e, e.ab, dt); }
+        // the tints breathe: fire flickers, lightning stutters, the weakened glow pulses
+        for (const m of TLIST.burn) m.emissiveIntensity = 0.08 + Math.random() * 0.16;
+        for (const m of TLIST.stun) m.emissiveIntensity = Math.random() < 0.2 ? 0.55 : 0.18;
+        for (const m of TLIST.gold) m.emissiveIntensity = 0.22 + Math.random() * 0.14;
+        for (const m of TLIST.weak) m.emissiveIntensity = 0.11 + Math.sin(G.time * 5) * 0.05;
+        for (const m of TLIST.lit) m.emissiveIntensity = 0.05 + Math.sin(G.time * 3) * 0.02;
+        if (vigFlash > 0) { vigFlash -= dt; const el = document.getElementById('vig'); if (el) el.style.boxShadow = vigFlash > 0 ? `inset 0 0 ${Math.round(220 * vigFlash / 0.35)}px rgba(255, 240, 200, ${(vigFlash / 0.35 * 0.8).toFixed(2)})` : ''; }
+      },
+      statusTick(e, dt) {      // before the foe's AI: a vortex drags it; returns true while it's stunned (skip its AI and attacks)
+        const s = e.ab; if (!s) return false;
+        if (s.pull > 0 && e.state !== 'execd' && e.state !== 'leap' && e.state !== 'fall') {
+          const dx = s.px - e.pos.x, dz = s.pz - e.pos.z, d = Math.hypot(dx, dz);
+          if (d > 0.6) { const k = Math.min(d - 0.6, s.pk * dt / Math.sqrt(e.D.mass)); e.pos.x += dx / d * k; e.pos.z += dz / d * k; }
+        }
+        return s.stun > 0;
+      },
+      speedMult(e) { const s = e.ab; return !s ? 1 : s.stun > 0 ? 0 : (s.lit ? 0.6 : 1) * (s.pull > 0 ? 0.4 : 1); },
+      dmgMult(src, e) {
+        const blade = src === 'sword' || src === 'slam' || src === 'thrust'; let k = 1;
+        if (blade && SUP.on && SUP.id === 'sigismund') k *= 1.6;
+        if (blade && BB.n > 0) k *= 2;
+        if (LIT.on && LIT.inP && src !== 'exec') k *= 1.35;
+        if (e && e.ab) { if (e.ab.weak > 0) k *= 1.25; if (e.ab.lit) k *= 1.2; }
+        return k;
+      },
+      takenMult() { return (SUP.on && SUP.id === 'sigismund' ? 0.6 : 1) * (LIT.on && LIT.inP ? 0.5 : 1); },
+      onSwing(step) {      // Wrath of Sigismund: each cut throws a crescent of lightning (60% of the cut, the super's +60% included)
+        if (!SUP.on || SUP.id !== 'sigismund' || !C.active || C.mode === 'abil' || !C.move) return;
+        const wide = SUP.mod === 'sig_wave'; fwd(_d); const o = v(P.pos.x + _d.x * 0.6, 0, P.pos.z + _d.z * 0.6); o.y = GY(o.x, o.z);
+        wave('bolt', o, _d, wide ? 20 : 10, 30, wide ? 1.5 : 0.75, (C.move.dmg || 60) * BK().dmg * 1.6 * 0.6, 'ability', [0.4, 0.72, 1], [0.95, 0.98, 1], C.mode === 'thrust' ? 0 : [-0.3, 0.55, PI / 2][step] || 0);
+        AS.crack(o, 0.7);
+      },
+      onHit(e, dmg, src) {      // after any damage the Templar dealt: the searing edge lights foes, the blessed blade arcs on
+        if (src !== 'sword' && src !== 'slam' && src !== 'thrust') return;
+        if (SE.t > 0) burn(e, 30, 4, 'ability');
+        if (BB.n > 0) {
+          BB.n--; const at = eUp(e, e.ly); sparks(at, 18, PC.gold, 6, 0.3);
+          let o = null, bd = 5; for (const f of ENEMIES) { if (f === e || !f.alive || f.state === 'execd') continue; const d = f.pos.distanceTo(e.pos); if (d < bd) { bd = d; o = f; } }
+          if (o) { const to = eUp(o, o.ly); zap(at, to, 0xffe6a0, 0.09, 0.22, 1.3); hurt(o, 40, dirFrom(e.pos, o), 3, 'ability'); AS.crack(to, 0.5); }
+          if (!BB.n) moveToast('The blessing is spent');
+        }
+      },
+      onKill(e, src) { if (SUP.on && SUP.id === 'sigismund' && SUP.mod === 'sig_heal' && P.alive) heal(0.1); },
+      fireOverride() {
+        if (!SUP.on || SUP.id !== 'judgement') return false;
+        if (JP.air && !JP.pound && JP.phase !== 'none') return false;      // in the air the click still picks the jump pack's mark
+        if (!P.alive || GUN.cd > 0 || SUP.shots <= 0 || (C.active && C.mode !== 'combo' && C.mode !== 'thrust')) return true;
+        if (C.active) endCombo();
+        relicShot(); return true;
+      },
+      reset() {
+        for (const g of GRN) { g.on = false; g.g.visible = false; g.stuck = null; }
+        for (const D of DISCS) { D.on = false; D.own = null; D.m.visible = false; }
+        for (const S of SHELLS) { S.on = false; S.own = null; S.m.visible = false; }
+        for (const W_ of WAVES) { W_.on = false; W_.m.visible = false; }
+        for (const Z of ZAPS) { Z.t = 0; Z.m.visible = false; }
+        ZONES.length = 0; LATER.length = 0;
+        for (const e of [...AFF]) clearSt(e); AFF.clear();
+        if (SUP.on) endSuper(); SUP.id = ''; Object.assign(LIT, { on: false, sink: 0, land: 0, inP: false, D: null, a: 0 }); STD.g.visible = false; CUR.visible = false; FOOT.visible = false; REL.g.visible = false;
+        BB.n = 0; BB.t = 0; SE.t = 0; MV.cur = null; MV.done = true; api.quiet = false; bladeLook('');
+      },
+      hud() { return SUP.on ? { name: SNAME[SUP.id], left: Math.max(0, SUP.t), max: SUP.dur, shots: SUP.id === 'judgement' ? SUP.shots : undefined } : null; },
+      // for the test hook: what's running, and every foe's statuses
+      state() {
+        return { sup: SUP.on ? { id: SUP.id, mod: SUP.mod, left: +SUP.t.toFixed(2), shots: SUP.shots } : null, blessed: BB.n, searing: +Math.max(0, SE.t).toFixed(2), lit: LIT.on ? { inP: LIT.inP, R: SUP.R } : null,
+          gren: GRN.filter(g => g.on).map(g => ({ id: g.id, settled: g.settled, stuck: !!g.stuck, pos: g.pos.toArray().map(x => +x.toFixed(1)) })), zones: ZONES.map(z => z.kind), waves: WAVES.filter(w => w.on).map(w => w.kind + ' ' + w.dist.toFixed(1) + '/' + w.max.toFixed(1)), shot: api.lastShot || null,
+          foes: ENEMIES.map(e => ({ type: e.type, hp: Math.round(e.hp), alive: e.alive, burn: e.ab ? +Math.max(0, e.ab.burn).toFixed(1) : 0, stun: e.ab ? +Math.max(0, e.ab.stun).toFixed(1) : 0, weak: e.ab ? +Math.max(0, e.ab.weak).toFixed(1) : 0, lit: !!(e.ab && e.ab.lit), pull: !!(e.ab && e.ab.pull > 0), slow: api.speedMult(e), tint: e.ab ? e.ab.tint : '' })) };
+      }
+    };
+    return api;
+  })();
   // ================================================================ abilities: grenade (G), melee ability (V) and super (X), from the subclass you've chosen
   function useAbility(k) {
     if (!P.alive || FLY.on || G.ui || (C.active && C.mode === 'exec')) return;
@@ -7110,6 +7942,7 @@ const GALLERY_ONLY = /*__GALLERY__*/false;      // build.py also makes gallery.h
         enemies: ENEMIES.map(e => ({ type: e.type, lvl: e.lvl, pw: e.pw, imm: immune(e), dm: +e.dm.toFixed(2), hp: Math.round(e.hp), maxHp: e.maxHp, alive: e.alive, state: e.state, aggro: e.aggro, boss: e.boss, name: e.name, pos: e.pos.toArray().map(x => +x.toFixed(1)) })),
         enc: ENC.filter(E => E.state !== 'dormant').map(E => `${E.id}:${E.state}`), cam: cam.position.toArray().map(x => +x.toFixed(1)) };
     },
+    abil: { g(id) { return ABIL.grenade(id); }, m(id) { return ABIL.melee(id); }, s(id, mod) { return ABIL.super(id, mod || null); }, st() { return ABIL.state(); }, hud() { return ABIL.hud(); } },
     cos: { shader: id => COS.applyShader(id), hawk: id => COS.applyHawk(id), orn: id => COS.applyOrn(id), skull: id => COS.skull.setVariant(id), emblems: () => COS.EMBLEMS.map(e => [e.id, e.name, e.svg]), state: () => COS.state(), vis: () => COS.skull.root.visible },
     W: () => W, R: () => R, P, G, C, ST, ENC, NPCS, KEEPERS, DUNS, FLY, JP, T, en: i => ENEMIES[i]
   };

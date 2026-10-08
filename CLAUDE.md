@@ -91,6 +91,15 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
   The weekly crusade (`WEEK`, `weekCheck`, `weekStep`) resets Tuesday 17:00 UTC (`weekNo`) and pays pinnacle drops.
 - Subclasses (`SUBS`: sword from L1, crusader L5, chaplain L10): Destiny 1 style trees, eight rows, one point per level per subclass
   (`subPts`, `subPick(row)`, `subSwitch`). Energy `AB` {gren, melee, sup} charges over time and on kills; G, V and X fire `useAbility`.
+- Abilities (`ABIL`, one module before the main loop): 7 grenades, 9 melee abilities, 3 supers (Wrath of Sigismund, Ansgar's Judgement,
+  Litany of Hate) with 3 mods each. `grenade`/`melee`/`super` return false when they refuse; energy is spent only on true. Foe statuses
+  (burn, stun, weak, pull, lit) live in `e.ab` and belong to ABIL. Melee abilities run through updateCombo as `C.mode = 'abil'` (bladeHits skips it).
+  Hooks: `statusTick`/`speedMult` in updateEnemies, `dmgMult` in strike, `onHit`/`onKill` in damageEnemy, `takenMult` in hurtPlayer,
+  `onSwing`, `fireOverride` at the top of fire(), `reset` in clearEnemies and die. Damage-over-time ticks set `ABIL.quiet` (no blood or hit marker).
+- Cosmetics (`COS`, just before ABIL): shaders, emblems (`emblemSVG`), servo-skulls, blade ornaments (power field / chain teeth), gunship paints.
+  At load the Templar gets private clones of the paints he wears (`COSM[role]`), because `M.*` also dresses the foes and arenas: tint `COSM`,
+  never `M`, for him. The trail reads a `tcol` uniform; `COS.update` sets it each frame unless `COS.hold` (an ability's blade look owns it).
+  `R.cos` holds the picks and `un` (owned); `applyCos()` wears them. `applyLook` calls `cosCape()`, not `COS`, because it runs before COS exists.
 - Screens: the character screen (I, Tab or B; `#build`, `renderCS`: Gear with slot fans, cards with compare and two-step actions, drag to
   equip; Subclass trees; Cosmetics) in `CS` state, Quartermaster shop (`renderSheet`), map with waypoints (M, `drawMap`), talk (`openTalk`).
 - `rpg/tools/kenney_convert.py <cc0-world/models> rpg/assets/kenney.json` bakes the Kenney GLBs to vertex colours with a per-surface class
@@ -116,6 +125,6 @@ the arenas as dungeons, levels, loot, quests and saving. Published to https://cl
   published to https://claude.ai/artifact/2dyF1DF8Zz8JJPPMpeA7pJ. Hook `window.__gal` (show, look, hawk, view, step) in that build.
 - Test hook `window.__rpg`: begin(fresh), sim(s, fps), set({pos,yaw,pitch,hp,gold,quest}), tp(x,z,yaw), spawn, clear, noEnc, fire, sword,
   execute, dash, key, act, enter(id), exit, wave(n), killAll, xp, give(slot,rar,pw,exo), equip(id), power(), ab(k), fill(), node, subUse,
-  cs(o), week(), ui(name), talk(id), travel(id), save, quest, norender, render, view(cam, target, fov)/unview, board, land, fly, jump, trial,
+  cs(o), week(), abil {g, m, s, st, hud}, cos {shader, hawk, orn, skull, emblems, state, vis}, ui(name), talk(id), travel(id), save, quest, norender, render, view(cam, target, fov)/unview, board, land, fly, jump, trial,
   look, cannon, keep(), hawk(), jp(), state(). `noEnc(true)` stops encounters; `noEnc()` turns them back on.
   The page takes about 17 s to load headless (SwiftShader). `window.__world` is the old preview's hook.
